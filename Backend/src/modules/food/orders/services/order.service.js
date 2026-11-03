@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { FoodOrder, FoodSettings } from '../models/order.model.js';
+import { PendingOnlinePayment } from '../models/pendingOnlinePayment.model.js';
 // import { paymentSnapshotFromOrder } from './foodOrderPayment.service.js';
 import { logger } from '../../../../utils/logger.js';
 import { FoodUser } from '../../../../core/users/user.model.js';
@@ -82,24 +83,21 @@ export async function calculateOrder(userId, dto) {
   return calculateOrderPricing(userId, { ...dto, useCart: dto?.useCart !== false });
 }
 
-// Store for pending razorpay online payment intents (allows Webhook to auto-create order if user phone drops network post-payment)
-const pendingOnlinePayments = new Map();
-
 export async function createOrderFromPendingIntent(rzOrderId, rzPaymentId, rzSignature = "webhook_verified") {
-  const intent = pendingOnlinePayments.get(rzOrderId);
+  const intent = await PendingOnlinePayment.findOne({ razorpayOrderId: rzOrderId, consumedAt: null });
   if (!intent) return null;
   const { userId, dto } = intent;
   dto.razorpayOrderId = rzOrderId;
   dto.razorpayPaymentId = rzPaymentId;
   dto.razorpaySignature = rzSignature;
-  
+
   try {
     // The webhook body was HMAC-verified with the webhook secret, but there is
     // no checkout signature here. createOrder used to demand one, so this
     // recovery path always failed: the customer was charged and no order was
     // created. The payment is still re-fetched from Razorpay and amount-checked.
     const result = await createOrder(userId, dto, { gatewayVerified: true });
-    pendingOnlinePayments.delete(rzOrderId);
+    await PendingOnlinePayment.deleteOne({ razorpayOrderId: rzOrderId });
     return result?.order || null;
   } catch (err) {
     logger.error(`[PendingPaymentRecovery] Failed to create order for ${rzOrderId}: ${err?.message || err}`);
@@ -176,18 +174,12 @@ export async function initiateOnlinePayment(userId, dto) {
     pricing: normalizedPricing,
     couponCode: normalizedPricing.couponCode || dto.couponCode || "",
   };
-  pendingOnlinePayments.set(rzOrder.id, {
+  await PendingOnlinePayment.create({
+    razorpayOrderId: rzOrder.id,
     userId,
     dto: safeDto,
-    createdAt: Date.now()
   });
-
-  // Clean up expired pending intents (> 30 mins)
-  for (const [key, val] of pendingOnlinePayments.entries()) {
-    if (Date.now() - val.createdAt > 30 * 60 * 1000) {
-      pendingOnlinePayments.delete(key);
-    }
-  }
+  // Expiry is handled by the model's TTL index (30 min), not manual cleanup.
 
   return {
     key: getRazorpayKeyId(),
@@ -774,7 +766,9 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
   }
   if (paymentMethod === "razorpay" && payment.razorpay?.orderId) {
     // The app placed it; the webhook must not create a second copy.
-    pendingOnlinePayments.delete(payment.razorpay.orderId);
+    PendingOnlinePayment.deleteOne({ razorpayOrderId: payment.razorpay.orderId }).catch((err) => {
+      logger.warn(`[OrderCreate] Failed to clear pending intent ${payment.razorpay.orderId}: ${err?.message || err}`);
+    });
   }
 
   try {
@@ -785,7 +779,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
 
   if (isWallet) {
     try {
-      await userWalletService.deductWalletBalance(userId, order.pricing.total, `Payment for order #${order.order_id || order._id}`, { orderId: order._id });
+      await userWalletService.deductWalletBalance(userId, order.pricing.total, `Payment for order #${order.order_id || order._id}`, { orderId: order._id, idempotencyKey: `order_payment:${order._id}` });
     } catch (err) {
       // If wallet deduction fails (e.g. insufficient balance), we should not have saved the order or we should delete/cancel it.
       // But since we already saved it, let's at least throw the error so the user knows.
@@ -1346,7 +1340,7 @@ export async function cancelOrder(orderId, userId, reason, refundDestination = "
           userId,
           order.pricing.total,
           `Refund for cancelled order #${order.order_id || order._id}`,
-          { orderId: order._id, source: "order_refund_wallet" },
+          { orderId: order._id, source: "order_refund_wallet", idempotencyKey: `order_refund:${order._id}` },
         );
         order.payment.status = "refunded";
         order.payment.refund = {
@@ -1394,7 +1388,7 @@ export async function cancelOrder(orderId, userId, reason, refundDestination = "
     !hasRefundProcessed
   ) {
     try {
-      await userWalletService.refundWalletBalance(userId, order.pricing.total, `Refund for cancelled order #${order.order_id || order._id}`, { orderId: order._id });
+      await userWalletService.refundWalletBalance(userId, order.pricing.total, `Refund for cancelled order #${order.order_id || order._id}`, { orderId: order._id, idempotencyKey: `order_refund:${order._id}` });
       order.payment.status = "refunded";
       order.payment.refund = {
         status: "processed",
@@ -2080,7 +2074,7 @@ export async function updateOrderStatusRestaurant(
       (!order.payment.refund || order.payment.refund.status !== "processed")
     ) {
       try {
-        await userWalletService.refundWalletBalance(order.userId, order.pricing.total, `Refund for order #${order.order_id || order._id} cancelled by restaurant`, { orderId: order._id });
+        await userWalletService.refundWalletBalance(order.userId, order.pricing.total, `Refund for order #${order.order_id || order._id} cancelled by restaurant`, { orderId: order._id, idempotencyKey: `order_refund:${order._id}` });
         order.payment.status = "refunded";
         order.payment.refund = {
           status: "processed",

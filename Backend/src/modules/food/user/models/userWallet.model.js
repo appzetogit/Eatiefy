@@ -13,9 +13,19 @@ const walletTransactionSchema = new mongoose.Schema(
         metadata: { type: Object, default: {} },
         razorpayOrderId: { type: String, default: null },
         razorpayPaymentId: { type: String, default: null },
-        razorpaySignature: { type: String, default: null }
+        razorpaySignature: { type: String, default: null },
+        // Globally unique key (e.g. `order_payment:${orderId}`) used to make wallet
+        // credits/deductions idempotent against retries and concurrent requests.
+        idempotencyKey: { type: String, default: null }
     },
     { timestamps: true }
+);
+
+// Multikey unique index: enforces idempotencyKey uniqueness across every
+// transaction in every wallet document (null values excluded via `sparse`).
+walletTransactionSchema.index(
+    { 'idempotencyKey': 1 },
+    { unique: true, sparse: true }
 );
 
 const userWalletSchema = new mongoose.Schema(

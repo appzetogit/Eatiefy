@@ -15,23 +15,91 @@ const ensureWallet = async (userId) => {
     return FoodUserWallet.create({ userId: oid, balance: 0, transactions: [] });
 };
 
+/**
+ * Atomically applies a signed balance delta plus a transaction-log entry in a
+ * single `findOneAndUpdate`, instead of load → mutate-in-memory → `.save()`.
+ * That read-modify-write pattern let two concurrent calls (a retry racing the
+ * original request, a refund racing a deduction) both read the same balance
+ * and have the second `.save()` silently clobber the first — balance *and*
+ * transaction log, since `.save()` replaces the whole document.
+ *
+ * `idempotencyKey`, when given, is enforced by a unique sparse index on
+ * `transactions.idempotencyKey`: a duplicate call (same key) hits a Mongo
+ * E11000 error instead of applying the delta twice, and is treated as
+ * "already applied" rather than an error.
+ */
+const applyWalletDelta = async (userId, { delta, referralDelta = 0, type, description, metadata, idempotencyKey, requireSufficientBalance = false }) => {
+    const id = String(userId || '');
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+        throw new ValidationError('User not found');
+    }
+    const oid = new mongoose.Types.ObjectId(id);
+
+    const filter = { userId: oid };
+    if (requireSufficientBalance) {
+        filter.balance = { $gte: -delta };
+    }
+
+    const update = {
+        $inc: { balance: delta, ...(referralDelta ? { referralEarnings: referralDelta } : {}) },
+        $push: {
+            transactions: {
+                $each: [{
+                    type,
+                    amount: Math.abs(delta),
+                    status: 'Completed',
+                    description,
+                    metadata: metadata || {},
+                    idempotencyKey: idempotencyKey || null
+                }],
+                $position: 0
+            }
+        },
+        $setOnInsert: { userId: oid }
+    };
+
+    // Never upsert when a sufficient-balance guard is in the filter: Mongo ignores
+    // `$gte` when building the upserted document, so it would happily create a
+    // brand-new wallet with a negative balance instead of failing the deduction.
+    const upsert = !requireSufficientBalance;
+
+    let updated;
+    try {
+        updated = await FoodUserWallet.findOneAndUpdate(filter, update, { new: true, upsert });
+    } catch (err) {
+        if (err?.code === 11000 && idempotencyKey) {
+            // Already applied by a previous/concurrent call with the same key.
+            return { wallet: await getUserWallet(userId), alreadyApplied: true };
+        }
+        if (err?.code === 11000 && upsert) {
+            // Lost the upsert race against a concurrent wallet-creation call; retry once.
+            updated = await FoodUserWallet.findOneAndUpdate(filter, update, { new: true, upsert: true });
+        } else {
+            throw err;
+        }
+    }
+
+    if (!updated) {
+        throw new ValidationError('Insufficient wallet balance');
+    }
+
+    return { wallet: await getUserWallet(userId) };
+};
+
 export const creditReferralReward = async (userId, amountInr, metadata = {}) => {
     const amount = Number(amountInr);
     if (!Number.isFinite(amount) || amount <= 0) {
         return { wallet: await getUserWallet(userId) };
     }
-    const wallet = await ensureWallet(userId);
-    wallet.transactions.unshift({
+    const { wallet } = await applyWalletDelta(userId, {
+        delta: amount,
+        referralDelta: amount,
         type: 'addition',
-        amount,
-        status: 'Completed',
         description: 'Referral reward',
-        metadata: { source: 'referral_reward', ...(metadata || {}) }
+        metadata: { source: 'referral_reward', ...(metadata || {}) },
+        idempotencyKey: metadata?.idempotencyKey
     });
-    wallet.balance = Number(wallet.balance || 0) + amount;
-    wallet.referralEarnings = Number(wallet.referralEarnings || 0) + amount;
-    await wallet.save();
-    return { wallet: await getUserWallet(userId) };
+    return { wallet };
 };
 
 export const getUserWallet = async (userId) => {
@@ -165,19 +233,14 @@ export const creditWalletBalance = async (userId, amountInr, description = 'Wall
         throw new ValidationError('Invalid credit amount');
     }
 
-    const wallet = await ensureWallet(userId);
-    wallet.transactions.unshift({
+    const { wallet } = await applyWalletDelta(userId, {
+        delta: amount,
         type: 'addition',
-        amount,
-        status: 'Completed',
         description,
-        metadata: { source: 'wallet_credit', ...(metadata || {}) }
+        metadata: { source: 'wallet_credit', ...(metadata || {}) },
+        idempotencyKey: metadata?.idempotencyKey
     });
-
-    wallet.balance = Number(wallet.balance || 0) + amount;
-    await wallet.save();
-
-    return { wallet: await getUserWallet(userId) };
+    return { wallet };
 };
 
 export const deductWalletBalance = async (userId, amountInr, description = 'Order payment', metadata = {}) => {
@@ -186,23 +249,15 @@ export const deductWalletBalance = async (userId, amountInr, description = 'Orde
         throw new ValidationError('Invalid deduction amount');
     }
 
-    const wallet = await ensureWallet(userId);
-    if (wallet.balance < amount) {
-        throw new ValidationError('Insufficient wallet balance');
-    }
-
-    wallet.transactions.unshift({
+    const { wallet } = await applyWalletDelta(userId, {
+        delta: -amount,
         type: 'deduction',
-        amount,
-        status: 'Completed',
         description,
-        metadata: { source: 'order_payment', ...(metadata || {}) }
+        metadata: { source: 'order_payment', ...(metadata || {}) },
+        idempotencyKey: metadata?.idempotencyKey,
+        requireSufficientBalance: true
     });
-
-    wallet.balance = Number(wallet.balance) - amount;
-    await wallet.save();
-
-    return { wallet: await getUserWallet(userId) };
+    return { wallet };
 };
 
 export const refundWalletBalance = async (userId, amountInr, description = 'Order refund', metadata = {}) => {
@@ -211,18 +266,13 @@ export const refundWalletBalance = async (userId, amountInr, description = 'Orde
         return { wallet: await getUserWallet(userId) };
     }
 
-    const wallet = await ensureWallet(userId);
-    wallet.transactions.unshift({
+    const { wallet } = await applyWalletDelta(userId, {
+        delta: amount,
         type: 'refund',
-        amount,
-        status: 'Completed',
         description,
-        metadata: { source: 'order_refund', ...(metadata || {}) }
+        metadata: { source: 'order_refund', ...(metadata || {}) },
+        idempotencyKey: metadata?.idempotencyKey
     });
-
-    wallet.balance = Number(wallet.balance) + amount;
-    await wallet.save();
-
-    return { wallet: await getUserWallet(userId) };
+    return { wallet };
 };
 

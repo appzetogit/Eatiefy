@@ -1499,6 +1499,23 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
     }
   }
 
+  // 3b. Atomically claim this status transition. `order` was loaded with a plain
+  // `findOne` above and everything past this point (earning backfill, status
+  // history, ledger update, `.save()`) runs against that in-memory copy. Two
+  // concurrent completion calls for the same order (double-tap, client retry,
+  // a duplicate webhook) both pass the `isStatusAdvance` check above before
+  // either persists anything. This update can only match for one of them —
+  // `orderStatus: from` stops matching the instant the winner's update lands —
+  // so the loser fails fast here instead of re-running earning/ledger/
+  // notification side effects a second time.
+  const claimed = await FoodOrder.findOneAndUpdate(
+    { _id: order._id, orderStatus: from },
+    { $set: { orderStatus: '__completing__' } },
+  );
+  if (!claimed) {
+    throw new ValidationError(`Order is already being completed or was already marked '${nextStatus}'.`);
+  }
+
   // 4. Backfill rider earning if missing (geocode coords + commission rules)
   try {
     await ensureRiderEarningOnOrder(order);
@@ -1537,7 +1554,13 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
     note: `Delivery completed using ${finalPayMethod}.`,
   });
 
-  await order.save();
+  try {
+    await order.save();
+  } catch (saveErr) {
+    // Release the claim so the order isn't stuck in the transient sentinel status.
+    await FoodOrder.updateOne({ _id: order._id, orderStatus: '__completing__' }, { $set: { orderStatus: from } }).catch(() => {});
+    throw saveErr;
+  }
 
   // Reset COD Cancellation Count on any successful delivery
   if (order.userId) {
@@ -1597,7 +1620,6 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
       note: `Rider finalized payment as ${finalPayMethod}. Order is now delivered.`,
     });
   } catch (txErr) {
-    import('fs').then(fs => fs.appendFileSync('c:\\Users\\princeb\\.gemini\\antigravity-ide\\brain\\6e556dc8-03b6-43c7-8fad-7c0a061a566e\\scratch\\txErr.log', txErr.stack + '\\n'));
     logger.error(`Failed to update transaction status for order ${order._id}:`, txErr);
   }
 
