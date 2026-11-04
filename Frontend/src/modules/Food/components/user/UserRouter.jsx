@@ -132,6 +132,12 @@ const PageLoader = () => (
 /** Main tabs render via MainTabKeepAlive in UserLayout — route match only. */
 const MainTabRoutePlaceholder = () => null
 
+/** Plain <Navigate to="/user/auth/login" /> drops the query string (e.g. ?ref= for referral links). */
+const RedirectToLogin = () => {
+  const location = useLocation()
+  return <Navigate to={`/user/auth/login${location.search}`} replace />
+}
+
 const RequireInitialAuth = ({ children }) => {
   const location = useLocation();
   const authStatus = localStorage.getItem("user_authenticated");
@@ -194,15 +200,15 @@ export default function UserRouter() {
           <Route path="help/orders/:orderId" element={<OrderHelp />} />
 
           {/* Auth Redirects & Callbacks */}
-          <Route path="login" element={<Navigate to="/user/auth/login" replace />} />
+          <Route path="login" element={<RedirectToLogin />} />
           <Route path="auth/login" element={
             <AuthRedirect module="user">
-              <Navigate to="/user/auth/login" replace />
+              <RedirectToLogin />
             </AuthRedirect>
           } />
           <Route path="auth/sign-in" element={
             <AuthRedirect module="user">
-              <Navigate to="/user/auth/login" replace />
+              <RedirectToLogin />
             </AuthRedirect>
           } />
           <Route path="auth/otp" element={

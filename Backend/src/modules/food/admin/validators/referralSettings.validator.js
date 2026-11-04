@@ -3,6 +3,7 @@ import { ValidationError } from '../../../../core/auth/errors.js';
 
 const schema = z.object({
     referralRewardUser: z.number().min(0).optional(),
+    referralCommissionPercent: z.number().min(0).max(100).optional(),
     referralRewardDelivery: z.number().min(0).optional(),
     referralLimitUser: z.number().min(0).optional(),
     referralLimitDelivery: z.number().min(0).optional(),
@@ -12,6 +13,7 @@ const schema = z.object({
 export const validateReferralSettingsUpsertDto = (body) => {
     const normalized = {
         referralRewardUser: body?.referralRewardUser !== undefined ? Number(body.referralRewardUser) : undefined,
+        referralCommissionPercent: body?.referralCommissionPercent !== undefined ? Number(body.referralCommissionPercent) : undefined,
         referralRewardDelivery: body?.referralRewardDelivery !== undefined ? Number(body.referralRewardDelivery) : undefined,
         referralLimitUser: body?.referralLimitUser !== undefined ? Number(body.referralLimitUser) : undefined,
         referralLimitDelivery: body?.referralLimitDelivery !== undefined ? Number(body.referralLimitDelivery) : undefined,

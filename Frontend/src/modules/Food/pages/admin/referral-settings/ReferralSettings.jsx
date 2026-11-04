@@ -11,6 +11,7 @@ export default function ReferralSettings() {
   const [saving, setSaving] = useState(false)
   const [settings, setSettings] = useState({
     referralRewardUser: "",
+    referralCommissionPercent: "",
     referralRewardDelivery: "",
     referralLimitUser: "",
     referralLimitDelivery: "",
@@ -24,6 +25,7 @@ export default function ReferralSettings() {
       if (res?.data?.success && s) {
         setSettings({
           referralRewardUser: s.referralRewardUser ?? "",
+          referralCommissionPercent: s.referralCommissionPercent ?? "",
           referralRewardDelivery: s.referralRewardDelivery ?? "",
           referralLimitUser: s.referralLimitUser ?? "",
           referralLimitDelivery: s.referralLimitDelivery ?? "",
@@ -31,6 +33,7 @@ export default function ReferralSettings() {
       } else {
         setSettings({
           referralRewardUser: "",
+          referralCommissionPercent: "",
           referralRewardDelivery: "",
           referralLimitUser: "",
           referralLimitDelivery: "",
@@ -53,6 +56,7 @@ export default function ReferralSettings() {
       setSaving(true)
       const body = {
         referralRewardUser: settings.referralRewardUser === "" ? 0 : Number(settings.referralRewardUser),
+        referralCommissionPercent: settings.referralCommissionPercent === "" ? 0 : Number(settings.referralCommissionPercent),
         referralRewardDelivery: settings.referralRewardDelivery === "" ? 0 : Number(settings.referralRewardDelivery),
         referralLimitUser: settings.referralLimitUser === "" ? 0 : Number(settings.referralLimitUser),
         referralLimitDelivery: settings.referralLimitDelivery === "" ? 0 : Number(settings.referralLimitDelivery),
@@ -65,6 +69,7 @@ export default function ReferralSettings() {
         if (saved) {
           setSettings({
             referralRewardUser: saved.referralRewardUser ?? "",
+            referralCommissionPercent: saved.referralCommissionPercent ?? "",
             referralRewardDelivery: saved.referralRewardDelivery ?? "",
             referralLimitUser: saved.referralLimitUser ?? "",
             referralLimitDelivery: saved.referralLimitDelivery ?? "",
@@ -138,7 +143,18 @@ export default function ReferralSettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="border border-slate-200 rounded-xl p-4">
                 <h3 className="font-semibold text-slate-900 mb-3">User Referral</h3>
-                <label className="block text-sm text-slate-600 mb-1">Reward amount (₹)</label>
+                <label className="block text-sm text-slate-600 mb-1">Commission (% of referee's first order)</label>
+                <input
+                  value={settings.referralCommissionPercent}
+                  onChange={onChange("referralCommissionPercent")}
+                  inputMode="numeric"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                  placeholder="e.g. 10"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Paid to the referrer when the referee's first order is delivered. Set to 0 to use a flat reward instead.
+                </p>
+                <label className="block text-sm text-slate-600 mb-1 mt-3">Flat reward amount (₹) — used only if commission % is 0</label>
                 <input
                   value={settings.referralRewardUser}
                   onChange={onChange("referralRewardUser")}

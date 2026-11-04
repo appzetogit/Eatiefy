@@ -39,6 +39,25 @@ const ROLES = {
   ADMIN: "ADMIN",
 };
 
+// Excludes visually ambiguous characters (0/O, 1/I/L) so a code can be read
+// aloud or typed from memory without mix-ups.
+const SHORT_REFERRAL_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const SHORT_REFERRAL_CODE_LENGTH = 6;
+
+async function generateUniqueShortReferralCode() {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    let code = "";
+    for (let i = 0; i < SHORT_REFERRAL_CODE_LENGTH; i += 1) {
+      code += SHORT_REFERRAL_CODE_ALPHABET[crypto.randomInt(SHORT_REFERRAL_CODE_ALPHABET.length)];
+    }
+    const existing = await FoodUser.findOne({ shortReferralCode: code }).select("_id").lean();
+    if (!existing) return code;
+  }
+  // Astronomically unlikely after 10 tries at 32^6 combinations - fall back to
+  // something guaranteed unique rather than looping forever.
+  return `U${Date.now().toString(36).toUpperCase()}`;
+}
+
 /**
  * Saves the FCM (and, for restaurant/rider, VoIP) token sent with an OTP
  * login. Both halves used to be silent either way — no log when the client
@@ -317,13 +336,24 @@ export const verifyUserOtpAndLogin = async (
     userDoc.referralCode = String(userDoc._id);
     await userDoc.save();
   }
+  if (!userDoc.shortReferralCode) {
+    userDoc.shortReferralCode = await generateUniqueShortReferralCode();
+    await userDoc.save();
+  }
 
   // Referral crediting: only for brand new accounts.
   const refRaw = typeof ref === "string" ? String(ref).trim() : "";
-  if (isNewUser && refRaw) {
+  let referrerId = null;
+  if (mongoose.Types.ObjectId.isValid(refRaw)) {
+    referrerId = new mongoose.Types.ObjectId(refRaw);
+  } else if (refRaw) {
+    // Not a Mongo _id - try resolving as a short, human-typeable referral code.
+    const byShortCode = await FoodUser.findOne({ shortReferralCode: refRaw.toUpperCase() }).select("_id").lean();
+    if (byShortCode) referrerId = byShortCode._id;
+  }
+  if (isNewUser && referrerId) {
     try {
-      if (mongoose.Types.ObjectId.isValid(refRaw)) {
-        const referrerId = new mongoose.Types.ObjectId(refRaw);
+      {
         if (String(referrerId) !== String(userDoc._id)) {
           const [referrer, settingsDoc] = await Promise.all([
             FoodUser.findById(referrerId).select("_id referralCount").lean(),
@@ -333,7 +363,11 @@ export const verifyUserOtpAndLogin = async (
           ]);
 
           if (referrer && settingsDoc) {
-            const reward = Math.max(
+            const commissionPercent = Math.max(
+              0,
+              Number(settingsDoc.referralCommissionPercent) || 0,
+            );
+            const flatReward = Math.max(
               0,
               Number(settingsDoc.referralRewardUser) || 0,
             );
@@ -342,8 +376,23 @@ export const verifyUserOtpAndLogin = async (
               Number(settingsDoc.referralLimitUser) || 0,
             );
 
-            if (
-              reward > 0 &&
+            if (commissionPercent > 0) {
+              // Commission mode: nothing is paid at signup. The reward is a % of
+              // the referee's first DELIVERED order, paid out later by the
+              // order-delivery hook (order.model.js post('save') -> referral
+              // commission service), which also enforces referralLimitUser.
+              userDoc.referredBy = referrerId;
+              await userDoc.save();
+
+              await FoodReferralLog.create({
+                referrerId,
+                refereeId: userDoc._id,
+                role: "USER",
+                rewardAmount: 0,
+                status: "pending",
+              });
+            } else if (
+              flatReward > 0 &&
               limit > 0 &&
               Number(referrer.referralCount || 0) < limit
             ) {
@@ -354,7 +403,7 @@ export const verifyUserOtpAndLogin = async (
                 referrerId,
                 refereeId: userDoc._id,
                 role: "USER",
-                rewardAmount: reward,
+                rewardAmount: flatReward,
                 status: "credited",
               });
 
@@ -363,7 +412,7 @@ export const verifyUserOtpAndLogin = async (
                   { _id: referrerId },
                   { $inc: { referralCount: 1 } },
                 ),
-                creditReferralReward(referrerId, reward, {
+                creditReferralReward(referrerId, flatReward, {
                   role: "USER",
                   refereeId: String(userDoc._id),
                   referralLogId: String(log._id),
@@ -374,10 +423,10 @@ export const verifyUserOtpAndLogin = async (
                 referrerId,
                 refereeId: userDoc._id,
                 role: "USER",
-                rewardAmount: reward,
+                rewardAmount: flatReward,
                 status: "rejected",
                 reason:
-                  reward <= 0
+                  flatReward <= 0
                     ? "reward_disabled"
                     : limit <= 0
                       ? "limit_disabled"

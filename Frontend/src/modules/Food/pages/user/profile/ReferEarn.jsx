@@ -35,6 +35,8 @@ export default function ReferEarn() {
     referralCount: 0,
     totalReferralEarnings: 0,
     rewardAmount: 0,
+    commissionPercent: 0,
+    shortReferralCode: "",
     totalInvited: 0,
     creditedCount: 0,
     pendingCount: 0,
@@ -55,6 +57,8 @@ export default function ReferEarn() {
             referralCount: Number(nextStats.referralCount) || 0,
             totalReferralEarnings: Number(nextStats.totalReferralEarnings) || 0,
             rewardAmount: Number(nextStats.rewardAmount) || 0,
+            commissionPercent: Number(nextStats.commissionPercent) || 0,
+            shortReferralCode: String(nextStats.shortReferralCode || ""),
             totalInvited: Number(nextStats.totalInvited) || 0,
             creditedCount: Number(nextStats.creditedCount) || 0,
             pendingCount: Number(nextStats.pendingCount) || 0,
@@ -84,9 +88,25 @@ export default function ReferEarn() {
     : "";
 
   const shareText = useMemo(() => {
-    const rewardText = stats.rewardAmount > 0 ? `\u20B9${stats.rewardAmount}` : "rewards";
-    return `Join ${companyName} and earn ${rewardText}.`;
-  }, [companyName, stats.rewardAmount]);
+    const rewardText =
+      stats.commissionPercent > 0
+        ? `${stats.commissionPercent}% of their first order`
+        : stats.rewardAmount > 0
+          ? `\u20B9${stats.rewardAmount}`
+          : "rewards";
+    const codeText = stats.shortReferralCode ? ` My code: ${stats.shortReferralCode}.` : "";
+    return `Join ${companyName} and earn ${rewardText}.${codeText}`;
+  }, [companyName, stats.rewardAmount, stats.commissionPercent, stats.shortReferralCode]);
+
+  const handleCopyCode = async () => {
+    if (!stats.shortReferralCode) return;
+    try {
+      await navigator.clipboard?.writeText(stats.shortReferralCode);
+      toast.success("Referral code copied");
+    } catch (error) {
+      toast.error("Unable to copy code");
+    }
+  };
 
   const handleShare = async () => {
     if (!referralLink) {
@@ -137,7 +157,9 @@ export default function ReferEarn() {
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Reward per invite</p>
-                <p className="text-lg font-bold text-[#1F6B45]">{"\u20B9"}{stats.rewardAmount}</p>
+                <p className="text-lg font-bold text-[#1F6B45]">
+                  {stats.commissionPercent > 0 ? `${stats.commissionPercent}%` : `\u20B9${stats.rewardAmount}`}
+                </p>
               </div>
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Referral earnings</p>
@@ -155,6 +177,22 @@ export default function ReferEarn() {
               <Share2 className="h-4 w-4 mr-2" />
               Share Invite
             </Button>
+
+            {stats.shortReferralCode ? (
+              <div className="mt-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Or share this code - for when a link can't be tapped
+                  </p>
+                  <p className="text-lg font-bold tracking-widest text-gray-900 dark:text-white">
+                    {stats.shortReferralCode}
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={handleCopyCode}>
+                  Copy
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

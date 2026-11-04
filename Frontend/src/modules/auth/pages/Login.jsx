@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { Phone, Loader2, X, User, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { authAPI, userAPI } from "@food/api"
@@ -39,6 +39,8 @@ export default function UnifiedOTPFastLogin() {
   const [deletedAccountData, setDeletedAccountData] = useState(null)
   const [blockTimer, setBlockTimer] = useState(0)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const referralCode = String(searchParams.get("ref") || "").trim() || null
   const submitting = useRef(false)
   // iOS only opens the soft-keyboard from a focus() that happens *inside* a
   // user gesture. This hidden input is focused synchronously on the "Log in"
@@ -270,7 +272,7 @@ export default function UnifiedOTPFastLogin() {
         console.warn("Failed to get FCM token during login", e);
       }
 
-      const response = await authAPI.verifyOTP(phone, otpCode, "login", null, null, "user", null, null, fcmToken, platform, null, confirmAction)
+      const response = await authAPI.verifyOTP(phone, otpCode, "login", null, null, "user", null, referralCode, fcmToken, platform, null, confirmAction)
       const data = response?.data?.data || response?.data || {}
 
       // Handle deleted account found
@@ -290,6 +292,7 @@ export default function UnifiedOTPFastLogin() {
           otp: otpCode,
           fcmToken,
           platform,
+          referralCode,
           confirmAction // Preserve the action (new) for the subsequent name submission
         })
         setShowNameModal(true)
@@ -345,6 +348,7 @@ export default function UnifiedOTPFastLogin() {
           otp: otpCode,
           fcmToken,
           platform,
+          referralCode,
           confirmAction
         })
         setShowNameModal(true)
@@ -385,7 +389,7 @@ export default function UnifiedOTPFastLogin() {
           null,
           "user",
           null,
-          null,
+          pendingVerify.referralCode,
           pendingVerify.fcmToken,
           pendingVerify.platform,
           null, // _token
@@ -843,6 +847,26 @@ export default function UnifiedOTPFastLogin() {
                 />
               </div>
             </div>
+
+            {pendingVerify && (
+              <div className="space-y-4">
+                <Label htmlFor="referralCode" className="text-sm font-medium text-gray-700 dark:text-gray-300 ml-1">
+                  Referral code (optional)
+                </Label>
+                <div className="relative group">
+                  <Input
+                    id="referralCode"
+                    value={pendingVerify.referralCode || ""}
+                    onChange={(e) => {
+                      const v = e.target.value.trim()
+                      setPendingVerify((prev) => (prev ? { ...prev, referralCode: v || null } : prev))
+                    }}
+                    placeholder="Enter code if a friend referred you"
+                    className="pl-4 h-14 bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-[#1F6B45] transition-all group-hover:border-[#1F6B45]/30"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col gap-3">
               <Button

@@ -17,7 +17,9 @@ const referralLogSchema = new mongoose.Schema(
             default: 'pending',
             index: true
         },
-        reason: { type: String, default: '' }
+        reason: { type: String, default: '' },
+        // Set when a USER-role commission payout is triggered by an order delivery.
+        creditedOrderId: { type: mongoose.Schema.Types.ObjectId, default: null }
     },
     { collection: 'food_referral_logs', timestamps: true }
 );

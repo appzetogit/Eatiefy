@@ -19,7 +19,7 @@ const OrderDetectDelivery = lazy(() => import("@food/pages/admin/OrderDetectDeli
 const Category = lazy(() => import("@food/pages/admin/categories/Category"));
 const FeeSettings = lazy(() => import("@food/pages/admin/fee-settings/FeeSettings"));
 // TODO: Referral feature temporarily disabled. Uncomment to re-enable in future.
-// const ReferralSettings = lazy(() => import("@food/pages/admin/referral-settings/ReferralSettings"));
+const ReferralSettings = lazy(() => import("@food/pages/admin/referral-settings/ReferralSettings"));
 // Restaurant Management
 const ZoneSetup = lazy(() => import("@food/pages/admin/restaurant/ZoneSetup"));
 const AddZone = lazy(() => import("@food/pages/admin/restaurant/AddZone"));
@@ -228,8 +228,7 @@ export default function AdminRouter() {
             {/* FOOD & CATEGORY MANAGEMENT */}
             <Route path="categories" element={<Category />} />
             <Route path="fee-settings" element={<FeeSettings />} />
-            {/* TODO: Referral feature temporarily disabled. Uncomment to re-enable in future. */}
-            {/* <Route path="referral-settings" element={<ReferralSettings />} /> */}
+            <Route path="referral-settings" element={<ReferralSettings />} />
             <Route path="foods" element={<FoodsList />} />
             <Route path="food/list" element={<FoodsList />} />
             <Route path="pricing" element={<PricingManagement />} />

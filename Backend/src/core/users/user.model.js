@@ -110,6 +110,14 @@ const userSchema = new mongoose.Schema(
         referralCode: {
             type: String
         },
+        // Short, easy-to-say/type alternative to referralCode (which is the raw
+        // Mongo _id) - for sharing a referral code by voice/SMS instead of a link.
+        shortReferralCode: {
+            type: String,
+            index: true,
+            sparse: true,
+            unique: true
+        },
         referredBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'FoodUser',

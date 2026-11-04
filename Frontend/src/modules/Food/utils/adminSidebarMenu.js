@@ -117,14 +117,13 @@ export const adminSidebarMenu = [
       },
     ],
   },
-  // TODO: Referral feature temporarily disabled. Uncomment to re-enable in future.
-  // {
-  //   type: "section",
-  //   label: "REFERRAL & REWARDS",
-  //   items: [
-  //     { type: "link", label: "Referral Settings", path: "/admin/food/referral-settings", icon: "Gift" },
-  //   ],
-  // },
+  {
+    type: "section",
+    label: "REFERRAL & REWARDS",
+    items: [
+      { type: "link", label: "Referral Settings", path: "/admin/food/referral-settings", icon: "Gift" },
+    ],
+  },
   {
     type: "section",
     label: "CUSTOMER MANAGEMENT",

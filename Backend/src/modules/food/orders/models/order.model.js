@@ -519,6 +519,20 @@ orderSchema.post('save', function (doc) {
         .catch(() => {});
 });
 
+/*
+ * Commission-mode user referrals are paid out the moment a user's first order
+ * is delivered (see userReferral.service.js), not at signup - so a cancelled
+ * or never-paid order pays nothing. Hooked here so it fires regardless of
+ * which service (rider, restaurant, admin) made the 'delivered' transition.
+ */
+orderSchema.post('save', function (doc) {
+    if (!doc?.$locals?.orderStatusChanged) return;
+    if (String(doc.orderStatus || '') !== 'delivered') return;
+    import('../../user/services/userReferral.service.js')
+        .then(({ payUserReferralCommissionOnDelivery }) => payUserReferralCommissionOnDelivery(doc))
+        .catch(() => {});
+});
+
 export const FoodOrder = mongoose.model('FoodOrder', orderSchema);
 
 const settingsSchema = new mongoose.Schema(
