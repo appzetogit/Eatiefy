@@ -142,6 +142,7 @@ export default function RestaurantsList() {
   const [savingDetails, setSavingDetails] = useState(false)
   const [detailsForm, setDetailsForm] = useState({
     name: "",
+    foodType: "Mixed",
     pureVegRestaurant: false,
     pureVeganRestaurant: false,
     ownerName: "",
@@ -894,6 +895,7 @@ export default function RestaurantsList() {
     if (!restaurant) {
       return {
         name: "",
+        foodType: "Mixed",
         pureVegRestaurant: false,
         pureVeganRestaurant: false,
         ownerName: "",
@@ -925,6 +927,11 @@ export default function RestaurantsList() {
 
     return {
       name: restaurant.restaurantName || restaurant.name || "",
+      foodType:
+        restaurant.foodType ||
+        (typeof restaurant.pureVegRestaurant === "boolean"
+          ? (restaurant.pureVegRestaurant ? "Veg" : "Mixed")
+          : "Mixed"),
       pureVegRestaurant:
         typeof restaurant.pureVegRestaurant === "boolean"
           ? restaurant.pureVegRestaurant
@@ -990,8 +997,7 @@ export default function RestaurantsList() {
 
       const payload = {
         name: detailsForm.name.trim(),
-        pureVegRestaurant:
-          detailsForm.pureVegRestaurant === true || detailsForm.pureVeganRestaurant === true,
+        foodType: detailsForm.foodType,
         pureVeganRestaurant: detailsForm.pureVeganRestaurant === true,
         ownerName: detailsForm.ownerName.trim(),
         ownerEmail: detailsForm.ownerEmail.trim(),
@@ -1683,13 +1689,13 @@ export default function RestaurantsList() {
                           onClick={() =>
                             setDetailsForm((prev) => ({
                               ...prev,
+                              foodType: "Veg",
                               pureVegRestaurant: true,
                               pureVeganRestaurant: false,
                             }))
                           }
                           className={`px-3 py-1.5 text-xs rounded-full border ${
-                            detailsForm.pureVegRestaurant === true &&
-                            detailsForm.pureVeganRestaurant !== true
+                            detailsForm.foodType === "Veg"
                               ? "bg-green-600 text-white border-green-600"
                               : "bg-white text-slate-700 border-slate-300"
                           }`}
@@ -1701,29 +1707,31 @@ export default function RestaurantsList() {
                           onClick={() =>
                             setDetailsForm((prev) => ({
                               ...prev,
-                              pureVegRestaurant: true,
-                              pureVeganRestaurant: true,
+                              foodType: "Non-Veg",
+                              pureVegRestaurant: false,
+                              pureVeganRestaurant: false,
                             }))
                           }
                           className={`px-3 py-1.5 text-xs rounded-full border ${
-                            detailsForm.pureVeganRestaurant === true
-                              ? "bg-emerald-700 text-white border-emerald-700"
+                            detailsForm.foodType === "Non-Veg"
+                              ? "bg-red-600 text-white border-red-600"
                               : "bg-white text-slate-700 border-slate-300"
                           }`}
                         >
-                          Pure Vegan
+                          Non-Veg
                         </button>
                         <button
                           type="button"
                           onClick={() =>
                             setDetailsForm((prev) => ({
                               ...prev,
+                              foodType: "Mixed",
                               pureVegRestaurant: false,
                               pureVeganRestaurant: false,
                             }))
                           }
                           className={`px-3 py-1.5 text-xs rounded-full border ${
-                            detailsForm.pureVegRestaurant === false
+                            detailsForm.foodType === "Mixed"
                               ? "bg-slate-900 text-white border-slate-900"
                               : "bg-white text-slate-700 border-slate-300"
                           }`}

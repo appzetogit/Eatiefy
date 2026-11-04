@@ -2620,6 +2620,10 @@ export default function Home() {
                     : activeOffers.length,
                 slug: restaurant.slug,
                 restaurantId: restaurant.restaurantId,
+                // Dropped here before, so the later client-side vegMode filter
+                // (which reads foodType, not just the booleans below) could
+                // never tell a Non-Veg restaurant apart from a Mixed one.
+                foodType: restaurant.foodType || null,
                 pureVegRestaurant: restaurant.pureVegRestaurant === true,
                 pureVeganRestaurant: restaurant.pureVeganRestaurant === true,
                 isVeg: restaurant.isVeg === true || restaurant.pureVegRestaurant === true,
