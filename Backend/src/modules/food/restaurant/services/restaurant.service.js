@@ -1767,6 +1767,10 @@ export const listApprovedRestaurants = async (query = {}) => {
         filter['diningSettings.isEnabled'] = true;
     }
 
+    if (query.isSweetShop === 'true' || query.isSweetShop === true) {
+        filter.isSweetShop = true;
+    }
+
     if (query.foodType) {
         const ft = String(query.foodType).trim().toLowerCase();
         if (ft === 'veg' || ft === 'pure-veg' || ft === 'pure veg') {
@@ -1881,6 +1885,7 @@ export const listApprovedRestaurants = async (query = {}) => {
         foodType: 1,
         pureVegRestaurant: 1,
         pureVeganRestaurant: 1,
+        isSweetShop: 1,
         diningSettings: 1,
         createdAt: 1,
         location: 1,

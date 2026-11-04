@@ -476,12 +476,15 @@ export async function getRestaurants(query) {
     } else if (query.isActive === false || query.isActive === 'false') {
         filter.isActive = false;
     }
+    if (query.isSweetShop === true || query.isSweetShop === 'true') {
+        filter.isSweetShop = true;
+    }
     const [restaurants, total] = await Promise.all([
         FoodRestaurant.find(filter)
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .select('restaurantName location area city profileImage coverImages status ownerName ownerPhone zoneId rating totalRatings pureVegRestaurant isActive')
+            .select('restaurantName location area city profileImage coverImages status ownerName ownerPhone zoneId rating totalRatings foodType pureVegRestaurant isSweetShop isActive')
             .populate('zoneId', 'name zoneName')
             .lean(),
         FoodRestaurant.countDocuments(filter)
@@ -3517,6 +3520,9 @@ export async function updateRestaurantById(id, body = {}) {
         // longer a selectable menu type. Stored values are left as they are.
         parseBooleanLike(body.pureVeganRestaurant, 'pureVeganRestaurant');
         doc.pureVeganRestaurant = false;
+    }
+    if (body.isSweetShop !== undefined) {
+        doc.isSweetShop = parseBooleanLike(body.isSweetShop, 'isSweetShop');
     }
     if (doc.pureVeganRestaurant === true) {
         doc.pureVegRestaurant = true;

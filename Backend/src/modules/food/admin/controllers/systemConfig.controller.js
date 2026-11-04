@@ -75,6 +75,11 @@ const CUSTOMIZATION_TOGGLES = [
         description: 'When disabled, dining routes, tabs and entry points are hidden across every app'
     },
     {
+        key: 'sweets_enabled',
+        defaultValue: false,
+        description: 'When disabled, the Sweets & Bakery tab, routes and admin pages are hidden across every app'
+    },
+    {
         key: 'restaurant_onboarding_razorpay_enabled',
         // Defaults to ON. A missing row (or a failed read) must never let a
         // restaurant skip a fee that is actually being charged.
@@ -151,6 +156,7 @@ export async function updateCustomizationSettings(req, res) {
     if (updates.some((u) =>
         u.key === 'takeaway_enabled' ||
         u.key === 'dining_enabled' ||
+        u.key === 'sweets_enabled' ||
         u.key === 'restaurant_onboarding_razorpay_enabled'
     )) {
         invalidateModuleAccessCache();

@@ -31,6 +31,13 @@ const CUSTOMIZATION_TOGGLES = [
     defaultValue: false,
   },
   {
+    key: "sweets_enabled",
+    label: "Sweets & Bakery Module",
+    description:
+      "When OFF, the Sweets & Bakery tab, listing page and admin page are hidden everywhere and direct URLs redirect away.",
+    defaultValue: false,
+  },
+  {
     key: "cod_enabled",
     label: "Global COD",
     description:
@@ -240,7 +247,7 @@ export default function CustomizationSettings() {
 
       // Takeaway / Dining gate routes and nav across the apps, so push the new
       // value into the shared cache and tell live tabs to re-read it.
-      if (key === "takeaway_enabled" || key === "dining_enabled") {
+      if (key === "takeaway_enabled" || key === "dining_enabled" || key === "sweets_enabled") {
         try {
           const raw = localStorage.getItem("ometto_customization_settings");
           const parsed = raw ? JSON.parse(raw) : {};

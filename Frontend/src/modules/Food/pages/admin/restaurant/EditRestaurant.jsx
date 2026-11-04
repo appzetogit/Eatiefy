@@ -77,6 +77,7 @@ const normalizeDetailsFormFromRestaurant = (restaurant) => {
         ? restaurant.pureVegRestaurant
         : false,
     pureVeganRestaurant: restaurant?.pureVeganRestaurant === true,
+    isSweetShop: restaurant?.isSweetShop === true,
     ownerName: restaurant?.ownerName || "",
     ownerEmail: restaurant?.ownerEmail || "",
     ownerPhone: restaurant?.ownerPhone || "",
@@ -312,6 +313,7 @@ export default function EditRestaurant() {
         name: detailsForm.name,
         foodType: detailsForm.foodType,
         pureVeganRestaurant: detailsForm.pureVeganRestaurant === true,
+        isSweetShop: detailsForm.isSweetShop === true,
         ownerName: detailsForm.ownerName,
         ownerEmail: detailsForm.ownerEmail,
         ownerPhone: detailsForm.ownerPhone,
@@ -521,6 +523,24 @@ export default function EditRestaurant() {
                       }`}
                     >
                       Mixed
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <Label>Sweet Shop / Bakery</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDetailsForm((p) => ({ ...p, isSweetShop: !p.isSweetShop }))
+                      }
+                      className={`px-3 py-1.5 text-xs rounded-full border ${
+                        detailsForm.isSweetShop === true
+                          ? "bg-pink-600 text-white border-pink-600"
+                          : "bg-white text-slate-700 border-slate-300"
+                      }`}
+                    >
+                      {detailsForm.isSweetShop === true ? "Listed as Sweet Shop" : "Not a Sweet Shop"}
                     </button>
                   </div>
                 </div>

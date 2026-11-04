@@ -93,6 +93,7 @@ const PushDebug = lazy(() => import("@food/pages/admin/system/PushDebug"));
 const LandingPageManagement = lazy(() => import("@food/pages/admin/system/LandingPageManagement"));
 const DiningManagement = lazy(() => import("@food/pages/admin/system/DiningManagement"));
 const DiningList = lazy(() => import("@food/pages/admin/system/DiningList"));
+const SweetShops = lazy(() => import("@food/pages/admin/system/SweetShops"));
 const DiningRequests = lazy(() => import("@food/pages/admin/system/DiningRequests"));
 const CustomizationSettings = lazy(() => import("@food/pages/admin/system/CustomizationSettings"));
 const ArchivedAccounts = lazy(() => import("@food/pages/admin/system/ArchivedAccounts"));
@@ -152,7 +153,7 @@ const RETIRED_TEMPLATE_PATHS = [
 ];
 
 export default function AdminRouter() {
-  const { diningEnabled } = useModuleAccess();
+  const { diningEnabled, sweetsEnabled } = useModuleAccess();
   // Admin-specific fallback. `null` here left a blank screen on slow networks,
   // and the outer boundary would otherwise have shown the customer app shell.
   return (
@@ -319,6 +320,7 @@ export default function AdminRouter() {
             ))}
             <Route path="dining-management" element={diningEnabled ? <DiningManagement /> : <Navigate to="/admin/food" replace />} />
             <Route path="dining-list" element={diningEnabled ? <DiningList /> : <Navigate to="/admin/food" replace />} />
+            <Route path="sweet-shops" element={sweetsEnabled ? <SweetShops /> : <Navigate to="/admin/food" replace />} />
             <Route path="dining-requests" element={diningEnabled ? <DiningRequests /> : <Navigate to="/admin/food" replace />} />
             <Route path="customization-settings" element={<CustomizationSettings />} />
             <Route path="archived-accounts" element={<ArchivedAccounts />} />

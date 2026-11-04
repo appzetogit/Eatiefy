@@ -96,6 +96,13 @@ const restaurantSchema = new mongoose.Schema(
       required: true,
       default: false,
     },
+    // Independent of foodType/pureVegRestaurant - a sweet shop/bakery can serve
+    // only veg items but is a different browsing category, not a diet type.
+    isSweetShop: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     addressLine1: {
       type: String,
     },

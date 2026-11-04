@@ -25,7 +25,7 @@ const debugError = (...args) => {}
 
 
 export default function DesktopNavbar({ showLogo = true }) {
-  const { diningEnabled, takeawayEnabled } = useModuleAccess();
+  const { diningEnabled, takeawayEnabled, sweetsEnabled } = useModuleAccess();
     const location = useLocation()
     const navigate = useNavigate()
     const { location: userLocation, loading: locationLoading } = useLocationHook()
@@ -82,10 +82,11 @@ export default function DesktopNavbar({ showLogo = true }) {
     }
 
     const isDining = location.pathname === "/food/user/dining" || location.pathname === "/food/dining"
+    const isSweets = location.pathname === "/food/user/sweets" || location.pathname === "/food/sweets"
     const isTakeaway = location.pathname === "/food/user/takeaway" || location.pathname === "/food/takeaway"
     const isUnder250 = location.pathname === "/food/user/under-250" || location.pathname === "/food/under-250"
     const isProfile = location.pathname.startsWith("/food/user/profile") || location.pathname.startsWith("/food/profile")
-    const isDelivery = !isDining && !isTakeaway && !isUnder250 && !isProfile && (location.pathname === "/food/user" || location.pathname === "/food" || (location.pathname.startsWith("/food/user") && !location.pathname.includes("/dining") && !location.pathname.includes("/takeaway") && !location.pathname.includes("/under-250") && !location.pathname.includes("/profile")))
+    const isDelivery = !isDining && !isSweets && !isTakeaway && !isUnder250 && !isProfile && (location.pathname === "/food/user" || location.pathname === "/food" || (location.pathname.startsWith("/food/user") && !location.pathname.includes("/dining") && !location.pathname.includes("/sweets") && !location.pathname.includes("/takeaway") && !location.pathname.includes("/under-250") && !location.pathname.includes("/profile")))
     const isBannerRoute =
         location.pathname === "/food/user" ||
         location.pathname === "/food" ||
@@ -447,6 +448,28 @@ export default function DesktopNavbar({ showLogo = true }) {
                             >
                                 <span className="text-sm font-bold tracking-wide uppercase">Dining</span>
                                 {isDining && (
+                                    <motion.div
+                                        layoutId="navIndicator"
+                                        className="absolute -bottom-3 left-0 right-0 h-0.5 bg-[#1F6B45]"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ duration: 0.3 }}
+                                    />
+                                )}
+                            </Link>
+                            )}
+
+                            {/* Sweets & Bakery Tab — gated by sweetsEnabled */}
+                            {sweetsEnabled && (
+                            <Link
+                                to="/food/user/sweets"
+                                className={`flex flex-col items-center gap-1 px-2 py-1 transition-colors relative group ${isSweets
+                                    ? "text-[#1F6B45]"
+                                    : "text-gray-600 dark:text-gray-400 hover:text-[#1F6B45]"
+                                    }`}
+                            >
+                                <span className="text-sm font-bold tracking-wide uppercase">Sweets</span>
+                                {isSweets && (
                                     <motion.div
                                         layoutId="navIndicator"
                                         className="absolute -bottom-3 left-0 right-0 h-0.5 bg-[#1F6B45]"

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { Tag, User, Soup, ShoppingCart, History, UtensilsCrossed } from "lucide-react"
+import { Tag, User, Soup, ShoppingCart, History, UtensilsCrossed, Cookie } from "lucide-react"
 import { clearHomeScrollState } from "@food/utils/homeScrollRestore"
 import { isFeatureEnabled } from "@food/services/publicAppConfig"
 import { usePublicAppConfigOptional } from "@food/context/PublicAppConfigContext"
@@ -29,7 +29,7 @@ export default function BottomNavigation() {
   // Dining visibility follows the admin Customization Settings toggle. The older
   // `dining_control` feature setting still applies on top, so either switch can
   // hide the tab, but neither can show it once dining itself is turned off.
-  const { diningEnabled: diningModuleEnabled } = useModuleAccess()
+  const { diningEnabled: diningModuleEnabled, sweetsEnabled } = useModuleAccess()
 
   const getDiningFeatureEnabled = () => {
     try {
@@ -47,12 +47,14 @@ export default function BottomNavigation() {
   const isUnder250 = pathname === "/food/under-250" || pathname.startsWith("/food/user/under-250")
   const isReorder = pathname === "/food/reorder" || pathname.startsWith("/food/user/reorder")
   const isDining = pathname === "/food/dining" || pathname.startsWith("/food/user/dining") || pathname.startsWith("/food/dining")
+  const isSweets = pathname === "/food/sweets" || pathname.startsWith("/food/user/sweets") || pathname.startsWith("/food/sweets")
   const isProfile = pathname.startsWith("/food/profile") || pathname.startsWith("/food/user/profile")
   const isDelivery =
     !isCart &&
     !isUnder250 &&
     !isReorder &&
     !isDining &&
+    !isSweets &&
     !isProfile &&
     (pathname === "/food" ||
       pathname === "/food/" ||
@@ -62,6 +64,7 @@ export default function BottomNavigation() {
         !pathname.includes("/under-250") &&
         !pathname.includes("/reorder") &&
         !pathname.includes("/dining") &&
+        !pathname.includes("/sweets") &&
         !pathname.includes("/profile")))
 
   const activeColor = "var(--module-theme-color, #E2AD4B)"
@@ -164,6 +167,25 @@ export default function BottomNavigation() {
             </div>
             <span className={`text-[10px] sm:text-xs font-semibold tracking-wide transition-all ${isDining ? "" : "text-gray-500 dark:text-gray-400 opacity-80"}`}>
               Dining
+            </span>
+          </Link>
+        )}
+
+        {/* Sweets & Bakery Tab (Dynamic from Admin Toggle) */}
+        {sweetsEnabled && (
+          <Link
+            to="/food/user/sweets"
+            className={`flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1 transition-all duration-300 relative rounded-full ${isSweets
+                ? ""
+                : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50"
+              }`}
+            style={isSweets ? { color: activeColor, backgroundColor: activeBg } : undefined}
+          >
+            <div className="relative">
+              <Cookie className={`h-5 w-5 transition-transform duration-300 ${isSweets ? "scale-110" : "text-gray-500 dark:text-gray-400"}`} strokeWidth={isSweets ? 2.5 : 2} style={isSweets ? { color: activeColor, fill: activeFill } : undefined} />
+            </div>
+            <span className={`text-[10px] sm:text-xs font-semibold tracking-wide transition-all ${isSweets ? "" : "text-gray-500 dark:text-gray-400 opacity-80"}`}>
+              Sweets
             </span>
           </Link>
         )}

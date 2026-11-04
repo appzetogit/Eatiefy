@@ -27,6 +27,7 @@ const TableCancellationPolicy = lazy(() => import("@food/pages/user/dining/Table
 const TableEditUserPage = lazy(() => import("@food/pages/user/dining/TableEditUserPage"))
 const MyBookings = lazy(() => import("@food/pages/user/dining/MyBookings"))
 const ProductDetail = lazy(() => import("@food/pages/user/ProductDetail"))
+const SweetsBakery = lazy(() => import("@food/pages/user/SweetsBakery"))
 
 // Cart
 const Cart = lazy(() => import("@food/pages/user/cart/Cart"))
@@ -173,7 +174,7 @@ const RequireInitialAuth = ({ children }) => {
 }
 
 export default function UserRouter() {
-  const { takeawayEnabled, diningEnabled } = useModuleAccess()
+  const { takeawayEnabled, diningEnabled, sweetsEnabled } = useModuleAccess()
 
   return (
     <Suspense fallback={<AppShellSkeleton />}>
@@ -241,6 +242,11 @@ export default function UserRouter() {
             <Route path="dining/*" element={<Navigate to="/food/user" replace />} />
           )}
           <Route path="under-250" element={<MainTabRoutePlaceholder />} />
+          {sweetsEnabled ? (
+            <Route path="sweets" element={<Suspense fallback={<PageLoader />}><SweetsBakery /></Suspense>} />
+          ) : (
+            <Route path="sweets" element={<Navigate to="/food/user" replace />} />
+          )}
           <Route path="reorder" element={<Reorder />} />
           <Route path="categories" element={<Categories />} />
           <Route path="category/:category" element={<MainTabRoutePlaceholder />} />

@@ -1,4 +1,4 @@
-import { isDiningEnabled } from "@food/config/featureFlags"
+import { isDiningEnabled, isSweetsEnabled } from "@food/config/featureFlags"
 
 export const adminSidebarMenu = [
   {
@@ -228,6 +228,17 @@ export const adminSidebarMenu = [
             { type: "link", label: "Dining Banners", path: "/admin/food/dining-management", icon: "UtensilsCrossed" },
             { type: "link", label: "Dining List", path: "/admin/food/dining-list", icon: "FileText" },
             { type: "link", label: "Dining Category Request", path: "/admin/food/dining-requests", icon: "CheckCircle" },
+          ],
+        },
+      ]
+    : []),
+  ...(isSweetsEnabled()
+    ? [
+        {
+          type: "section",
+          label: "SWEETS & BAKERY",
+          items: [
+            { type: "link", label: "Sweet Shops", path: "/admin/food/sweet-shops", icon: "Gift" },
           ],
         },
       ]

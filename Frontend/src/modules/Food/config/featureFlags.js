@@ -17,6 +17,7 @@ const DEFAULTS = {
   // Takeaway ships enabled; dining shipped off behind the old build-time flag.
   takeaway_enabled: true,
   dining_enabled: false,
+  sweets_enabled: false,
 };
 
 const readCachedSettings = () => {
@@ -67,6 +68,7 @@ export const refreshModuleAccessFromCache = () => applyModuleAccessSettings(read
 export const getModuleAccess = () => snapshot;
 export const isTakeawayEnabled = () => snapshot.takeaway_enabled === true;
 export const isDiningEnabled = () => snapshot.dining_enabled === true;
+export const isSweetsEnabled = () => snapshot.sweets_enabled === true;
 
 export const subscribeModuleAccess = (listener) => {
   listeners.add(listener);
