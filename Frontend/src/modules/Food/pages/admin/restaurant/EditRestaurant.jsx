@@ -67,6 +67,11 @@ const normalizeLocationFormFromRestaurant = (restaurant) => {
 const normalizeDetailsFormFromRestaurant = (restaurant) => {
   return {
     name: restaurant?.name || restaurant?.restaurantName || "",
+    foodType:
+      restaurant?.foodType ||
+      (typeof restaurant?.pureVegRestaurant === "boolean"
+        ? (restaurant.pureVegRestaurant ? "Veg" : "Mixed")
+        : "Mixed"),
     pureVegRestaurant:
       typeof restaurant?.pureVegRestaurant === "boolean"
         ? restaurant.pureVegRestaurant
@@ -305,8 +310,7 @@ export default function EditRestaurant() {
 
       const payload = {
         name: detailsForm.name,
-        pureVegRestaurant:
-          detailsForm.pureVegRestaurant === true || detailsForm.pureVeganRestaurant === true,
+        foodType: detailsForm.foodType,
         pureVeganRestaurant: detailsForm.pureVeganRestaurant === true,
         ownerName: detailsForm.ownerName,
         ownerEmail: detailsForm.ownerEmail,
@@ -449,21 +453,39 @@ export default function EditRestaurant() {
                       onClick={() =>
                         setDetailsForm((p) => ({
                           ...p,
+                          foodType: "Veg",
                           pureVegRestaurant: true,
                           pureVeganRestaurant: false,
                         }))
                       }
                       className={`px-3 py-1.5 text-xs rounded-full border ${
-                        detailsForm.pureVegRestaurant === true &&
-                        detailsForm.pureVeganRestaurant !== true
+                        detailsForm.foodType === "Veg"
                           ? "bg-green-600 text-white border-green-600"
                           : "bg-white text-slate-700 border-slate-300"
                       }`}
                     >
                       Pure Veg
                     </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDetailsForm((p) => ({
+                          ...p,
+                          foodType: "Non-Veg",
+                          pureVegRestaurant: false,
+                          pureVeganRestaurant: false,
+                        }))
+                      }
+                      className={`px-3 py-1.5 text-xs rounded-full border ${
+                        detailsForm.foodType === "Non-Veg"
+                          ? "bg-red-600 text-white border-red-600"
+                          : "bg-white text-slate-700 border-slate-300"
+                      }`}
+                    >
+                      Non-Veg
+                    </button>
                     {/* DISABLED: "Pure Vegan" is not a selectable restaurant menu type —
-                        only Pure Veg and Mixed Menu are active. Kept, not deleted.
+                        only Pure Veg, Non-Veg and Mixed Menu are active. Kept, not deleted.
                     <button
                       type="button"
                       onClick={() =>
@@ -487,12 +509,13 @@ export default function EditRestaurant() {
                       onClick={() =>
                         setDetailsForm((p) => ({
                           ...p,
+                          foodType: "Mixed",
                           pureVegRestaurant: false,
                           pureVeganRestaurant: false,
                         }))
                       }
                       className={`px-3 py-1.5 text-xs rounded-full border ${
-                        detailsForm.pureVegRestaurant === false
+                        detailsForm.foodType === "Mixed"
                           ? "bg-slate-900 text-white border-slate-900"
                           : "bg-white text-slate-700 border-slate-300"
                       }`}

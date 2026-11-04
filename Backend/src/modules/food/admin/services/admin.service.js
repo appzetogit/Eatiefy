@@ -3495,8 +3495,22 @@ export async function updateRestaurantById(id, body = {}) {
     if (body.ownerPhone !== undefined) doc.ownerPhone = toStr(body.ownerPhone);
     if (body.primaryContactNumber !== undefined) doc.primaryContactNumber = toStr(body.primaryContactNumber);
 
-    if (body.pureVegRestaurant !== undefined) {
+    // `foodType` must be set directly, not derived from `pureVegRestaurant`
+    // alone: the model's pre-save hook re-normalizes `pureVegRestaurant` from
+    // whatever `doc.foodType` already holds, so setting only the boolean here
+    // got silently clobbered back to the restaurant's existing (stale)
+    // foodType on save - a restaurant onboarded as 'Mixed' could never be
+    // switched to Veg/Non-Veg from this admin screen.
+    if (body.foodType !== undefined) {
+        const ft = String(body.foodType).trim();
+        if (!['Veg', 'Non-Veg', 'Mixed'].includes(ft)) {
+            throw new ValidationError('foodType must be Veg, Non-Veg, or Mixed');
+        }
+        doc.foodType = ft;
+        doc.pureVegRestaurant = ft === 'Veg';
+    } else if (body.pureVegRestaurant !== undefined) {
         doc.pureVegRestaurant = parseBooleanLike(body.pureVegRestaurant, 'pureVegRestaurant');
+        doc.foodType = doc.pureVegRestaurant ? 'Veg' : 'Mixed';
     }
     if (body.pureVeganRestaurant !== undefined) {
         // DISABLED: validated as before, then forced off — "Pure Vegan" is no
