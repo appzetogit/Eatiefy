@@ -152,7 +152,7 @@ export default function ReferEarn() {
         <Card className="bg-white dark:bg-[#242424] rounded-2xl border-0 dark:border-gray-800 shadow-sm mb-3">
           <CardContent className="p-4">
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              Invite friends and earn when they sign up.
+              Invite friends and earn when they place their first order.
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">

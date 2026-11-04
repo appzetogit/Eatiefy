@@ -110,10 +110,14 @@ export default function MenuCategoriesPage() {
     navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate])
 
+  // Includes global/admin-owned categories too: the card below already renders
+  // a "Global" badge and disables edit/delete for them (canEdit === false), so
+  // a food filed under a shared category like "wings" is still visible here -
+  // just not editable.
   const ownCategories = useMemo(
     () =>
       (Array.isArray(categories) ? categories : []).filter(
-        (category) => category && typeof category === "object" && category.ownedByRestaurant,
+        (category) => category && typeof category === "object" && (category.ownedByRestaurant || category.isGlobal),
       ),
     [categories],
   )
