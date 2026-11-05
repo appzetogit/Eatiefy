@@ -151,7 +151,7 @@ export default function ReferEarn() {
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">Reward per invite</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Earn upto</p>
                 <p className="text-lg font-bold text-[#1F6B45]">
                   {stats.rewardAmount > 0 ? `\u20B9${stats.rewardAmount}` : "Rewards"}
                 </p>
