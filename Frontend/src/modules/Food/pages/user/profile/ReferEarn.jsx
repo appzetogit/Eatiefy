@@ -88,15 +88,10 @@ export default function ReferEarn() {
     : "";
 
   const shareText = useMemo(() => {
-    const rewardText =
-      stats.commissionPercent > 0
-        ? `${stats.commissionPercent}% of their first order`
-        : stats.rewardAmount > 0
-          ? `\u20B9${stats.rewardAmount}`
-          : "rewards";
+    const rewardText = stats.rewardAmount > 0 ? `\u20B9${stats.rewardAmount}` : "rewards";
     const codeText = stats.shortReferralCode ? ` My code: ${stats.shortReferralCode}.` : "";
     return `Join ${companyName} and earn ${rewardText}.${codeText}`;
-  }, [companyName, stats.rewardAmount, stats.commissionPercent, stats.shortReferralCode]);
+  }, [companyName, stats.rewardAmount, stats.shortReferralCode]);
 
   const handleCopyCode = async () => {
     if (!stats.shortReferralCode) return;
@@ -158,7 +153,7 @@ export default function ReferEarn() {
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Reward per invite</p>
                 <p className="text-lg font-bold text-[#1F6B45]">
-                  {stats.commissionPercent > 0 ? `${stats.commissionPercent}%` : `\u20B9${stats.rewardAmount}`}
+                  {stats.rewardAmount > 0 ? `\u20B9${stats.rewardAmount}` : "Rewards"}
                 </p>
               </div>
               <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3">
