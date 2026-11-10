@@ -14,7 +14,7 @@
 
 export const THEME_STORAGE_KEY = "appTheme"
 
-const THEMED_PATH_PREFIXES = ["/food/user", "/user/auth"]
+const THEMED_PATH_PREFIXES = ["/food/user", "/user"]
 
 /** True only for routes belonging to the user app. */
 export const isThemedPath = (pathname) => {
