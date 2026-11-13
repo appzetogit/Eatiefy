@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence, useScroll, useTransform, useSpring } from "framer-motion"
 import { useNavigate } from "react-router-dom"
+import { useCompanyName } from "@food/hooks/useCompanyName"
+import { useCompanyLogo } from "@food/hooks/useCompanyLogo"
+import { loadBusinessSettings, getCachedSettings } from "@food/utils/businessSettings"
 import {
   Clock,
   MapPin,
@@ -118,6 +121,31 @@ export default function MasterLandingPage() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [activeTestimonial, setActiveTestimonial] = useState(0)
+  const companyName = useCompanyName()
+  const logoUrl = useCompanyLogo("user")
+  const [contactInfo, setContactInfo] = useState(() => {
+    const cached = getCachedSettings()
+    return { email: cached?.email, phone: cached?.phone }
+  })
+
+  useEffect(() => {
+    const syncContactInfo = () => {
+      const settings = getCachedSettings()
+      if (settings) setContactInfo({ email: settings.email, phone: settings.phone })
+    }
+    if (!getCachedSettings()) {
+      loadBusinessSettings().then(syncContactInfo).catch(() => {})
+    } else {
+      syncContactInfo()
+    }
+    window.addEventListener("businessSettingsUpdated", syncContactInfo)
+    return () => window.removeEventListener("businessSettingsUpdated", syncContactInfo)
+  }, [])
+
+  const contactEmail = contactInfo.email || "support@eatiefy.in"
+  const contactPhone = contactInfo.phone?.number
+    ? `${contactInfo.phone.countryCode || "+91"} ${contactInfo.phone.number}`
+    : "+91 98765 43210"
 
   const mobileSectionRef = useRef(null)
 
@@ -695,7 +723,7 @@ export default function MasterLandingPage() {
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2 mb-6">
-                <img src="/assets/images/EatiefyUserAppLogo.jpeg" alt="Eatiefy" className="h-14 w-14 object-cover rounded-xl shadow-lg" />
+                <img src={logoUrl} alt={companyName} className="h-14 w-14 object-cover rounded-xl shadow-lg" />
               </div>
               <p className="text-gray-400 text-sm mb-6 leading-relaxed">
                 India's smartest dining and takeaway platform. Skip the lines, discover new tastes, and dine better.
@@ -750,13 +778,13 @@ export default function MasterLandingPage() {
                   <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white shrink-0">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                   </div>
-                  <span>support@eatiefy.in</span>
+                  <span>{contactEmail}</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white shrink-0">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" /></svg>
                   </div>
-                  <span>+91 98765 43210</span>
+                  <span>{contactPhone}</span>
                 </li>
               </ul>
             </div>
@@ -764,7 +792,7 @@ export default function MasterLandingPage() {
 
           <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-gray-500 text-sm">
-              &copy; {new Date().getFullYear()} Eatiefy Technologies. All rights reserved.
+              &copy; {new Date().getFullYear()} {companyName} Technologies. All rights reserved.
             </p>
             <div className="flex gap-4 text-sm text-gray-500">
               <span>Made with ❤️ in India</span>
