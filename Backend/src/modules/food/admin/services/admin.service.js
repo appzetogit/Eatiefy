@@ -8179,15 +8179,17 @@ export async function getSidebarBadges() {
 }
 
 /**
- * Admin-triggered Razorpay refund for a paid online order.
- * Status correction + gateway refund — does not re-run cancel automations.
+ * Admin-triggered refund for an order (online Razorpay or customer Wallet).
+ * Status correction + gateway/wallet refund — does not re-run cancel automations.
  */
-export async function processRefund(orderId, refundAmount) {
-    if (!mongoose.Types.ObjectId.isValid(orderId)) {
-        throw new ValidationError('Invalid order id');
+export async function processRefund(orderId, refundAmount, options = {}) {
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(orderId)) {
+        order = await FoodOrder.findById(orderId);
     }
-
-    const order = await FoodOrder.findById(orderId);
+    if (!order) {
+        order = await FoodOrder.findOne({ $or: [{ orderId }, { order_id: orderId }] });
+    }
     if (!order) throw new NotFoundError('Order not found');
 
     const method = String(order.payment?.method || '').toLowerCase();
@@ -8196,17 +8198,8 @@ export async function processRefund(orderId, refundAmount) {
     const alreadyProcessed =
         String(order.payment?.refund?.status || '').toLowerCase() === 'processed';
 
-    if (!['razorpay', 'razorpay_qr'].includes(method)) {
-        throw new ValidationError('Refund via Razorpay is only for online payments');
-    }
-    if (status !== 'paid' && status !== 'refunded') {
-        throw new ValidationError('Order payment is not in a refundable paid state');
-    }
     if (alreadyProcessed || status === 'refunded') {
         return order;
-    }
-    if (!paymentId) {
-        throw new ValidationError('Razorpay payment id missing on this order');
     }
 
     const amount = Number(
@@ -8218,37 +8211,72 @@ export async function processRefund(orderId, refundAmount) {
         throw new ValidationError('Invalid refund amount');
     }
 
-    const { initiateRazorpayRefund, isRazorpayConfigured } = await import(
-        '../../orders/helpers/razorpay.helper.js'
-    );
-    if (!isRazorpayConfigured()) {
-        throw new ValidationError('Razorpay is not configured on this server');
-    }
+    const requestedDestination = String(options.destination || '').toLowerCase();
+    const shouldRefundToWallet =
+        requestedDestination === 'wallet' ||
+        method === 'wallet' ||
+        (!['razorpay', 'razorpay_qr'].includes(method));
 
-    const refundResult = await initiateRazorpayRefund(paymentId, amount);
-    if (!refundResult.success) {
+    if (shouldRefundToWallet) {
+        const userWalletService = await import('../../user/services/userWallet.service.js');
+        if (order.userId) {
+            await userWalletService.refundWalletBalance(
+                order.userId,
+                amount,
+                `Refund for order #${order.order_id || order.orderId || order._id}`,
+                {
+                    orderId: order._id,
+                    source: 'order_refund_wallet',
+                    idempotencyKey: `order_refund:${order._id}`,
+                }
+            );
+        }
+        order.payment.status = 'refunded';
         order.payment.refund = {
-            status: 'failed',
-            destination: 'source',
+            status: 'processed',
+            destination: 'wallet',
             amount,
             refundId: '',
-            processedAt: null,
+            processedAt: new Date(),
         };
         order.markModified('payment');
         await order.save();
-        throw new ValidationError(refundResult.error || 'Razorpay refund failed');
-    }
+    } else {
+        const { initiateRazorpayRefund, isRazorpayConfigured } = await import(
+            '../../orders/helpers/razorpay.helper.js'
+        );
+        if (!isRazorpayConfigured()) {
+            throw new ValidationError('Razorpay is not configured on this server');
+        }
+        if (!paymentId) {
+            throw new ValidationError('Razorpay payment id missing on this order');
+        }
 
-    order.payment.status = 'refunded';
-    order.payment.refund = {
-        status: 'processed',
-        destination: 'source',
-        amount,
-        refundId: refundResult.refundId || '',
-        processedAt: new Date(),
-    };
-    order.markModified('payment');
-    await order.save();
+        const refundResult = await initiateRazorpayRefund(paymentId, amount);
+        if (!refundResult.success) {
+            order.payment.refund = {
+                status: 'failed',
+                destination: 'source',
+                amount,
+                refundId: '',
+                processedAt: null,
+            };
+            order.markModified('payment');
+            await order.save();
+            throw new ValidationError(refundResult.error || 'Razorpay refund failed');
+        }
+
+        order.payment.status = 'refunded';
+        order.payment.refund = {
+            status: 'processed',
+            destination: 'source',
+            amount,
+            refundId: refundResult.refundId || '',
+            processedAt: new Date(),
+        };
+        order.markModified('payment');
+        await order.save();
+    }
 
     try {
         await FoodTransaction.updateOne(
@@ -8260,7 +8288,7 @@ export async function processRefund(orderId, refundAmount) {
                         kind: 'refunded',
                         amount,
                         at: new Date(),
-                        note: `Admin Razorpay refund ${refundResult.refundId || ''}`.trim(),
+                        note: `Admin refund (${order.payment?.refund?.destination || 'source'}) ${order.payment?.refund?.refundId || ''}`.trim(),
                         recordedBy: { role: 'ADMIN' },
                     },
                 },

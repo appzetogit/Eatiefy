@@ -1211,6 +1211,10 @@ export default function Coupons() {
                         const offerId = item.id || item._id
                         const isActionLoading = !!restActionLoading[offerId]
                         const approvalStatus = item.approvalStatus || (item.status === "pending_approval" ? "pending" : "approved")
+                        const scope = item.applicableTo || item.appliesTo
+                        const dishes = Array.isArray(item.items) && item.items.length > 0 ? item.items : (Array.isArray(item.dishes) ? item.dishes : [])
+                        const categories = Array.isArray(item.categories) ? item.categories : []
+                        const offerTitle = item.title || item.name || "Untitled Offer"
 
                         return (
                           <tr key={offerId} className="hover:bg-slate-50/80 transition-colors">
@@ -1229,7 +1233,7 @@ export default function Coupons() {
 
                             {/* Offer Title & Description */}
                             <td className="px-4 py-4 max-w-xs">
-                              <div className="font-semibold text-sm text-slate-900">{item.name}</div>
+                              <div className="font-semibold text-sm text-slate-900">{offerTitle}</div>
                               {item.description && (
                                 <p className="text-xs text-slate-500 truncate max-w-xs mt-0.5">{item.description}</p>
                               )}
@@ -1261,48 +1265,53 @@ export default function Coupons() {
 
                             {/* Scope / Dishes */}
                             <td className="px-4 py-4 max-w-sm">
-                              {item.appliesTo === "entire_menu" && (
+                              {scope === "entire_menu" && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                   Entire Menu
                                 </span>
                               )}
-                              {item.appliesTo === "specific_categories" && (
+                              {(scope === "category" || scope === "specific_categories") && (
                                 <div>
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 mb-1">
-                                    Categories ({Array.isArray(item.categories) ? item.categories.length : 0})
+                                    Categories ({categories.length})
                                   </span>
-                                  {Array.isArray(item.categories) && item.categories.length > 0 && (
+                                  {categories.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-1">
-                                      {item.categories.slice(0, 3).map((cat) => (
+                                      {categories.slice(0, 3).map((cat) => (
                                         <span key={cat._id || cat.id} className="text-[11px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
                                           {cat.name}
                                         </span>
                                       ))}
-                                      {item.categories.length > 3 && (
-                                        <span className="text-[10px] text-slate-500 self-center">+{item.categories.length - 3} more</span>
+                                      {categories.length > 3 && (
+                                        <span className="text-[10px] text-slate-500 self-center">+{categories.length - 3} more</span>
                                       )}
                                     </div>
                                   )}
                                 </div>
                               )}
-                              {item.appliesTo === "specific_dishes" && (
+                              {(scope === "specific_items" || scope === "specific_dishes") && (
                                 <div>
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 mb-1">
-                                    Dishes ({Array.isArray(item.dishes) ? item.dishes.length : 0})
+                                    Dishes ({dishes.length})
                                   </span>
-                                  {Array.isArray(item.dishes) && item.dishes.length > 0 && (
+                                  {dishes.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-1">
-                                      {item.dishes.slice(0, 3).map((d) => (
+                                      {dishes.slice(0, 3).map((d) => (
                                         <span key={d._id || d.id} className="text-[11px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
                                           {d.name} {d.price ? `(₹${d.price})` : ""}
                                         </span>
                                       ))}
-                                      {item.dishes.length > 3 && (
-                                        <span className="text-[10px] text-slate-500 self-center">+{item.dishes.length - 3} more</span>
+                                      {dishes.length > 3 && (
+                                        <span className="text-[10px] text-slate-500 self-center">+{dishes.length - 3} more</span>
                                       )}
                                     </div>
                                   )}
                                 </div>
+                              )}
+                              {!["entire_menu", "category", "specific_categories", "specific_items", "specific_dishes"].includes(scope) && (
+                                <span className="text-xs text-slate-400">
+                                  {scope ? scope.replace(/_/g, " ") : "Not specified"}
+                                </span>
                               )}
                             </td>
 
@@ -1451,7 +1460,7 @@ export default function Coupons() {
                         <span className="font-semibold text-slate-800">Restaurant:</span> {rejectModal.offer?.restaurantName || "Restaurant"}
                       </p>
                       <p>
-                        <span className="font-semibold text-slate-800">Offer Title:</span> {rejectModal.offer?.name}
+                        <span className="font-semibold text-slate-800">Offer Title:</span> {rejectModal.offer?.title || rejectModal.offer?.name || "Untitled Offer"}
                       </p>
                     </div>
 

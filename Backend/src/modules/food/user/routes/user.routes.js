@@ -29,6 +29,7 @@ import {
     createSupportTicketController,
     listMySupportTicketsController
 } from '../controllers/supportTicket.controller.js';
+import * as feedbackExperienceController from '../../admin/controllers/feedbackExperience.controller.js';
 
 const router = express.Router();
 
@@ -52,6 +53,9 @@ router.get('/safety-emergency-reports', listMySafetyEmergencyReportsController);
 // Support tickets (Bearer USER)
 router.post('/support/ticket', createSupportTicketController);
 router.get('/support/my-tickets', listMySupportTicketsController);
+
+// Feedback Experience (Bearer USER)
+router.post('/feedback-experience', feedbackExperienceController.createFeedbackExperience);
 
 router.get('/addresses', listAddressesController);
 router.post('/addresses', addAddressController);

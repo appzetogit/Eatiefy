@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { exportTransactionsToExcel, exportTransactionsToPDF } from "@food/components/admin/transactions/transactionsExportUtils"
 import { adminAPI } from "@food/api"
+import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 const debugLog = (...args) => {}
@@ -119,6 +120,7 @@ export default function RestaurantWithdraws() {
       const response = await adminAPI.approveWithdrawalRequest(id)
       if (response.data?.success) {
         toast.success('Withdrawal request approved successfully')
+        refreshSidebarBadges("restaurantWithdrawals")
         fetchWithdrawals()
       } else {
         toast.error(response.data?.message || 'Failed to approve withdrawal request')
@@ -144,6 +146,7 @@ export default function RestaurantWithdraws() {
         toast.success('Withdrawal request rejected successfully')
         setShowRejectModal(false)
         setRejectionReason("")
+        refreshSidebarBadges("restaurantWithdrawals")
         fetchWithdrawals()
       } else {
         toast.error(response.data?.message || 'Failed to reject withdrawal request')

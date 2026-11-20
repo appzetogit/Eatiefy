@@ -220,6 +220,60 @@ const mapExpiredFssai = (response) => {
   }));
 };
 
+const mapRestaurantWithdrawals = (response) => {
+  const payload = response?.data?.data;
+  const rows =
+    payload?.requests ||
+    payload?.items ||
+    payload?.withdrawals ||
+    response?.data?.requests ||
+    [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.status || "").toLowerCase() === "pending")
+    .map((item) => {
+      const amountStr = Number(item?.amount || 0).toLocaleString("en-IN");
+      return {
+        id: `withdrawal-restaurant-${String(item?._id || item?.id || "")}`,
+        title: "Restaurant Withdrawal Request",
+        message: `${item?.restaurantName || "Restaurant"} requested a withdrawal of ₹${amountStr}.`,
+        type: "withdrawal",
+        category: "restaurant_withdrawal",
+        path: "/admin/food/restaurant-withdraws",
+        createdAt: item?.createdAt || item?.updatedAt,
+        timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+        metaLabel: joinMeta(item?.restaurantName, `₹${amountStr}`, item?.restaurantIdString),
+      };
+    });
+};
+
+const mapDeliveryWithdrawals = (response) => {
+  const payload = response?.data?.data;
+  const rows =
+    payload?.requests ||
+    payload?.items ||
+    payload?.withdrawals ||
+    response?.data?.requests ||
+    [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.status || "").toLowerCase() === "pending")
+    .map((item) => {
+      const amountStr = Number(item?.amount || 0).toLocaleString("en-IN");
+      return {
+        id: `withdrawal-delivery-${String(item?._id || item?.id || "")}`,
+        title: "Delivery Withdrawal Request",
+        message: `${item?.deliveryName || "Delivery partner"} requested a withdrawal of ₹${amountStr}.`,
+        type: "withdrawal",
+        category: "delivery_withdrawal",
+        path: "/admin/food/delivery-withdrawal",
+        createdAt: item?.createdAt || item?.updatedAt,
+        timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+        metaLabel: joinMeta(item?.deliveryName, item?.deliveryPhone, `₹${amountStr}`),
+      };
+    });
+};
+
 const applyReadState = (items, readIds) =>
   items.map((item) => ({
     ...item,
@@ -262,6 +316,8 @@ export default function useAdminNotifications(options = {}) {
         supportAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
         adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
         adminAPI.getExpiredFssaiNotifications(),
+        adminAPI.getWithdrawals({ page: 1, limit: 50, status: "pending" }),
+        adminAPI.getDeliveryWithdrawals({ page: 1, limit: 50, status: "pending" }),
       ]);
 
       const pick = (result) => (result.status === "fulfilled" ? result.value : null);
@@ -273,6 +329,8 @@ export default function useAdminNotifications(options = {}) {
         supportRes,
         deliverySupportRes,
         fssaiExpiredRes,
+        restaurantWithdrawalsRes,
+        deliveryWithdrawalsRes,
       ] = settled.map(pick);
 
       const restaurantPayload = restaurantsRes?.data?.data
@@ -289,6 +347,8 @@ export default function useAdminNotifications(options = {}) {
         ...mapDeliveryJoinRequests(deliveryJoinRes),
         ...mapFoodApprovals(foodApprovalRes),
         ...mapPendingCategories(categoryApprovalRes),
+        ...mapRestaurantWithdrawals(restaurantWithdrawalsRes),
+        ...mapDeliveryWithdrawals(deliveryWithdrawalsRes),
         ...mapUserRestaurantSupport(supportRes),
         ...mapDeliverySupport(deliverySupportRes),
         ...mapExpiredFssai(fssaiExpiredRes),

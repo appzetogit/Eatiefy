@@ -29,7 +29,8 @@ import {
   Pencil,
   Camera,
   Upload,
-  LifeBuoy
+  LifeBuoy,
+  MessageSquare
 } from "lucide-react";
 
 import {
@@ -68,6 +69,7 @@ import { toast } from "sonner";
 import { showAccountDeletedToast } from "@/shared/utils/customToasts";
 import { resolveProfileBackPath } from "@food/utils/mainTabRoutes";
 import useModuleAccess from "@food/hooks/useModuleAccess";
+import FeedbackBottomSheet from "@food/components/common/FeedbackBottomSheet";
 
 const debugLog = (...args) => { };
 const debugWarn = (...args) => { };
@@ -109,6 +111,7 @@ export default function Profile() {
   const [showBalanceWarning, setShowBalanceWarning] = useState(false);
   const [balanceData, setBalanceData] = useState({ balance: 0, type: "Wallet" });
   const [isCheckingBalance, setIsCheckingBalance] = useState(false);
+  const [feedbackSheetOpen, setFeedbackSheetOpen] = useState(false);
 
 
 
@@ -137,7 +140,7 @@ export default function Profile() {
 
   // Lock scroll when any popup is open
   useEffect(() => {
-    const isPopupOpen = logoutConfirmOpen || deleteAccountOpen || showBalanceWarning || vegModeOpen || appearanceOpen;
+    const isPopupOpen = logoutConfirmOpen || deleteAccountOpen || showBalanceWarning || vegModeOpen || appearanceOpen || feedbackSheetOpen;
     if (isPopupOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -146,7 +149,7 @@ export default function Profile() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [logoutConfirmOpen, deleteAccountOpen, showBalanceWarning, vegModeOpen, appearanceOpen]);
+  }, [logoutConfirmOpen, deleteAccountOpen, showBalanceWarning, vegModeOpen, appearanceOpen, feedbackSheetOpen]);
 
   const handleVegModeUpdate = (nextValue) => {
     setVegMode(nextValue);
@@ -977,6 +980,33 @@ export default function Profile() {
               </motion.div>
             </Link>
 
+            <div onClick={() => setFeedbackSheetOpen(true)} className="block">
+              <motion.div
+                whileHover={{ x: 4, scale: 1.01 }}
+                transition={{ duration: 0.2, type: "spring", stiffness: 300 }}>
+                <Card className="bg-white dark:bg-[#242424] py-0 rounded-xl shadow-sm border-0 dark:border-gray-800 cursor-pointer">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div
+                        className="bg-gray-100 dark:bg-gray-800 rounded-full p-2"
+                        whileHover={{ rotate: 15, scale: 1.1 }}
+                        transition={{ duration: 0.3 }}>
+                        <MessageSquare className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+                      </motion.div>
+                      <span className="text-base font-medium text-gray-900 dark:text-white">
+                        Share Feedback
+                      </span>
+                    </div>
+                    <motion.div
+                      whileHover={{ x: 4 }}
+                      transition={{ duration: 0.2 }}>
+                      <ChevronRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </div>
+
             <Link to="/user/profile/report-safety-emergency" className="block">
               <motion.div
                 whileHover={{ x: 4, scale: 1.01 }}
@@ -1431,6 +1461,12 @@ export default function Profile() {
       )}
 
 
+      {/* Experience Feedback Bottom Sheet */}
+      <FeedbackBottomSheet
+        isOpen={feedbackSheetOpen}
+        onClose={() => setFeedbackSheetOpen(false)}
+        module="user"
+      />
     </AnimatedPage>
   );
 }

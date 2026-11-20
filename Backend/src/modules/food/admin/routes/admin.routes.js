@@ -281,12 +281,15 @@ router.patch('/dining/requests/:id/approve', requireDiningEnabled, diningAdminCo
 router.patch('/dining/requests/:id/reject', requireDiningEnabled, diningAdminController.rejectDiningRequest);
 
 // ----- Orders -----
+router.get('/orders/refund-requests', orderController.getRefundRequestsAdminController);
+router.get('/refund-requests', orderController.getRefundRequestsAdminController);
 router.get('/orders', orderController.listOrdersAdminController);
 router.get('/orders/:orderId', orderController.getOrderByIdAdminController);
 router.delete('/orders/:orderId', orderController.deleteOrderAdminController);
 router.patch('/orders/:orderId/accept', orderController.acceptOrderAdminController);
 router.patch('/orders/:orderId/reject', orderController.rejectOrderAdminController);
 router.patch('/orders/:orderId/statuses', orderController.updateOrderStatusesAdminController);
+router.post('/orders/:orderId/refund', adminController.processRefund);
 
 // ----- CMS Pages (About + legal) -----
 router.get('/pages-social-media/:key', getAdminPageController);

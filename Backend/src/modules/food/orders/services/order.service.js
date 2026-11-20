@@ -3268,3 +3268,113 @@ export async function updateOrderStatusesAdmin(
   return normalizeOrderForClient(order);
 }
 
+/**
+ * Admin: list orders eligible for refund or refund requests.
+ * Includes:
+ * 1. Explicit refund requested or processed (payment.refund.status in ['pending', 'failed', 'processed'] or payment.status === 'refunded')
+ * 2. Cancelled orders where payment was non-cash (online or wallet).
+ */
+export async function getRefundRequestsAdmin(query = {}) {
+  const { page, limit, skip } = buildPaginationOptions(query);
+
+  const refundMatch = {
+    $or: [
+      { 'payment.refund.status': { $in: ['pending', 'failed', 'processed'] } },
+      { 'payment.status': 'refunded' },
+      {
+        orderStatus: {
+          $in: [
+            'cancelled_by_user',
+            'cancelled_by_restaurant',
+            'cancelled_by_admin',
+          ],
+        },
+        $or: [
+          { 'payment.status': { $in: ['paid', 'refunded'] } },
+          { 'payment.method': { $in: ['razorpay', 'razorpay_qr', 'wallet'] } },
+        ],
+      },
+    ],
+  };
+
+  const [docs, total] = await Promise.all([
+    FoodOrder.find(refundMatch)
+      .populate('userId', 'name phone email')
+      .populate('restaurantId', 'restaurantName area city ownerPhone')
+      .populate('dispatch.deliveryPartnerId', 'name phone')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    FoodOrder.countDocuments(refundMatch),
+  ]);
+
+  const orders = docs.map((doc) => {
+    const normalized = normalizeOrderForClient(doc);
+    const createdAt = doc.createdAt ? new Date(doc.createdAt) : new Date();
+    const dateStr = createdAt.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).toUpperCase();
+    const timeStr = createdAt.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).toUpperCase();
+
+    const isProcessed =
+      doc.payment?.refund?.status === 'processed' ||
+      doc.payment?.status === 'refunded';
+
+    const customerName =
+      doc.userId?.name || doc.customerName || doc.deliveryAddress?.name || 'N/A';
+    const customerPhone =
+      doc.userId?.phone || doc.customerPhone || doc.deliveryAddress?.phone || 'N/A';
+    const restaurantName =
+      doc.restaurantId?.restaurantName || doc.restaurantName || 'N/A';
+
+    let cancellationReason = doc.cancellationReason || '';
+    if (!cancellationReason) {
+      if (doc.orderStatus === 'cancelled_by_restaurant') {
+        cancellationReason = 'Rejected by restaurant';
+      } else if (doc.orderStatus === 'cancelled_by_user') {
+        cancellationReason = 'Cancelled by customer';
+      } else if (doc.orderStatus === 'cancelled_by_admin') {
+        cancellationReason = 'Cancelled by admin';
+      } else {
+        cancellationReason = 'Order Cancelled';
+      }
+    }
+
+    return {
+      ...normalized,
+      id: doc._id.toString(),
+      _id: doc._id.toString(),
+      orderId: doc.order_id || doc.orderId || doc._id.toString(),
+      date: dateStr,
+      time: timeStr,
+      createdAt: doc.createdAt,
+      customerName,
+      customerPhone,
+      restaurant: restaurantName,
+      totalAmount: Number(doc.pricing?.total ?? doc.totalAmount ?? doc.payment?.amountDue ?? 0),
+      paymentStatus: doc.payment?.status === 'refunded' ? 'Refunded' : (doc.payment?.status === 'paid' ? 'Paid' : (doc.payment?.status || 'Pending')),
+      paymentMethod: doc.payment?.method || 'N/A',
+      cancellationReason,
+      refundStatus: isProcessed ? 'processed' : 'pending',
+      originalOrder: doc,
+    };
+  });
+
+  return {
+    orders,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    },
+  };
+}
+

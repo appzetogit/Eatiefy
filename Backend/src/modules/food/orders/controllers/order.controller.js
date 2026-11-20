@@ -535,3 +535,12 @@ export async function updateOrderStatusesAdminController(req, res, next) {
         next(err);
     }
 }
+
+export async function getRefundRequestsAdminController(req, res, next) {
+    try {
+        const result = await orderService.getRefundRequestsAdmin(req.query);
+        return sendResponse(res, 200, 'Refund requests retrieved successfully', result);
+    } catch (err) {
+        next(err);
+    }
+}

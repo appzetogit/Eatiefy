@@ -5,6 +5,7 @@ import { requireRoles } from '../../../../core/roles/role.middleware.js';
 import * as orderController from '../../orders/controllers/order.controller.js';
 import { deliveryRegistrationAuthMiddleware } from '../../../../core/auth/onboardingToken.js';
 import { getDeliveryDraftUploadsController, addDeliveryDraftUploadController, removeDeliveryDraftUploadController, registerDeliveryPartnerController, updateDeliveryPartnerProfileController, updateDeliveryPartnerBankDetailsController, listSupportTicketsController, createSupportTicketController, getSupportTicketByIdController, updateDeliveryPartnerDetailsController, updateDeliveryPartnerProfilePhotoBase64Controller, updateAvailabilityController, getWalletController, createWithdrawalRequestController, createCashDepositOrderController, verifyCashDepositPaymentController, submitCashDepositByHandController, getEarningsController, getTripHistoryController, getPocketDetailsController, getEmergencyHelpController, getCashLimitController, getDeliveryReferralStatsController, getActiveEarningAddonsController, getMyReviewsController } from '../controllers/delivery.controller.js';
+import * as feedbackExperienceController from '../../admin/controllers/feedbackExperience.controller.js';
 
 const router = express.Router();
 
@@ -39,6 +40,9 @@ router.patch('/availability', authMiddleware, requireRoles('DELIVERY_PARTNER'), 
 router.get('/support-tickets', authMiddleware, requireRoles('DELIVERY_PARTNER'), listSupportTicketsController);
 router.post('/support-tickets', authMiddleware, requireRoles('DELIVERY_PARTNER'), createSupportTicketController);
 router.get('/support-tickets/:id', authMiddleware, requireRoles('DELIVERY_PARTNER'), getSupportTicketByIdController);
+
+// Feedback Experience (Bearer DELIVERY_PARTNER)
+router.post('/feedback-experience', authMiddleware, requireRoles('DELIVERY_PARTNER'), feedbackExperienceController.createFeedbackExperience);
 
 // ----- Orders -----
 router.get('/orders/current', authMiddleware, requireRoles('DELIVERY_PARTNER'), orderController.getCurrentTripDeliveryController);

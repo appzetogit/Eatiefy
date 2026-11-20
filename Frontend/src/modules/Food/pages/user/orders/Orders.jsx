@@ -77,6 +77,30 @@ export default function Orders() {
     }
   }, [shownRatingForOrders])
 
+  // Prevent background scrolling when rating modal is open
+  useEffect(() => {
+    if (ratingModal.open) {
+      const scrollY = window.scrollY
+      const prevOverflow = document.body.style.overflow
+      const prevPosition = document.body.style.position
+      const prevTop = document.body.style.top
+      const prevWidth = document.body.style.width
+
+      document.body.style.overflow = "hidden"
+      document.body.style.position = "fixed"
+      document.body.style.top = `-${scrollY}px`
+      document.body.style.width = "100%"
+
+      return () => {
+        document.body.style.overflow = prevOverflow
+        document.body.style.position = prevPosition
+        document.body.style.top = prevTop
+        document.body.style.width = prevWidth
+        window.scrollTo(0, scrollY)
+      }
+    }
+  }, [ratingModal.open])
+
   // Calculate countdown for an order
   const calculateCountdown = (order) => {
     if (!order || 
@@ -1075,13 +1099,24 @@ Order again from this restaurant in the ${companyName} app.`
         <h1 className="text-4xl font-black text-gray-200 dark:text-gray-800 tracking-tighter italic uppercase">eatiefy</h1>
       </div>
 
-      {/* Rating & Feedback Modal */}
+      {/* Rating & Feedback Bottom Sheet */}
       {ratingModal.open && ratingModal.order && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-[#121212] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border dark:border-gray-800">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center animate-in fade-in duration-200">
+          {/* Backdrop */}
+          <div
+            onClick={handleCloseRating}
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+          />
+
+          <div className="relative z-10 w-full sm:max-w-md rounded-t-[2.5rem] sm:rounded-3xl bg-white dark:bg-[#121212] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in slide-in-from-bottom duration-300 border-t sm:border dark:border-gray-800">
+            {/* Mobile Drag Handle */}
+            <div className="pt-3 pb-1 flex justify-center sm:hidden">
+              <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-zinc-700" />
+            </div>
+
             {/* Header with gradient */}
-            <div className="bg-gradient-to-r from-[#1F6B45] to-[#14512F] px-6 py-5">
-              <div className="flex items-center justify-between mb-2">
+            <div className="bg-gradient-to-r from-[#1F6B45] to-[#14512F] px-6 py-4">
+              <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Star className="w-5 h-5 fill-white" />
                   Rate Your Delivery
@@ -1097,7 +1132,7 @@ Order again from this restaurant in the ${companyName} app.`
               <p className="text-sm text-white/90">{ratingModal.order.restaurant}</p>
             </div>
 
-            <div className="px-6 py-6 font-sans">
+            <div className="px-6 py-6 font-sans overflow-y-auto">
               <div className="mb-6">
                 <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
                   Restaurant rating (out of 5)

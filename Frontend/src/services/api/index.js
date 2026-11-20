@@ -712,6 +712,17 @@ export const adminAPI = {
     apiClient.patch(`/food/admin/orders/${String(orderId)}/statuses`, body, {
       contextModule: "admin",
     }),
+  /** Refund requests (admin) */
+  getRefundRequests: (params = {}) =>
+    apiClient.get("/food/admin/refund-requests", {
+      params,
+      contextModule: "admin",
+    }),
+  /** Process refund (admin) */
+  processRefund: (orderId, body = {}) =>
+    apiClient.post(`/food/admin/orders/${String(orderId)}/refund`, body, {
+      contextModule: "admin",
+    }),
   /** Dispatch settings – auto vs manual assign (global) */
   /** Check for duplicate email, owner phone, or primary contact */
   checkRestaurantDuplicate: (params = {}) =>
@@ -2853,6 +2864,11 @@ export const deliveryAPI = {
   /** DELETE /food/delivery/account - permanently delete delivery partner account */
   deleteAccount: () =>
     apiClient.delete("/food/delivery/account", { contextModule: "delivery" }),
+  /** POST /food/delivery/feedback-experience - submit delivery app experience feedback */
+  submitFeedbackExperience: (body) =>
+    apiClient.post("/food/delivery/feedback-experience", body ?? {}, {
+      contextModule: "delivery",
+    }),
 };
 
 export const userAPI = {
@@ -3023,6 +3039,11 @@ export const userAPI = {
   /** DELETE /food/user/account - permanently delete user account */
   deleteAccount: () =>
     apiClient.delete("/food/user/account", { contextModule: "user" }),
+  /** POST /food/user/feedback-experience - submit user app experience feedback */
+  submitFeedbackExperience: (body) =>
+    apiClient.post("/food/user/feedback-experience", body ?? {}, {
+      contextModule: "user",
+    }),
 };
 export const locationAPI = createStubAPI();
 export const zoneAPI = {

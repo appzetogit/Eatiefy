@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { Search, Wallet, Eye, CheckCircle, XCircle, Loader2, Package, QrCode } from "lucide-react"
 import { adminAPI } from "@food/api"
+import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
 import { toast } from "sonner"
@@ -113,6 +114,7 @@ export default function DeliveryWithdrawal() {
       const response = await adminAPI.updateDeliveryWithdrawalStatus(id, { status: "Approved" })
       if (response?.data?.success) {
         toast.success("Withdrawal request approved successfully")
+        refreshSidebarBadges("deliveryWithdrawals")
         fetchRequests()
       }
  else {
@@ -139,6 +141,7 @@ export default function DeliveryWithdrawal() {
         setShowRejectModal(false)
         setRejectionReason("")
         setSelectedRequest(null)
+        refreshSidebarBadges("deliveryWithdrawals")
         fetchRequests()
       }
  else {

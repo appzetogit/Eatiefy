@@ -240,6 +240,29 @@ export const requestDeliveryWithdrawal = async (deliveryPartnerId, payload) => {
         throw new ValidationError('Insufficient balance for this withdrawal');
     }
 
+    try {
+        const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
+        const partnerName = partner?.name || 'Delivery partner';
+        const formattedAmount = Number(amount).toLocaleString('en-IN');
+        void notifyAdminsSafely({
+            title: 'New Withdrawal Request',
+            body: `${partnerName} requested a withdrawal of ₹${formattedAmount}.`,
+            link: '/admin/food/delivery-withdrawal',
+            idempotencyKey: `delivery_withdrawal:${String(withdrawal._id)}`,
+            data: {
+                type: 'delivery_withdrawal',
+                subType: 'delivery',
+                id: String(withdrawal._id),
+                deliveryPartnerId: String(deliveryPartnerId),
+                amount: String(amount),
+                link: '/admin/food/delivery-withdrawal'
+            }
+        });
+    } catch (notifErr) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to notify admins of delivery withdrawal request:', notifErr?.message || notifErr);
+    }
+
     return withdrawal;
 };
 

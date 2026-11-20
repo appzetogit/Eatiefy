@@ -74,6 +74,7 @@ const Logout = lazy(() => import("@food/pages/user/profile/Logout"))
 const ReferEarn = lazy(() => import("@food/pages/user/profile/ReferEarn"))
 const UserCMSHelpSupportPage = lazy(() => import("@food/pages/user/profile/UserCMSHelpSupportPage"))
 const Settings = lazy(() => import("@food/pages/user/profile/Settings"))
+const UserFeedbackExperience = lazy(() => import("@food/pages/user/profile/UserFeedbackExperience"))
 
 // Auth
 const SignIn = lazy(() => import("@food/pages/user/auth/SignIn"))
@@ -309,6 +310,7 @@ export default function UserRouter() {
             <Route path="profile/about" element={<About />} />
             <Route path="profile/report-safety-emergency" element={<ReportSafetyEmergency />} />
             <Route path="profile/accessibility" element={<Accessibility />} />
+            <Route path="profile/feedback" element={<UserFeedbackExperience />} />
             <Route path="profile/logout" element={<Logout />} />
             <Route path="profile/refer-earn" element={<ReferEarn />} />
             <Route path="profile/dining-bookings" element={diningEnabled ? <MyBookings /> : <Navigate to="/food/user/profile" replace />} />

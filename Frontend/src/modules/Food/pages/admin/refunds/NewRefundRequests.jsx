@@ -41,9 +41,10 @@ export default function NewRefundRequests() {
         
         const response = await adminAPI.getRefundRequests(params)
         
-        if (response.data?.success && response.data?.data?.orders) {
-          setOrders(response.data.data.orders)
-          setTotalCount(response.data.data.pagination?.total || response.data.data.orders.length)
+        const list = response.data?.data?.orders || response.data?.orders || (Array.isArray(response.data?.data) ? response.data.data : [])
+        if (response.data?.success && Array.isArray(list)) {
+          setOrders(list)
+          setTotalCount(response.data.data?.pagination?.total || response.data.pagination?.total || list.length)
         } else {
           debugError("Failed to fetch refund requests:", response.data)
           toast.error("Failed to fetch refund requests")
@@ -105,17 +106,19 @@ export default function NewRefundRequests() {
     }
 
     try {
-      setProcessingRefund(order.id)
-      const response = await adminAPI.processRefund(order.id, {})
+      const orderIdToUse = order.id || order._id || order.orderId
+      setProcessingRefund(orderIdToUse)
+      const response = await adminAPI.processRefund(orderIdToUse, {})
       
       if (response.data?.success) {
         toast.success(`Refund processed successfully for order ${order.orderId}`)
         // Refresh the list
         const params = { page: 1, limit: 1000 }
         const refreshResponse = await adminAPI.getRefundRequests(params)
-        if (refreshResponse.data?.success && refreshResponse.data?.data?.orders) {
-          setOrders(refreshResponse.data.data.orders)
-          setTotalCount(refreshResponse.data.data.pagination?.total || refreshResponse.data.data.orders.length)
+        const refreshList = refreshResponse.data?.data?.orders || refreshResponse.data?.orders || (Array.isArray(refreshResponse.data?.data) ? refreshResponse.data.data : [])
+        if (refreshResponse.data?.success && Array.isArray(refreshList)) {
+          setOrders(refreshList)
+          setTotalCount(refreshResponse.data.data?.pagination?.total || refreshResponse.data.pagination?.total || refreshList.length)
         }
       } else {
         toast.error(response.data?.message || "Failed to process refund")
@@ -207,30 +210,30 @@ export default function NewRefundRequests() {
                   </tr>
                 ) : (
                   filteredData.map((order, index) => (
-                    <tr key={order.orderId} className="hover:bg-slate-50">
+                    <tr key={order.orderId || order.id || index} className="hover:bg-slate-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="text-sm font-medium text-slate-700">{index + 1}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-slate-900">{order.orderId}</span>
+                        <span className="text-sm font-medium text-slate-900">{order.orderId || "N/A"}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-slate-700">{order.date}, {order.time}</span>
+                        <span className="text-sm font-medium text-slate-700">{order.date ? `${order.date}, ${order.time || ""}` : (order.createdAt ? new Date(order.createdAt).toLocaleString() : "N/A")}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-slate-700">{order.customerName}</span>
-                          <span className="text-xs text-slate-500 mt-0.5">{order.customerPhone}</span>
+                          <span className="text-sm font-medium text-slate-700">{order.customerName || "N/A"}</span>
+                          <span className="text-xs text-slate-500 mt-0.5">{order.customerPhone || "N/A"}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-medium text-slate-700">{order.restaurant}</span>
+                        <span className="text-sm font-medium text-slate-700">{order.restaurant || "N/A"}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="text-sm font-medium text-slate-900">
-                          {"\u20B9"}{order.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {"\u20B9"}{Number(order.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
-                        <div className="text-xs text-emerald-600 mt-0.5">{order.paymentStatus}</div>
+                        <div className="text-xs text-emerald-600 mt-0.5">{order.paymentStatus || ""}</div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-red-600 max-w-xs">
