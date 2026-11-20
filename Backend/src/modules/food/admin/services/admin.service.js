@@ -1416,6 +1416,7 @@ export async function getTransactionReport(query = {}) {
         const tax = toNum(pricing.tax);
         const discount = toNum(pricing.discount);
         const total = toNum(pricing.total);
+        const restaurantCommission = toNum(pricing.restaurantCommission ?? tx?.amounts?.restaurantCommission);
         const platformFeeStored = pricing.platformFee;
         const platformFee =
             platformFeeStored !== undefined && platformFeeStored !== null
@@ -1431,6 +1432,9 @@ export async function getTransactionReport(query = {}) {
             totalItemAmount: subtotal,
             restaurantBaseAmount: toNum(pricing.baseSubtotal ?? Math.max(0, subtotal - toNum(pricing.markupTotal))),
             adminMarkup: toNum(pricing.markupTotal),
+            packagingCharge: packagingFee,
+            packagingFee,
+            restaurantCommission,
             itemDiscount: discount,
             couponDiscount: discount,
             couponCode: pricing.couponCode || order.couponCode || null,

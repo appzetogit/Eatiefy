@@ -121,23 +121,44 @@ export const exportReportsToJSON = (data, filename = "report") => {
 
 // Specific export functions for Transaction Report
 export const exportTransactionReportToCSV = (transactions, filename = "transaction_report") => {
-  const headers = ["SI", "Order ID", "Restaurant", "Customer Name", "Total Item Amount", "Coupon Discount", "VAT/Tax", "Delivery Charge", "Platform Fee", "Order Amount"]
+  const headers = [
+    "SI",
+    "Order ID",
+    "Restaurant",
+    "Customer Name",
+    "Total Item Amount",
+    "Restaurant Base",
+    "Admin Pricing",
+    "Packaging Charge",
+    "Restaurant Commission",
+    "Coupon Discount",
+    "VAT/Tax",
+    "Delivery Charge",
+    "Platform Fee",
+    "Order Amount",
+    "Status"
+  ]
   const rows = transactions.map((transaction, index) => [
     index + 1,
-    transaction.orderId,
-    transaction.restaurant,
-    transaction.customerName,
-    transaction.totalItemAmount.toFixed(2),
-    transaction.couponDiscount.toFixed(2),
-    transaction.vatTax.toFixed(2),
-    transaction.deliveryCharge.toFixed(2),
+    transaction.orderId || "N/A",
+    transaction.restaurant || "N/A",
+    transaction.customerName || "N/A",
+    Number(transaction.totalItemAmount || 0).toFixed(2),
+    Number(transaction.restaurantBaseAmount ?? transaction.totalItemAmount ?? 0).toFixed(2),
+    Number(transaction.adminMarkup || 0).toFixed(2),
+    Number(transaction.packagingCharge ?? transaction.packagingFee ?? 0).toFixed(2),
+    Number(transaction.restaurantCommission || 0).toFixed(2),
+    Number(transaction.couponDiscount || 0).toFixed(2),
+    Number(transaction.vatTax || 0).toFixed(2),
+    Number(transaction.deliveryCharge || 0).toFixed(2),
     Number(transaction.platformFee || 0).toFixed(2),
-    transaction.orderAmount.toFixed(2)
+    Number(transaction.orderAmount || 0).toFixed(2),
+    transaction.status || transaction.orderStatus || "N/A"
   ])
   
   const csvContent = [
     headers.join(","),
-    ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
   ].join("\n")
   
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
@@ -152,18 +173,39 @@ export const exportTransactionReportToCSV = (transactions, filename = "transacti
 }
 
 export const exportTransactionReportToExcel = (transactions, filename = "transaction_report") => {
-  const headers = ["SI", "Order ID", "Restaurant", "Customer Name", "Total Item Amount", "Coupon Discount", "VAT/Tax", "Delivery Charge", "Platform Fee", "Order Amount"]
+  const headers = [
+    "SI",
+    "Order ID",
+    "Restaurant",
+    "Customer Name",
+    "Total Item Amount",
+    "Restaurant Base",
+    "Admin Pricing",
+    "Packaging Charge",
+    "Restaurant Commission",
+    "Coupon Discount",
+    "VAT/Tax",
+    "Delivery Charge",
+    "Platform Fee",
+    "Order Amount",
+    "Status"
+  ]
   const rows = transactions.map((transaction, index) => [
     index + 1,
-    transaction.orderId,
-    transaction.restaurant,
-    transaction.customerName,
-    transaction.totalItemAmount.toFixed(2),
-    transaction.couponDiscount.toFixed(2),
-    transaction.vatTax.toFixed(2),
-    transaction.deliveryCharge.toFixed(2),
+    transaction.orderId || "N/A",
+    transaction.restaurant || "N/A",
+    transaction.customerName || "N/A",
+    Number(transaction.totalItemAmount || 0).toFixed(2),
+    Number(transaction.restaurantBaseAmount ?? transaction.totalItemAmount ?? 0).toFixed(2),
+    Number(transaction.adminMarkup || 0).toFixed(2),
+    Number(transaction.packagingCharge ?? transaction.packagingFee ?? 0).toFixed(2),
+    Number(transaction.restaurantCommission || 0).toFixed(2),
+    Number(transaction.couponDiscount || 0).toFixed(2),
+    Number(transaction.vatTax || 0).toFixed(2),
+    Number(transaction.deliveryCharge || 0).toFixed(2),
     Number(transaction.platformFee || 0).toFixed(2),
-    transaction.orderAmount.toFixed(2)
+    Number(transaction.orderAmount || 0).toFixed(2),
+    transaction.status || transaction.orderStatus || "N/A"
   ])
   
   const csvContent = [
@@ -183,8 +225,24 @@ export const exportTransactionReportToExcel = (transactions, filename = "transac
 }
 
 export const exportTransactionReportToPDF = (transactions, filename = "transaction_report") => {
-  const headers = ["SI", "Order ID", "Restaurant", "Customer Name", "Total Item Amount", "Coupon Discount", "VAT/Tax", "Delivery Charge", "Platform Fee", "Order Amount"]
-  const escapeHtml = (unsafe) => String(unsafe)
+  const headers = [
+    "SI",
+    "Order ID",
+    "Restaurant",
+    "Customer Name",
+    "Total Item Amount",
+    "Restaurant Base",
+    "Admin Pricing",
+    "Packaging Charge",
+    "Restaurant Commission",
+    "Coupon Discount",
+    "VAT/Tax",
+    "Delivery Charge",
+    "Platform Fee",
+    "Order Amount",
+    "Status"
+  ]
+  const escapeHtml = (unsafe) => String(unsafe ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -193,7 +251,7 @@ export const exportTransactionReportToPDF = (transactions, filename = "transacti
 
   const fmtNum = (v) => {
     const n = Number(v)
-    return Number.isFinite(n) ? `₹${n.toFixed(2)}` : '0'
+    return Number.isFinite(n) ? `₹${n.toFixed(2)}` : '₹0.00'
   }
 
   let htmlContent = `
@@ -202,9 +260,9 @@ export const exportTransactionReportToPDF = (transactions, filename = "transacti
     <head>
       <title>Transaction Report</title>
       <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 8px; }
-        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+        body { font-family: Arial, sans-serif; margin: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 7px; }
+        th, td { border: 1px solid #ddd; padding: 4px; text-align: left; }
         th { background-color: #f2f2f2; font-weight: bold; }
         tr:nth-child(even) { background-color: #f9f9f9; }
         h1 { text-align: center; }
@@ -221,15 +279,20 @@ export const exportTransactionReportToPDF = (transactions, filename = "transacti
         </thead>
         <tbody>
           ${transactions.map((transaction, index) => {
-            const orderId = transaction.orderId || '0'
-            const restaurant = transaction.restaurant || '0'
-            const customerName = transaction.customerName || '0'
+            const orderId = transaction.orderId || 'N/A'
+            const restaurant = transaction.restaurant || 'N/A'
+            const customerName = transaction.customerName || 'N/A'
             const totalItemAmount = fmtNum(transaction.totalItemAmount)
+            const restaurantBase = fmtNum(transaction.restaurantBaseAmount ?? transaction.totalItemAmount)
+            const adminPricing = fmtNum(transaction.adminMarkup || 0)
+            const packagingCharge = fmtNum(transaction.packagingCharge ?? transaction.packagingFee ?? 0)
+            const restaurantCommission = fmtNum(transaction.restaurantCommission || 0)
             const couponDiscount = fmtNum(transaction.couponDiscount)
             const vatTax = fmtNum(transaction.vatTax)
             const deliveryCharge = fmtNum(transaction.deliveryCharge)
             const platformFee = fmtNum(transaction.platformFee || 0)
             const orderAmount = fmtNum(transaction.orderAmount)
+            const status = transaction.status || transaction.orderStatus || 'N/A'
             return `
             <tr>
               <td>${index + 1}</td>
@@ -237,11 +300,16 @@ export const exportTransactionReportToPDF = (transactions, filename = "transacti
               <td>${escapeHtml(String(restaurant))}</td>
               <td>${escapeHtml(String(customerName))}</td>
               <td>${totalItemAmount}</td>
+              <td>${restaurantBase}</td>
+              <td>${adminPricing}</td>
+              <td>${packagingCharge}</td>
+              <td>${restaurantCommission}</td>
               <td>${couponDiscount}</td>
               <td>${vatTax}</td>
               <td>${deliveryCharge}</td>
               <td>${platformFee}</td>
               <td>${orderAmount}</td>
+              <td>${escapeHtml(String(status))}</td>
             </tr>
           `}).join("")}
         </tbody>

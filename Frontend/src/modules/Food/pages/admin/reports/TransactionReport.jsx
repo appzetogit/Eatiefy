@@ -619,21 +619,23 @@ export default function TransactionReport() {
 
           {/* Table */}
           <div className="overflow-x-auto scrollbar-hide">
-            <table className="w-full" style={{ tableLayout: 'fixed', width: '100%' }}>
+            <table className="w-full" style={{ tableLayout: 'fixed', minWidth: '1250px' }}>
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '3%' }}>SI</th>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '7%' }}>Order Id</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '10%' }}>Restaurant</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '10%' }}>Customer Name</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '9%' }}>Total Item Amount</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '8%' }}>Restaurant Base</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '8%' }}>Admin Pricing</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '8%' }}>Coupon Discount</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '7%' }}>Vat/Tax</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '8%' }}>Delivery Charge</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '7%' }}>Platform Fee</th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '8%' }}>Order Amount</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '8.5%' }}>Restaurant</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '8.5%' }}>Customer Name</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '7%' }}>Total Item Amount</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '7%' }}>Restaurant Base</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '6.5%' }}>Admin Pricing</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '6.5%' }}>Packaging Charge</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '7%' }}>Restaurant Commission</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '6.5%' }}>Coupon Discount</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '6%' }}>Vat/Tax</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '6.5%' }}>Delivery Charge</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '6%' }}>Platform Fee</th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '7%' }}>Order Amount</th>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: '7%' }}>Status</th>
                 </tr>
               </thead>
@@ -641,7 +643,7 @@ export default function TransactionReport() {
                 {amountsLoading ? (
                   Array.from({ length: 6 }).map((_, index) => (
                     <tr key={`sk-${index}`}>
-                      {Array.from({ length: 13 }).map((__, col) => (
+                      {Array.from({ length: 15 }).map((__, col) => (
                         <td key={col} className="px-1.5 py-2">
                           <AmountSkeleton className="h-3 w-full max-w-[4.5rem]" />
                         </td>
@@ -650,7 +652,7 @@ export default function TransactionReport() {
                   ))
                 ) : transactions.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="px-6 py-20 text-center">
+                    <td colSpan={15} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                         <p className="text-sm text-slate-500">No transactions match your search</p>
@@ -694,6 +696,16 @@ export default function TransactionReport() {
                           {(Number(transaction.adminMarkup) || 0) > 0
                             ? formatFullCurrency(transaction.adminMarkup)
                             : "—"}
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <span className="text-[10px] text-slate-700">
+                          {formatFullCurrency(transaction.packagingCharge ?? transaction.packagingFee ?? 0)}
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <span className="text-[10px] text-slate-700">
+                          {formatFullCurrency(transaction.restaurantCommission ?? 0)}
                         </span>
                       </td>
                       <td className="px-1.5 py-1">
