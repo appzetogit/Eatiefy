@@ -8,6 +8,7 @@ import {
   DialogFooter,
 } from "@food/components/ui/dialog"
 import { Button } from "@food/components/ui/button"
+import { toast } from "sonner"
 
 // Utility to create the cropped image
 const createImage = (url) =>
@@ -102,12 +103,21 @@ export function ImageCropper({ isOpen, onClose, imageFile, onCropComplete }) {
   // Create object URL from file
   const [imageSrc, setImageSrc] = useState(null)
   
+  const [isSaving, setIsSaving] = useState(false)
+
   useEffect(() => {
+    // Always start from a clean state: a stale crop area from the previous
+    // photo made Save crop the wrong region (or throw) for the next one.
+    setCrop({ x: 0, y: 0 })
+    setZoom(1)
+    setCroppedAreaPixels(null)
+    setIsSaving(false)
     if (imageFile) {
       const objectUrl = URL.createObjectURL(imageFile)
       setImageSrc(objectUrl)
       return () => URL.revokeObjectURL(objectUrl)
     }
+    setImageSrc(null)
   }, [imageFile])
 
   const handleCropComplete = useCallback((croppedArea, croppedAreaPixels) => {
@@ -115,6 +125,8 @@ export function ImageCropper({ isOpen, onClose, imageFile, onCropComplete }) {
   }, [])
 
   const handleSave = async () => {
+    if (isSaving || !croppedAreaPixels) return
+    setIsSaving(true)
     try {
       const croppedImageBlob = await getCroppedImg(imageSrc, croppedAreaPixels, 0)
       if (croppedImageBlob) {
@@ -124,9 +136,14 @@ export function ImageCropper({ isOpen, onClose, imageFile, onCropComplete }) {
           lastModified: Date.now(),
         })
         onCropComplete(file)
+      } else {
+        toast.error("Could not crop this photo. Please try another one.")
       }
     } catch (e) {
       console.error(e)
+      toast.error("Could not crop this photo. Please try another one.")
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -152,8 +169,8 @@ export function ImageCropper({ isOpen, onClose, imageFile, onCropComplete }) {
           )}
         </div>
         <div className="p-4 bg-white dark:bg-[#242424] flex gap-3 justify-end">
-          <Button variant="outline" onClick={onClose} className="rounded-xl">Cancel</Button>
-          <Button onClick={handleSave} className="rounded-xl bg-[#DC2626] hover:bg-[#991B1B] text-white">Save</Button>
+          <Button type="button" variant="outline" onClick={() => onClose?.()} className="rounded-xl">Cancel</Button>
+          <Button onClick={handleSave} disabled={isSaving || !croppedAreaPixels} className="rounded-xl bg-[#DC2626] hover:bg-[#991B1B] text-white">{isSaving ? "Saving..." : "Save"}</Button>
         </div>
       </DialogContent>
     </Dialog>

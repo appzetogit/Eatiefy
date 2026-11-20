@@ -30,6 +30,11 @@ export default defineConfig({
       '@emotion/styled',
       '@mui/material',
       '@mui/x-date-pickers',
+      // Imported statically by admin pages (Category, exports). If the dev server
+      // only discovers them mid-session it re-optimizes and open tabs get
+      // "504 Outdated Optimize Dep" -> "Failed to fetch dynamically imported module".
+      'jspdf',
+      'jspdf-autotable',
     ],
   },
   server: {

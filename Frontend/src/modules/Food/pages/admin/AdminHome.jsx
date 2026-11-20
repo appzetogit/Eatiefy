@@ -171,8 +171,8 @@ export default function AdminHome() {
   // Every restaurant that completed signup in the selected zone/period (not deleted).
   const onboarded = dashboardData?.restaurants?.onboarded || {}
   const restaurantsOnboardedTotal = Number(onboarded.total || 0)
+  // The card counts live (approved) restaurants only; the rest are shown as context.
   const onboardedBreakdown = [
-    [onboarded.live, "live"],
     [onboarded.inReview, "in review"],
     [onboarded.paymentPending, "payment pending"],
     [onboarded.rejected, "rejected"],
@@ -482,8 +482,8 @@ export default function AdminHome() {
               title="Restaurants Onboarded"
               value={restaurantsOnboardedTotal.toLocaleString("en-IN")}
               helper={
-                onboardedBreakdown
-                  ? `${periodLabel} signups: ${onboardedBreakdown}`
+                restaurantsOnboardedTotal > 0 || onboardedBreakdown
+                  ? `${periodLabel} live restaurants${onboardedBreakdown ? ` · not counted: ${onboardedBreakdown}` : ""}`
                   : `No restaurant signups: ${periodLabel.toLowerCase()}`
               }
               icon={<ClipboardCheck className="h-5 w-5 text-teal-600" />}

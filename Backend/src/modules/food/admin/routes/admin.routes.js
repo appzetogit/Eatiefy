@@ -236,6 +236,7 @@ router.get('/delivery/support-tickets/stats', adminController.getSupportTicketSt
 router.get('/delivery/support-tickets', adminController.getSupportTickets);
 router.patch('/delivery/support-tickets/:id', adminController.updateSupportTicket);
 router.get('/delivery/partners', adminController.getDeliveryPartners);
+router.patch('/delivery/partners/:id/wallet', adminController.updateDeliveryPartnerWallet);
 router.get('/delivery/:id', adminController.getDeliveryPartnerById);
 router.patch('/delivery/:id', adminController.updateDeliveryPartner);
 router.patch('/delivery-partners/:id', adminController.updateDeliveryPartner);

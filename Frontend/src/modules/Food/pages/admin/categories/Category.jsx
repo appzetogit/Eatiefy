@@ -19,6 +19,8 @@ import { toast } from "sonner"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
+import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
 
 const defaultFormData = {
   name: "",
@@ -42,15 +44,20 @@ const scopeBadgeClass = (scope) => {
   return "bg-slate-100 text-slate-700 border-slate-200"
 }
 
-const zoneLabel = (zone) => {
+const zoneNameOf = (zone) => zone?.name || zone?.zoneName || zone?.serviceLocation || ""
+
+// `zoneNames` maps zone id -> name (built from the zones API). A raw id is only
+// shown as a last resort, when the zone no longer exists.
+const zoneLabel = (zone, zoneNames) => {
   if (!zone) return "—"
   if (typeof zone === "string") {
     const value = zone.trim()
     if (value === "global") return "Global"
-    if (/^[a-f0-9]{24}$/i.test(value)) return `Zone ID ${value.slice(-6)}`
+    if (/^[a-f0-9]{24}$/i.test(value)) return zoneNames?.get(value) || `Deleted zone (${value.slice(-6)})`
     return value
   }
-  return zone?.name || zone?.zoneName || zone?.serviceLocation || "Zone"
+  const id = String(zone?._id || zone?.id || "")
+  return zoneNameOf(zone) || zoneNames?.get(id) || (id ? `Deleted zone (${id.slice(-6)})` : "Zone")
 }
 
 export default function Category() {
@@ -72,6 +79,7 @@ export default function Category() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [zones, setZones] = useState([])
+  const [zoneNames, setZoneNames] = useState(() => new Map())
   const [zonesLoading, setZonesLoading] = useState(false)
   const [formData, setFormData] = useState(defaultFormData)
   const [selectedImageFile, setSelectedImageFile] = useState(null)
@@ -92,14 +100,19 @@ export default function Category() {
     let cancelled = false
     setZonesLoading(true)
     adminAPI
-      .getZones({ limit: 1000, isActive: true })
+      // All zones (not only active ones) so a category in a deactivated zone
+      // still shows its zone name; the dropdown below lists active zones only.
+      .getZones({ limit: 1000 })
       .then((res) => {
-        const list =
+        const raw =
           res?.data?.data?.zones ||
           res?.data?.data?.data?.zones ||
           res?.data?.data ||
           []
-        if (!cancelled) setZones(Array.isArray(list) ? list : [])
+        const list = Array.isArray(raw) ? raw : []
+        if (cancelled) return
+        setZoneNames(new Map(list.map((z) => [String(z?._id || z?.id || ""), zoneNameOf(z)]).filter(([id, name]) => id && name)))
+        setZones(list.filter((z) => z?.isActive !== false))
       })
       .catch(() => {
         if (!cancelled) setZones([])
@@ -125,6 +138,11 @@ export default function Category() {
   useEffect(() => {
     fetchCategories()
   }, [debouncedSearch, showPendingOnly, selectedZone, currentPage, pageSize])
+
+  // New pending category / approval elsewhere: reload when the sidebar count changes.
+  useAdminBadgeListRefresh("categories", () => fetchCategories({ silent: true }), [
+    debouncedSearch, showPendingOnly, selectedZone, currentPage, pageSize,
+  ])
 
   const fetchCategories = async ({ silent = false } = {}) => {
     try {
@@ -241,6 +259,7 @@ export default function Category() {
       const response = await adminAPI.approveCategory(String(id))
       if (response?.data?.success) {
         toast.success("Category approved successfully")
+        refreshSidebarBadges("categories")
         fetchCategories({ silent: true })
       }
     } catch (error) {
@@ -263,6 +282,7 @@ export default function Category() {
       const response = await adminAPI.rejectCategory(id, reason)
       if (response?.data?.success) {
         toast.success("Category rejected successfully")
+        refreshSidebarBadges("categories")
         fetchCategories({ silent: true })
       }
     } catch (error) {
@@ -316,7 +336,7 @@ export default function Category() {
         category?.name || "N/A",
         category?.foodTypeScope || "Both",
         category?.isGlobal ? "Global" : "Private",
-        zoneLabel(category?.zoneId),
+        category?.zoneName || zoneLabel(category?.zoneId, zoneNames),
         category?.approvalStatus || "pending",
       ])
 
@@ -506,7 +526,7 @@ export default function Category() {
                   const creatorName = category?.createdByRestaurant?.name || category?.restaurant?.name || "Admin"
                   const approvalStatus = category?.approvalStatus || "pending"
                   const isRestaurantCategory = Boolean(category?.createdByRestaurantId || category?.restaurantId)
-                  const zoneText = category?.zoneName || zoneLabel(category?.zoneId)
+                  const zoneText = category?.zoneName || zoneLabel(category?.zoneId, zoneNames)
 
                   return (
                     <tr key={category.id} className="align-top hover:bg-slate-50/80">

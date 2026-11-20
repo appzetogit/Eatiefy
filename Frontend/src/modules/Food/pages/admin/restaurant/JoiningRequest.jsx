@@ -112,7 +112,7 @@ export default function JoiningRequest() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch, zoneId])
+  }, [debouncedSearch, zoneId, filters.dateFrom, filters.dateTo])
 
   useAdminBadgeListRefresh("restaurants", fetchRequests, [debouncedSearch, currentPage, pageSize, zoneId])
 
@@ -375,10 +375,10 @@ export default function JoiningRequest() {
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
-              <div className="relative flex-1 sm:flex-initial min-w-[250px]">
+              <div className="relative flex-1 sm:flex-initial sm:w-80">
                 <input
                   type="text"
-                  placeholder="Ex: Search by restaurant na"
+                  placeholder="Search by restaurant, owner or phone"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -617,24 +617,7 @@ export default function JoiningRequest() {
               </div>
 
               <div className="space-y-4">
-                {/* Zone Filter */}
-                {filterOptions.zones.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Zone
-                    </label>
-                    <select
-                      value={filters.zone}
-                      onChange={(e) => setFilters({ ...filters, zone: e.target.value })}
-                      className="w-full px-4 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">All Zones</option>
-                      {filterOptions.zones.map((zone) => (
-                        <option key={zone} value={zone}>{zone}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                {/* Zone is filtered with the zone dropdown above the table. */}
 
                 {/* Date Range Filters */}
                 <div className="grid grid-cols-2 gap-3">

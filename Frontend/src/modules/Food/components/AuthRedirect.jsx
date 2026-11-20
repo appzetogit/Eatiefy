@@ -31,7 +31,16 @@ function getRestaurantPendingRedirect() {
  * Redirects authenticated users away from auth pages to their module's home page
  */
 export default function AuthRedirect({ children, module, redirectTo = null }) {
-  const isAuthenticated = isModuleAuthenticated(module)
+  let isAuthenticated = isModuleAuthenticated(module)
+
+  // Login stores the token before asking an existing nameless user for their
+  // name. Without this guard the redirect fired at that moment and sent them
+  // home, so the name step (and the login screen) vanished.
+  if (module === "user" && isAuthenticated) {
+    try {
+      if (sessionStorage.getItem("user_login_name_pending") === "1") isAuthenticated = false
+    } catch { /* ignore */ }
+  }
 
   const moduleHomePages = {
     user: "/food/user",

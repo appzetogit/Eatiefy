@@ -128,6 +128,8 @@ export const authAPI = {
       confirmAction,
     );
   },
+  /** Resolves true/false; rejects on network errors. */
+  validateReferralCode: (code) => authService.validateUserReferralCode(code),
   getCurrentUser: () => getUserMeOnce(),
   refreshToken: (token) => authService.refreshToken(token),
   logout: (refreshToken, fcmToken = null, platform = "web") => {
@@ -274,6 +276,13 @@ export const adminAPI = {
       params,
       contextModule: "admin",
     }, { ttlMs: 10000, staleOn429Ms: 90000 }),
+  /** Admin: set a delivery partner's pocket balance / cash in hand. */
+  updateDeliveryBoyWallet: ({ deliveryId, pocketBalance, cashInHand } = {}) =>
+    apiClient.patch(
+      `/food/admin/delivery/partners/${String(deliveryId)}/wallet`,
+      { pocketBalance, cashInHand },
+      { contextModule: "admin" },
+    ),
   /** List approved delivery partners (Deliveryman List page) */
   getDeliveryPartners: (params) =>
     apiClient.get("/food/admin/delivery/partners", {

@@ -514,13 +514,17 @@ export default function Profile() {
         <Card className="bg-white dark:bg-[#242424] py-0 rounded-[20px] shadow-[0_4px_16px_rgba(0,0,0,0.02)] mb-0 border-0 dark:border-gray-800 overflow-hidden">
           <CardContent className="p-4 py-2.3">
             <div className="flex items-center gap-4">
-              <div className="relative">
+              <div className="relative shrink-0">
                 <Avatar className="h-16 w-16 border border-gray-100 dark:border-gray-800 shadow-sm bg-transparent">
                   {(userProfile?.localImagePreview || (userProfile?.profileImage && typeof userProfile.profileImage === "string" && userProfile.profileImage.trim() !== "" && userProfile.profileImage !== "null" && userProfile.profileImage !== "undefined")) ? (
                     <img
                       src={userProfile?.localImagePreview || normalizeImageUrl(userProfile.profileImage)}
-                      alt={displayName}
-                      className="w-full h-full object-cover rounded-full"
+                      alt="Profile photo"
+                      className="w-full h-full object-cover rounded-full text-[0px]"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null
+                        e.currentTarget.src = "/assets/images/profile_avatar.webp"
+                      }}
                     />
                   ) : (
                     <img
@@ -531,12 +535,12 @@ export default function Profile() {
                   )}
                 </Avatar>
               </div>
-              <div className="flex-1">
-                <h2 className="text-[19px] font-bold text-gray-900 dark:text-white leading-tight capitalize">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-[19px] font-bold text-gray-900 dark:text-white leading-tight capitalize whitespace-normal [overflow-wrap:anywhere]">
                   {displayName}
                 </h2>
                 {hasValidEmail && (
-                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5 [overflow-wrap:anywhere]">
                     {userProfile.email}
                   </p>
                 )}

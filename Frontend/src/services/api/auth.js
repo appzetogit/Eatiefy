@@ -9,6 +9,7 @@ import { EMAIL_REGEX } from "@/shared/utils/emailValidation";
 const AUTH = {
   USER_REQUEST_OTP: "/food/auth/user/request-otp",
   USER_VERIFY_OTP: "/food/auth/user/verify-otp",
+  USER_VALIDATE_REFERRAL: "/food/auth/user/validate-referral",
   ADMIN_LOGIN: "/food/auth/admin/login",
   RESTAURANT_REQUEST_OTP: "/food/auth/restaurant/request-otp",
   RESTAURANT_VERIFY_OTP: "/food/auth/restaurant/verify-otp",
@@ -105,6 +106,19 @@ export function verifyUserOtp(
     ...(fcmToken ? { fcmToken, platform } : {}),
     ...(confirmAction ? { confirmAction } : {}),
   });
+}
+
+/**
+ * Check a referral code before sign-up. Resolves to true / false.
+ * Network errors reject, so the caller can decide to let the server decide.
+ */
+export async function validateUserReferralCode(code) {
+  const value = typeof code === "string" ? code.trim() : "";
+  if (!value) return true;
+  const res = await apiClient.get(AUTH.USER_VALIDATE_REFERRAL, {
+    params: { code: value },
+  });
+  return (res?.data?.data ?? res?.data)?.valid === true;
 }
 
 /**

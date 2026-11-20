@@ -50,7 +50,8 @@ const applyWalletDelta = async (userId, { delta, referralDelta = 0, type, descri
                     status: 'Completed',
                     description,
                     metadata: metadata || {},
-                    idempotencyKey: idempotencyKey || null
+                    // Omit (never null) when there is no key - see the model note.
+                    ...(idempotencyKey ? { idempotencyKey } : {})
                 }],
                 $position: 0
             }

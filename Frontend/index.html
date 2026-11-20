@@ -98,6 +98,7 @@
       } catch (e) { /* detection is best-effort; default (no flag) keeps web layout */ }
     })();
   </script>
+  <link rel="preload" as="image" href="/assets/images/eatiefy_logo.webp" fetchpriority="high" />
   <link rel="icon" type="image/jpeg" href="/EatiefyUserAppLogo.jpeg?v=3" />
   <!-- iOS only delivers web push to a Home Screen web app, which needs a manifest. -->
   <link rel="manifest" href="/manifest.webmanifest" />
@@ -113,62 +114,45 @@
     bars sat under the home indicator / gesture bar.
   -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#D91F3A" />
+  <meta name="theme-color" content="#FEEFC2" />
   <style>
     html, body {
-      margin: 0; padding: 0; background: #fffdf9;
+      margin: 0; padding: 0; background: #FEEFC2;
     }
+    /* Brand splash shown until the app mounts: same cream/gold as the logo
+       artwork, so there is no black/white flash around the green logo. */
     .initial-loader {
-      display: flex; flex-direction: column; gap: 1.5rem; padding: 1.5rem;
-      min-height: 100vh; background: linear-gradient(180deg, #fffdf9 0%, #fff8f1 100%);
+      position: fixed; inset: 0; z-index: 99999;
+      display: flex; align-items: center; justify-content: center;
+      background: #FEEFC2;
     }
-    .skeleton-box {
-      background: rgba(0,0,0,0.05); border-radius: 9999px;
-      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    .initial-loader img {
+      width: min(62vw, 280px); height: auto; border-radius: 28px;
+      animation: splash-pop .5s ease-out both;
     }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-    .header-row { display: flex; justify-content: space-between; gap: 1rem; }
-    .header-left { height: 2.75rem; width: 10rem; }
-    .header-right { display: flex; gap: 0.75rem; }
-    .header-btn1 { height: 2.75rem; width: 6rem; }
-    .header-btn2 { height: 2.75rem; width: 2.75rem; }
-    .hero-banner { height: 12rem; border-radius: 1.5rem; width: 100%; margin-top: 0.5rem; }
-    .title-line { height: 1.75rem; width: 13rem; margin-top: 1rem; }
-    .chips-row { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
-    .chip { height: 2rem; width: 4.5rem; }
+    @keyframes splash-pop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://maps.googleapis.com">
   <link rel="preconnect" href="https://maps.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap"
-    rel="stylesheet">
   <title>Eatiefy</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- One non-render-blocking font request (was two blocking stylesheets that
+       also loaded Outfit twice). The splash above shows meanwhile. -->
   <link
-    href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&family=Caveat:wght@400;700&family=Yellowtail&display=swap"
-    rel="stylesheet">
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&family=Caveat:wght@400;700&family=Yellowtail&display=swap"
+    rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800;900&family=Caveat:wght@400;700&family=Yellowtail&display=swap"
+      rel="stylesheet">
+  </noscript>
 </head>
 
 <body>
   <div id="root">
-    <div class="initial-loader">
-      <div class="header-row">
-        <div class="skeleton-box header-left"></div>
-        <div class="header-right">
-          <div class="skeleton-box header-btn1"></div>
-          <div class="skeleton-box header-btn2"></div>
-        </div>
-      </div>
-      <div class="skeleton-box hero-banner"></div>
-      <div class="skeleton-box title-line"></div>
-      <div class="chips-row">
-        <div class="skeleton-box chip"></div>
-        <div class="skeleton-box chip" style="width: 5.5rem;"></div>
-        <div class="skeleton-box chip"></div>
-      </div>
+    <div class="initial-loader" aria-label="Loading Eatiefy">
+      <img src="/assets/images/eatiefy_logo.webp" alt="Eatiefy" width="280" height="280" decoding="async" fetchpriority="high" />
     </div>
   </div>
   <script type="module" src="/src/index.jsx"></script>

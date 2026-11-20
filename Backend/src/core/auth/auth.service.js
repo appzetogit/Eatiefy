@@ -196,6 +196,23 @@ const sanitizeDeliveryForAuthResponse = (deliveryDoc = {}) => {
   };
 };
 
+/**
+ * Resolves a user-typed referral code (Mongo _id or the short human code) to the
+ * referrer's _id, or null when it matches nobody.
+ */
+export const resolveUserReferrerId = async (refRaw) => {
+  const ref = typeof refRaw === "string" ? refRaw.trim() : "";
+  if (!ref) return null;
+  if (mongoose.Types.ObjectId.isValid(ref)) {
+    const byId = await FoodUser.findOne({ _id: ref, isActive: { $ne: false } }).select("_id").lean();
+    if (byId) return byId._id;
+  }
+  const byShortCode = await FoodUser.findOne({ shortReferralCode: ref.toUpperCase(), isActive: { $ne: false } })
+    .select("_id")
+    .lean();
+  return byShortCode ? byShortCode._id : null;
+};
+
 export const requestUserOtp = async (phone) => {
   if (!phone) {
     throw new ValidationError("Phone is required");
@@ -239,6 +256,17 @@ export const verifyUserOtpAndLogin = async (
   // 1. It is a deleted account and the user hasn't chosen restore/new yet.
   // 2. It is a fresh registration and they haven't provided a name yet (needs name prompt).
   const preserveOtp = (isDeletedAccount && !confirmAction) || (isFreshRegistration && !trimmedName);
+
+  // A wrong referral code must be rejected BEFORE the OTP is consumed, so the
+  // user can fix the code and resubmit with the same OTP. It used to be ignored
+  // silently and the account was created without the referral.
+  const referralInput = typeof ref === "string" ? ref.trim() : "";
+  if (isFreshRegistration && trimmedName && referralInput) {
+    const validReferrerId = await resolveUserReferrerId(referralInput);
+    if (!validReferrerId) {
+      throw new ValidationError("Invalid referral code. Please check the code or leave it empty.");
+    }
+  }
 
   const result = await verifyOtp(phone, otp, preserveOtp);
   console.log(`[DEBUG] OTP Verification for ${phone}: valid=${result.valid}, reason=${result.reason}, preserve=${preserveOtp}, confirmAction=${confirmAction}`);
@@ -343,14 +371,7 @@ export const verifyUserOtpAndLogin = async (
 
   // Referral crediting: only for brand new accounts.
   const refRaw = typeof ref === "string" ? String(ref).trim() : "";
-  let referrerId = null;
-  if (mongoose.Types.ObjectId.isValid(refRaw)) {
-    referrerId = new mongoose.Types.ObjectId(refRaw);
-  } else if (refRaw) {
-    // Not a Mongo _id - try resolving as a short, human-typeable referral code.
-    const byShortCode = await FoodUser.findOne({ shortReferralCode: refRaw.toUpperCase() }).select("_id").lean();
-    if (byShortCode) referrerId = byShortCode._id;
-  }
+  const referrerId = await resolveUserReferrerId(refRaw);
   if (isNewUser && referrerId) {
     try {
       {

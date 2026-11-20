@@ -8,6 +8,7 @@ import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/resta
 import { getGoogleMapsApiKey } from "@food/utils/googleMapsApiKey"
 import { formatRestaurantDisplayAddress, getRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
+import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
 
 // Import icons from Dashboard-icons
@@ -123,6 +124,14 @@ const getPrimaryRestaurantImage = (restaurant, fallback = "") => {
 export default function RestaurantsList() {
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(() => {
+    try {
+      return Number(localStorage.getItem("admin_restaurants_pageSize")) || 20
+    } catch {
+      return 20
+    }
+  })
   const [restaurants, setRestaurants] = useState([])
   const [bannedRestaurants, setBannedRestaurants] = useState([])
   const [rejectedRestaurants, setRejectedRestaurants] = useState([])
@@ -545,6 +554,18 @@ export default function RestaurantsList() {
 
     return result
   }, [restaurants, bannedRestaurants, rejectedRestaurants, viewMode, searchQuery, filters.all, sortConfig])
+
+  // Back to page 1 whenever the visible set changes (tab, search, filter, sort).
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [viewMode, searchQuery, filters.all, sortConfig, restaurants.length, bannedRestaurants.length, rejectedRestaurants.length])
+
+  const totalPages = Math.max(1, Math.ceil(filteredRestaurants.length / pageSize))
+  const safePage = Math.min(currentPage, totalPages)
+  const paginatedRestaurants = useMemo(
+    () => filteredRestaurants.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filteredRestaurants, safePage, pageSize],
+  )
 
   const modalRestaurant = restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant
   const detailsApprovalStatus = modalRestaurant ? normalizeApprovalStatus(modalRestaurant) : "pending"
@@ -1313,11 +1334,11 @@ export default function RestaurantsList() {
             {/* Right Action Tools: Search, Export, Add Restaurant */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               {/* Search Bar */}
-              <div className="relative min-w-[240px] sm:w-64">
+              <div className="relative w-full sm:w-80">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Ex: search by Restaurant name"
+                  placeholder="Search by restaurant, owner or phone"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 pr-8 py-2 w-full text-sm rounded-lg border border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -1457,14 +1478,14 @@ export default function RestaurantsList() {
                       </td>
                     </tr>
                   ) : (
-                    filteredRestaurants.map((restaurant, index) => {
+                    paginatedRestaurants.map((restaurant, index) => {
                       return (
                       <tr
                         key={restaurant.id}
                         className="hover:bg-slate-50 transition-colors"
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-slate-700">{index + 1}</span>
+                          <span className="text-sm font-medium text-slate-700">{(safePage - 1) * pageSize + index + 1}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -1581,6 +1602,23 @@ export default function RestaurantsList() {
               </table>
             )}
           </div>
+          {!loading && filteredRestaurants.length > 0 && (
+            <AdminListPagination
+              currentPage={safePage}
+              pageSize={pageSize}
+              totalItems={filteredRestaurants.length}
+              itemLabel="restaurants"
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                try {
+                  localStorage.setItem("admin_restaurants_pageSize", String(size))
+                } catch {
+                  /* ignore */
+                }
+              }}
+            />
+          )}
         </div>
       </div>
 

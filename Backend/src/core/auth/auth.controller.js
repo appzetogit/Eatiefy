@@ -1,5 +1,6 @@
 import {
   requestUserOtp,
+  resolveUserReferrerId,
   verifyUserOtpAndLogin,
   adminLogin,
   refreshAccessToken,
@@ -41,6 +42,25 @@ export const requestUserOtpController = async (req, res, next) => {
       phone,
       ...result,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** Public: lets the sign-up form flag a wrong referral code before submitting. */
+export const validateUserReferralCodeController = async (req, res, next) => {
+  try {
+    const code = String(req.query?.code ?? req.body?.code ?? "").trim().slice(0, 64);
+    if (!code) {
+      return sendResponse(res, 200, "No referral code provided", { valid: false, empty: true });
+    }
+    const referrerId = await resolveUserReferrerId(code);
+    return sendResponse(
+      res,
+      200,
+      referrerId ? "Referral code is valid" : "Invalid referral code",
+      { valid: Boolean(referrerId) },
+    );
   } catch (error) {
     next(error);
   }
