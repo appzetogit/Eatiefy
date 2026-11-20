@@ -19,7 +19,8 @@ import {
     listRestaurantsUnder250Controller,
     createDiningRequestController,
     getPendingDiningRequestController,
-    createRestaurantDiningCategoryController
+    createRestaurantDiningCategoryController,
+    getRestaurantVerificationStatusController
 } from '../controllers/restaurant.controller.js';
 import {
     createRestaurantSupportTicketController,
@@ -118,6 +119,7 @@ const uploadFields = upload.fields([
 ]);
 
 router.post('/register', uploadFields, registerRestaurantController);
+router.get('/verification-status', getRestaurantVerificationStatusController);
 
 // Onboarding draft uploads. The restaurant does not exist until /register, so these
 // use the registration token issued when the phone was OTP-verified. Files are

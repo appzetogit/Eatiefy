@@ -139,6 +139,7 @@ export default function RestaurantRouter() {
           </ProtectedRoute>
         }>
           <Route path="" element={<OrdersMain />} />
+          <Route path="orders" element={<Navigate to="/food/restaurant" replace />} />
           <Route path="orders/all" element={<AllOrdersPage />} />
           <Route path="orders/:id" element={<OrderDetails />} />
           <Route path="notifications" element={<RestaurantNotifications />} />

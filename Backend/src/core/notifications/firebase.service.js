@@ -1316,8 +1316,8 @@ export const sendNotificationToOwners = async (targets = [], payload = {}) => {
  * from the notification channel the app registered for `channelId`.
  */
 export const getNewOrderAlertSound = () => ({
-    android: sanitizeString(process.env.PUSH_NEW_ORDER_SOUND_ANDROID) || 'default',
-    ios: sanitizeString(process.env.PUSH_NEW_ORDER_SOUND_IOS) || 'default',
+    android: sanitizeString(process.env.PUSH_NEW_ORDER_SOUND_ANDROID) || 'restaurant_alert',
+    ios: sanitizeString(process.env.PUSH_NEW_ORDER_SOUND_IOS) || 'restaurant_alert.mp3',
 });
 
 export const notifyAdminsSafely = async (payload = {}) => {

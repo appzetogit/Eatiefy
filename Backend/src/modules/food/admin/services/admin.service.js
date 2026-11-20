@@ -4541,7 +4541,7 @@ export async function createFood(body) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) throw new ValidationError('Food name is required');
     const foodType = normalizeDishFoodType(body.foodType);
-    const restaurantFoodType = restaurant.foodType || (restaurant.pureVegRestaurant ? 'Veg' : 'Mixed');
+    const restaurantFoodType = restaurant.pureVegRestaurant ? 'Veg' : (restaurant.foodType || 'Mixed');
     if (restaurantFoodType === 'Veg' && foodType !== 'Veg') {
         throw new ValidationError('Veg restaurants can only add veg foods');
     }
@@ -4612,7 +4612,7 @@ export async function updateFood(id, body) {
 
     if (body.name !== undefined) doc.name = String(body.name || '').trim();
     if (body.description !== undefined) doc.description = String(body.description || '').trim();
-    const restaurantFoodType = restaurant.foodType || (restaurant.pureVegRestaurant ? 'Veg' : 'Mixed');
+    const restaurantFoodType = restaurant.pureVegRestaurant ? 'Veg' : (restaurant.foodType || 'Mixed');
     const targetFoodType = body.foodType !== undefined
         ? normalizeDishFoodType(body.foodType)
         : normalizeDishFoodType(doc.foodType);
@@ -4948,6 +4948,7 @@ export async function createRestaurantByAdmin(body) {
 async function sendRestaurantApprovalNotifications(restaurant, existing = {}, isChangesApproval = false) {
     const restaurantId = String(restaurant._id);
     const recipientEmail = String(restaurant.ownerEmail || existing.ownerEmail || '').trim();
+    const recipientPhone = String(restaurant.ownerPhone || restaurant.ownerPhoneDigits || existing.ownerPhone || existing.ownerPhoneDigits || '').trim();
     const restaurantName = restaurant.restaurantName || existing.restaurantName || 'your restaurant';
 
     const pushTitle = isChangesApproval
@@ -4960,7 +4961,7 @@ async function sendRestaurantApprovalNotifications(restaurant, existing = {}, is
         ? '/food/restaurant'
         : '/food/restaurant/pending-verification';
 
-    logger.info(`[APPROVE-EMAIL] Restaurant ${restaurantId} — ownerEmail=${recipientEmail || 'MISSING'}`);
+    logger.info(`[APPROVE-EMAIL] Restaurant ${restaurantId} — ownerEmail=${recipientEmail || 'MISSING'}, phone=${recipientPhone || 'MISSING'}`);
 
     // Persist an inbox row first: push/email are best-effort, but the partner panel
     // reads this collection, so it must survive refresh and re-login.
@@ -4999,13 +5000,21 @@ async function sendRestaurantApprovalNotifications(restaurant, existing = {}, is
         try {
             const io = getIO();
             if (io) {
-                io.to(rooms.restaurant(restaurantId)).emit('admin_notification', {
+                const approvalPayload = {
                     id: String(inboxRow?._id || ''),
+                    restaurantId,
                     title: inboxRow?.title,
                     message: inboxRow?.message,
                     link: targetUrl,
                     type: isChangesApproval ? 'restaurant_changes_approved' : 'restaurant_approved',
                     createdAt: inboxRow?.createdAt || new Date().toISOString()
+                };
+                io.to(rooms.restaurant(restaurantId)).emit('admin_notification', approvalPayload);
+                io.emit('restaurant_approval_status', {
+                    restaurantId,
+                    phone: restaurant.ownerPhone || existing.ownerPhone,
+                    status: 'approved',
+                    type: isChangesApproval ? 'restaurant_changes_approved' : 'restaurant_approved'
                 });
             }
         } catch (socketError) {
@@ -5061,16 +5070,31 @@ async function sendRestaurantApprovalNotifications(restaurant, existing = {}, is
         } else {
             logger.warn(`[APPROVE-EMAIL] Restaurant ${restaurantId} — email FAILED for ${recipientEmail}`);
         }
-        return emailSent;
     } catch (e) {
         logger.error(`[APPROVE-EMAIL] Restaurant ${restaurantId} — email error: ${e?.message || e}`);
-        return false;
     }
+
+    if (recipientPhone) {
+        try {
+            const { sendAccountApprovalSms } = await import('../../../../core/otp/otp.service.js');
+            await sendAccountApprovalSms({
+                phone: recipientPhone,
+                name: restaurantName,
+                role: 'RESTAURANT',
+                isChangesApproval
+            });
+        } catch (smsErr) {
+            logger.warn(`[APPROVE-SMS] Restaurant ${restaurantId} — SMS error: ${smsErr?.message || smsErr}`);
+        }
+    }
+
+    return true;
 }
 
 async function sendDeliveryApprovalNotifications(partner, existing = {}, isChangesApproval = false) {
     const partnerId = String(partner._id);
     let recipientEmail = String(partner.email || existing.email || '').trim().toLowerCase();
+    let recipientPhone = String(partner.phone || existing.phone || '').trim();
     const partnerName = partner.name || existing.name || 'Partner';
 
     const pushTitle = isChangesApproval
@@ -5083,12 +5107,13 @@ async function sendDeliveryApprovalNotifications(partner, existing = {}, isChang
         ? '/food/delivery'
         : '/food/delivery/pending-verification';
 
-    if (!recipientEmail && mongoose.Types.ObjectId.isValid(partnerId)) {
-        const fresh = await FoodDeliveryPartner.findById(partnerId).select('email name').lean();
-        recipientEmail = String(fresh?.email || '').trim().toLowerCase();
+    if ((!recipientEmail || !recipientPhone) && mongoose.Types.ObjectId.isValid(partnerId)) {
+        const fresh = await FoodDeliveryPartner.findById(partnerId).select('email name phone').lean();
+        if (!recipientEmail) recipientEmail = String(fresh?.email || '').trim().toLowerCase();
+        if (!recipientPhone) recipientPhone = String(fresh?.phone || '').trim();
     }
 
-    logger.info(`[APPROVE-EMAIL] Delivery ${partnerId} — email=${recipientEmail || 'MISSING'}`);
+    logger.info(`[APPROVE-EMAIL] Delivery ${partnerId} — email=${recipientEmail || 'MISSING'}, phone=${recipientPhone || 'MISSING'}`);
 
     // Persist an inbox row first: push/email are best-effort, but the partner app
     // reads this collection, so it must survive refresh and re-login.
@@ -5190,11 +5215,25 @@ async function sendDeliveryApprovalNotifications(partner, existing = {}, isChang
         } else {
             logger.warn(`[APPROVE-EMAIL] Delivery ${partnerId} — email FAILED for ${recipientEmail}`);
         }
-        return emailSent;
     } catch (e) {
         logger.error(`[APPROVE-EMAIL] Delivery ${partnerId} — email error: ${e?.message || e}`);
-        return false;
     }
+
+    if (recipientPhone) {
+        try {
+            const { sendAccountApprovalSms } = await import('../../../../core/otp/otp.service.js');
+            await sendAccountApprovalSms({
+                phone: recipientPhone,
+                name: partnerName,
+                role: 'DELIVERY_PARTNER',
+                isChangesApproval
+            });
+        } catch (smsErr) {
+            logger.warn(`[APPROVE-SMS] Delivery ${partnerId} — SMS error: ${smsErr?.message || smsErr}`);
+        }
+    }
+
+    return true;
 }
 
 export async function approveRestaurant(id) {
@@ -5202,7 +5241,7 @@ export async function approveRestaurant(id) {
 
     logger.info(`[ADMIN-APPROVE] approveRestaurant service called id=${id}`);
 
-    const existing = await FoodRestaurant.findById(id).select('status ownerEmail restaurantName pendingApprovalType').lean();
+    const existing = await FoodRestaurant.findById(id).select('status ownerEmail ownerPhone ownerPhoneDigits restaurantName profileImage pendingApprovalType').lean();
     if (!existing) return null;
     const isChangesApproval = existing.pendingApprovalType === 'changes';
 
@@ -6911,7 +6950,7 @@ export async function approveDeliveryPartner(id, body = {}) {
     logger.info(`[ADMIN-APPROVE] approveDeliveryPartner service called id=${id}`);
 
     const existing = await FoodDeliveryPartner.findById(id)
-        .select('status email name pendingApprovalType zoneId city state address')
+        .select('status email name phone pendingApprovalType zoneId city state address')
         .lean();
     if (!existing) return null;
     const isChangesApproval = existing.pendingApprovalType === 'changes';

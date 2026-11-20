@@ -1284,6 +1284,23 @@ export const restaurantAPI = {
     return authService.reapplyRestaurant(phone);
   },
   getMe: () => authService.getMe("restaurant"),
+  /** Verification status check for pending restaurant onboarding/approval. */
+  getVerificationStatus: (params = {}, registrationToken = null) => {
+    const headers = {};
+    const regToken =
+      registrationToken ||
+      (typeof localStorage !== "undefined"
+        ? localStorage.getItem("restaurant_registrationToken")
+        : null);
+    if (regToken) {
+      headers["x-registration-token"] = regToken;
+    }
+    return apiClient.get("/food/restaurant/verification-status", {
+      contextModule: "restaurant",
+      params: params || {},
+      headers,
+    });
+  },
   /** Restaurant dashboard: fetch current restaurant profile (deduped + short-cached). */
   getCurrentRestaurant: () => getRestaurantCurrentOnce(),
   /** Force-refresh current restaurant profile bypassing the short-lived cache. */

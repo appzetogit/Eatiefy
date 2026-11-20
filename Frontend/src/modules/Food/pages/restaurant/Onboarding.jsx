@@ -1953,7 +1953,7 @@ export default function RestaurantOnboarding() {
             resolveImageForProfileUpdate(step3.fssaiImage, "food/restaurants/fssai"),
           ])
 
-          const effectiveFoodType = step1.foodType || (step1.pureVegRestaurant === true ? "Veg" : "Mixed")
+          const effectiveFoodType = step1.pureVegRestaurant === true ? "Veg" : (step1.foodType || "Mixed")
           const updatePayload = {
             restaurantName: step1.restaurantName || "",
             foodType: effectiveFoodType,
@@ -2023,7 +2023,7 @@ export default function RestaurantOnboarding() {
         const formData = new FormData()
 
         // Step 1
-        const effectiveFoodType = step1.foodType || (step1.pureVegRestaurant === true ? "Veg" : "Mixed")
+        const effectiveFoodType = step1.pureVegRestaurant === true ? "Veg" : (step1.foodType || "Mixed")
         formData.append("restaurantName", step1.restaurantName || "")
         formData.append("foodType", effectiveFoodType)
         formData.append("pureVegRestaurant", effectiveFoodType === "Veg" ? "true" : "false")
@@ -2125,7 +2125,9 @@ export default function RestaurantOnboarding() {
 
         // Clear localStorage when onboarding is complete
         clearOnboardingFromLocalStorage()
-        clearRestaurantRegistrationToken()
+        if (registered?.registrationToken) {
+          setRestaurantRegistrationToken(registered.registrationToken)
+        }
         clearOnboardingFileCache()
         try {
           await clearAllFilesFromDB()

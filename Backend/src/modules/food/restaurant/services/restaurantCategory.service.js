@@ -31,7 +31,7 @@ const getRestaurantContext = async (restaurantId) => {
         throw new ValidationError('Restaurant not found');
     }
 
-    const foodType = restaurant.foodType || (restaurant.pureVegRestaurant ? 'Veg' : 'Mixed');
+    const foodType = restaurant.pureVegRestaurant ? 'Veg' : (restaurant.foodType || 'Mixed');
     return {
         restaurantId: toObjectId(restaurantId),
         zoneId: restaurant.zoneId ? String(restaurant.zoneId) : '',

@@ -155,7 +155,7 @@ const sanitizeUserForAuthResponse = (userDoc = {}) => {
   };
 };
 
-const sanitizeRestaurantForAuthResponse = (restaurantDoc = {}) => {
+export const sanitizeRestaurantForAuthResponse = (restaurantDoc = {}) => {
   const id =
     restaurantDoc?._id?.toString?.() ||
     restaurantDoc?.id?.toString?.() ||
@@ -667,9 +667,11 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
     // Sending it back to a checkout with nothing to charge would be a dead end, so
     // it moves into the approval queue instead ("pending": approval still required).
     if (await releaseIfNoOnboardingFeeDue(restaurant._id)) {
+      const { signRegistrationToken } = await import("./onboardingToken.js");
       return {
         pendingApproval: true,
         restaurantId: String(restaurant._id),
+        registrationToken: signRegistrationToken(phone),
         message:
           "Your restaurant registration is pending admin approval. You will be able to access your account once your request is approved.",
       };
@@ -686,12 +688,8 @@ export const verifyRestaurantOtpAndLogin = async (phone, otp, fcmToken, platform
 
   if (restaurantStatus !== "approved") {
     const isRejected = restaurantStatus === "rejected";
-    // Re-apply resubmits through /register; this token (the phone was just
-    // OTP-verified) is what lets it update the rejected registration instead of
-    // colliding with it as "already exists".
-    const registrationToken = isRejected
-      ? (await import("./onboardingToken.js")).signRegistrationToken(phone)
-      : undefined;
+    const { signRegistrationToken } = await import("./onboardingToken.js");
+    const registrationToken = signRegistrationToken(phone);
     return {
       pendingApproval: true,
       isRejected,

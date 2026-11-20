@@ -682,7 +682,10 @@ export const verifyOnboardingPayment = async (restaurantId, payload = {}) => {
         confirmedVia: recoveringDiscardedAttempt ? 'checkout_verify_recovered' : 'checkout_verify'
     });
 
-    return { payment: toOnboardingPaymentView(finalized), alreadyProcessed };
+    const { signRegistrationToken } = await import('../../../../core/auth/onboardingToken.js');
+    const registrationToken = restaurant?.ownerPhone ? signRegistrationToken(restaurant.ownerPhone) : null;
+
+    return { payment: toOnboardingPaymentView(finalized), alreadyProcessed, ...(registrationToken ? { registrationToken } : {}) };
 };
 
 /**

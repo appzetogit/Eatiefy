@@ -273,7 +273,7 @@ export default function VerificationPending() {
                     disabled={enablingPush}
                     onClick={handleEnablePush}
                   >
-                    {enablingPush ? "Enabling..." : "Allow Mail Notifications"}
+                    {enablingPush ? "Enabling..." : "Enable Notifications"}
                   </button>
                 ) : null}
                 <button type="button" className={DELIVERY_PRIMARY_BTN} onClick={handleBackToLogin}>

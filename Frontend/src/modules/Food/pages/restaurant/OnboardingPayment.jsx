@@ -7,6 +7,7 @@ import { restaurantAPI } from "@food/api"
 import { Button } from "@food/components/ui/button"
 import { initRazorpayPayment, preloadRazorpayScript } from "@food/utils/razorpay"
 import { useCompanyName } from "@food/hooks/useCompanyName"
+import { setRestaurantRegistrationToken } from "@food/utils/auth"
 
 const ONBOARDING_TOKEN_KEY = "restaurant_onboardingToken"
 const ONBOARDING_RESTAURANT_ID_KEY = "restaurant_onboardingRestaurantId"
@@ -220,6 +221,9 @@ export default function OnboardingPayment() {
               razorpaySignature: response?.razorpay_signature,
             })
             const verified = verifyResponse?.data?.data || {}
+            if (verified.registrationToken) {
+              setRestaurantRegistrationToken(verified.registrationToken)
+            }
             setPaidSummary(verified.payment || null)
             setSucceeded(true)
             clearOnboardingSession()

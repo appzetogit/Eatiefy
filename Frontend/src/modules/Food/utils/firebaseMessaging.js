@@ -1750,6 +1750,23 @@ function showForegroundNotification(payload = {}) {
     ) {
       window.dispatchEvent(new CustomEvent("delivery-wallet-refresh"));
     }
+    if (
+      notificationType === "restaurant_approved" ||
+      notificationType === "restaurant_changes_approved" ||
+      notificationType === "onboarding_approved"
+    ) {
+      window.dispatchEvent(new CustomEvent("restaurantApprovalStatusChanged", { detail: payload?.data }));
+    }
+    if (
+      notificationType === "new_order" ||
+      notificationType === "delivery_offer" ||
+      notificationType === "delivery_request" ||
+      Boolean(payload?.data?.orderId || payload?.data?.order_id)
+    ) {
+      window.dispatchEvent(new CustomEvent("app-order-push", { detail: payload }));
+      window.dispatchEvent(new CustomEvent("new_order", { detail: payload?.data || payload }));
+      window.dispatchEvent(new CustomEvent("delivery_request", { detail: payload?.data || payload }));
+    }
     return;
   }
 
@@ -1780,6 +1797,23 @@ function showForegroundNotification(payload = {}) {
     notificationType === "cash_deposit_rejected"
   ) {
     window.dispatchEvent(new CustomEvent("delivery-wallet-refresh"));
+  }
+  if (
+    notificationType === "restaurant_approved" ||
+    notificationType === "restaurant_changes_approved" ||
+    notificationType === "onboarding_approved"
+  ) {
+    window.dispatchEvent(new CustomEvent("restaurantApprovalStatusChanged", { detail: payload?.data }));
+  }
+  if (
+    notificationType === "new_order" ||
+    notificationType === "delivery_offer" ||
+    notificationType === "delivery_request" ||
+    Boolean(payload?.data?.orderId || payload?.data?.order_id)
+  ) {
+    window.dispatchEvent(new CustomEvent("app-order-push", { detail: payload }));
+    window.dispatchEvent(new CustomEvent("new_order", { detail: payload?.data || payload }));
+    window.dispatchEvent(new CustomEvent("delivery_request", { detail: payload?.data || payload }));
   }
 
   // Must match the tag the service worker uses for the same event so the two
@@ -1862,12 +1896,27 @@ function attachServiceWorkerMessageListener() {
     navigator.serviceWorker.addEventListener("message", (event) => {
       const data = isRecord(event?.data) ? event.data : null;
       if (!data || data.type !== "push-notification-received") return;
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-        pushDebugLog(PUSH_DEBUG_PREFIX, "Skipping page notification render for SW relay because tab is hidden");
-        return;
-      }
       if (!isRecord(data.payload)) {
         pushDebugWarn(PUSH_DEBUG_PREFIX, "Ignoring malformed SW push relay payload", { payload: data.payload });
+        return;
+      }
+      const rawType = String(data?.payload?.data?.type || "").toLowerCase();
+      const isOrderAlert =
+        rawType === "new_order" ||
+        rawType === "delivery_offer" ||
+        rawType === "delivery_request" ||
+        Boolean(data?.payload?.data?.orderId || data?.payload?.data?.order_id);
+
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        if (isOrderAlert) {
+          pushDebugLog(PUSH_DEBUG_PREFIX, "Background order alert received from SW relay - triggering alert & events");
+          playPushSound(data.payload);
+          window.dispatchEvent(new CustomEvent("app-order-push", { detail: data.payload }));
+          window.dispatchEvent(new CustomEvent("new_order", { detail: data.payload?.data || data.payload }));
+          window.dispatchEvent(new CustomEvent("delivery_request", { detail: data.payload?.data || data.payload }));
+        } else {
+          pushDebugLog(PUSH_DEBUG_PREFIX, "Skipping page notification render for SW relay because tab is hidden");
+        }
         return;
       }
       pushDebugLog(PUSH_DEBUG_PREFIX, "Received service worker message in page", { payload: data.payload });
