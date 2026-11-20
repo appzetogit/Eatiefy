@@ -1149,6 +1149,26 @@ export default function FoodApproval() {
                           <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Status</label>
                           <p className="text-sm text-gray-700 capitalize font-medium">{selectedRequest.approvalStatus || 'pending'}</p>
                       </div>
+                      {selectedRequest.entityType !== 'addon' && (
+                        <>
+                          <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Preparation Time</label>
+                              <p className="text-sm text-gray-700">
+                                {(() => {
+                                  const prep = String(selectedRequest.preparationTime ?? '').trim()
+                                  if (!prep) return 'Not specified'
+                                  return /^\d+$/.test(prep) ? `${prep} mins` : prep
+                                })()}
+                              </p>
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Recommended</label>
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${selectedRequest.isRecommended ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                                {selectedRequest.isRecommended ? 'Yes - recommended' : 'No'}
+                              </span>
+                          </div>
+                        </>
+                      )}
                   </div>
 
                   <div className="space-y-4">

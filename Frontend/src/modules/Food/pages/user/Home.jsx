@@ -3956,13 +3956,13 @@ export default function Home() {
                                 </div>
 
                                 {/* Price */}
-                                <div className="flex items-center justify-between w-full mt-1">
-                                  <div className="flex items-center gap-1.5">
-                                    {hasVariants && (
-                                      <span className="text-[9.5px] font-semibold text-gray-500 dark:text-gray-400">
-                                        Starting from
-                                      </span>
-                                    )}
+                                <div className="flex flex-col items-start w-full mt-1 gap-0.5 min-w-0">
+                                  {hasVariants && (
+                                    <span className="text-[9.5px] leading-none font-semibold text-gray-500 dark:text-gray-400">
+                                      Starting from
+                                    </span>
+                                  )}
+                                  <div className="flex flex-wrap items-baseline gap-x-1.5 min-w-0">
                                     <span className="text-sm font-black text-gray-900 dark:text-white">
                                       ₹{dish.price}
                                     </span>
@@ -3973,7 +3973,7 @@ export default function Home() {
                                     )}
                                   </div>
                                   {hasVariants && (
-                                    <span className="text-[8px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                                    <span className="text-[8px] leading-none font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                                       Customisable
                                     </span>
                                   )}

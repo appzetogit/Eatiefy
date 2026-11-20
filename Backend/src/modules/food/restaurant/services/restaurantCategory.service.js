@@ -321,6 +321,27 @@ export async function createRestaurantCategory(restaurantId, body = {}) {
             : undefined
     });
     await doc.save();
+
+    // Tell admins a category is waiting for approval: push + live panel alert.
+    // Best effort - it must never fail the restaurant's request.
+    try {
+        const restaurantDoc = await FoodRestaurant.findById(context.restaurantId).select('restaurantName').lean();
+        const restaurantName = restaurantDoc?.restaurantName || 'A restaurant';
+        const link = '/admin/food/categories';
+        const message = `${restaurantName} submitted the category "${name}" for approval.`;
+        const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
+        void notifyAdminsSafely({
+            title: 'Category Approval Pending',
+            body: message,
+            link,
+            idempotencyKey: `category_approval:${String(doc._id)}`,
+            data: { type: 'category_approval', subType: 'category', id: String(doc._id) }
+        });
+    } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to notify admins of pending category:', err?.message || err);
+    }
+
     return doc.toObject();
 }
 

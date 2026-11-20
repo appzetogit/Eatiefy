@@ -16,7 +16,11 @@ const walletTransactionSchema = new mongoose.Schema(
         razorpaySignature: { type: String, default: null },
         // Globally unique key (e.g. `order_payment:${orderId}`) used to make wallet
         // credits/deductions idempotent against retries and concurrent requests.
-        idempotencyKey: { type: String, default: null }
+        // Intentionally NO default: the unique index below is `sparse`, which only
+        // skips documents where the field is MISSING. A stored `null` is still
+        // indexed, so the second wallet to log any key-less transaction (admin
+        // credit, referral reward, top-up) hit E11000 and the credit failed.
+        idempotencyKey: { type: String }
     },
     { timestamps: true }
 );

@@ -218,7 +218,7 @@ export default function AddMoneyModal({ open, onOpenChange, onSuccess }) {
                     key={quickAmount}
                     type="button"
                     variant={amount === quickAmount.toString() ? "default" : "outline"}
-                    className="h-10"
+                    className={amount === quickAmount.toString() ? "h-10 bg-[#14512F] text-white hover:bg-[#0F3F25] border-[#14512F]" : "h-10"}
                     onClick={() => handleAmountSelect(quickAmount)}
                     disabled={loading || processing}
                   >
@@ -231,7 +231,7 @@ export default function AddMoneyModal({ open, onOpenChange, onSuccess }) {
             <Button
               onClick={handleAddMoney}
               disabled={!amount || loading || processing || parseFloat(amount) < 1}
-              className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-semibold text-base"
+              className="w-full h-12 bg-[#14512F] hover:bg-[#0F3F25] text-white font-semibold text-base shadow-md disabled:opacity-100 disabled:bg-[#14512F]/55 disabled:text-white"
             >
               {loading || processing ? (
                 <>

@@ -82,7 +82,7 @@ export async function listPendingFoodApprovals(query = {}) {
     const [foodList, addonList, foodTotal, addonTotal] = await Promise.all([
         FoodItem.find(foodFilter)
             .sort({ requestedAt: -1, createdAt: -1 })
-            .select('restaurantId categoryName name price variants image foodType approvalStatus requestedAt createdAt actionType oldData newData description preparationTime zoneId')
+            .select('restaurantId categoryName name price variants image foodType approvalStatus requestedAt createdAt actionType oldData newData description preparationTime isRecommended zoneId')
             .lean(),
         FoodAddon.find(addonFilter)
             .sort({ requestedAt: -1, createdAt: -1 })
@@ -142,6 +142,7 @@ export async function listPendingFoodApprovals(query = {}) {
             newData: f.newData,
             description: f.description || '',
             preparationTime: f.preparationTime || '',
+            isRecommended: f.isRecommended === true,
         };
     });
 

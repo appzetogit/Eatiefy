@@ -32,6 +32,7 @@ import { invalidateRestaurantCommissionRulesCache } from '../../orders/services/
 import { FeedbackExperience } from '../models/feedbackExperience.model.js';
 import { FoodUser } from '../../../../core/users/user.model.js';
 import { getUserWallet, creditWalletBalance, deductWalletBalance } from '../../user/services/userWallet.service.js';
+import { FoodUserWallet } from '../../user/models/userWallet.model.js';
 import { FoodRefreshToken } from '../../../../core/refreshTokens/refreshToken.model.js';
 import { FoodDeliveryCashLimit } from '../models/deliveryCashLimit.model.js';
 import { FoodTopRestaurant } from '../models/topRestaurant.model.js';
@@ -949,8 +950,8 @@ export async function getDashboardStats(query = {}) {
         zoneId
             ? FoodOrder.find(orderMatch).distinct('userId').then((ids) => ids.filter(Boolean).length)
             : periodRange
-                ? FoodUser.countDocuments({ createdAt: { $gte: periodRange.start, $lte: periodRange.end } })
-                : FoodUser.countDocuments({}),
+                ? FoodUser.countDocuments({ role: 'USER', createdAt: { $gte: periodRange.start, $lte: periodRange.end } })
+                : FoodUser.countDocuments({ role: 'USER' }),
         FoodRestaurant.find({ ...restaurantMatch, status: 'pending' }).sort({ createdAt: -1 }).limit(5).select('restaurantName createdAt').lean(),
         FoodDeliveryPartner.find({ status: 'pending', ...deliveryFilter }).sort({ createdAt: -1 }).limit(5).select('name createdAt').lean(),
         FoodOrder.find({ 
@@ -1038,7 +1039,11 @@ export async function getDashboardStats(query = {}) {
 
     const onboardedByStatus = new Map((restaurantsOnboardedAgg || []).map((row) => [String(row._id || ''), Number(row.count || 0)]));
     const restaurantsOnboarded = {
-        total: Array.from(onboardedByStatus.values()).reduce((sum, n) => sum + n, 0),
+        // "Onboarded" = completed signup AND approved, i.e. live on the platform
+        // (same rule as the "Total restaurants" card). It used to add up every
+        // status - in review, payment pending, rejected, banned - which showed 41
+        // when only 30 restaurants were actually onboarded.
+        total: onboardedByStatus.get('approved') || 0,
         live: onboardedByStatus.get('approved') || 0,
         inReview: onboardedByStatus.get('pending') || 0,
         paymentPending: onboardedByStatus.get('payment_pending') || 0,
@@ -1987,6 +1992,14 @@ export async function getCustomers(query = {}) {
         ])
     );
 
+    // Current wallet balance per customer (one query for the whole page).
+    const walletDocs = userIds.length > 0
+        ? await FoodUserWallet.find({ userId: { $in: userIds } }).select('userId balance').lean()
+        : [];
+    const walletBalanceMap = new Map(
+        walletDocs.map((w) => [String(w.userId), Number(w.balance) || 0])
+    );
+
     let customers = docs.map((u) => {
         const stats = orderStatsMap.get(String(u._id)) || { totalOrder: 0, totalOrderAmount: 0 };
         return ({
@@ -2003,6 +2016,7 @@ export async function getCustomers(query = {}) {
         isCodBlocked: u.isCodBlocked === true,
         totalOrder: stats.totalOrder,
         totalOrderAmount: stats.totalOrderAmount,
+        walletBalance: walletBalanceMap.get(String(u._id)) || 0,
         joiningDate: u.createdAt,
         createdAt: u.createdAt
         });
@@ -2105,7 +2119,7 @@ export async function adjustCustomerWallet(id, { type, amount, reason } = {}, ad
 
     const metadata = {
         source: 'admin_adjustment',
-        adminId: adminUser?.id || adminUser?._id || null,
+        adminId: adminUser?.userId || adminUser?.id || adminUser?._id || null,
         adminName: adminUser?.name || adminUser?.email || null,
         reason: reason ? String(reason).trim() : ''
     };
@@ -5600,13 +5614,14 @@ export async function getDeliveryJoinRequests(query) {
     const skip = Math.max(0, (Number(page) || 1) - 1) * Math.max(1, Math.min(1000, Number(limit) || 100));
     const limitNum = Math.max(1, Math.min(1000, Number(limit) || 100));
 
-    const [list, zoneDocs] = await Promise.all([
+    const [list, zoneDocs, total] = await Promise.all([
         FoodDeliveryPartner.find(filter)
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limitNum)
             .lean(),
-        FoodZone.find({}).select('_id name zoneName serviceLocation').lean()
+        FoodZone.find({}).select('_id name zoneName serviceLocation').lean(),
+        FoodDeliveryPartner.countDocuments(filter)
     ]);
 
     const zoneMap = new Map((zoneDocs || []).map((z) => [String(z._id), z.name || z.zoneName || z.serviceLocation || '']));
@@ -5630,7 +5645,17 @@ export async function getDeliveryJoinRequests(query) {
         };
     });
 
-    return { requests };
+    // The page reads pagination.total to know how many pages exist. Without it
+    // the UI assumed "total = rows on this page" and never offered page 2.
+    return {
+        requests,
+        pagination: {
+            page: Math.max(1, Number(page) || 1),
+            limit: limitNum,
+            total,
+            pages: Math.max(1, Math.ceil(total / limitNum))
+        }
+    };
 }
 
 export function getDeliveryWalletsStub() {
@@ -7532,6 +7557,10 @@ async function computeDeliveryWalletRows(partners) {
             phone: p.phone || '',
             deliveryIdString: partnerIdstr,
             pocketBalance,
+            // Unclamped figures: an admin correction has to be measured from
+            // these, or a balance floored at 0 would be adjusted by the wrong amount.
+            rawPocketBalance: (totalEarned + totalBonus) - (totalWithdrawn + pendingWithdrawals),
+            rawCashInHand: grossCashCollected - totalDepositedCash,
             totalCashLimit: cashLimitFor(p),
             remainingCashLimit: Math.max(0, cashLimitFor(p) - cashInHand),
             cashCollected: grossCashCollected,
@@ -7544,6 +7573,97 @@ async function computeDeliveryWalletRows(partners) {
     });
 
     return wallets;
+}
+
+/**
+ * Admin sets a delivery partner's pocket balance and/or cash in hand.
+ *
+ * Both figures are DERIVED (earnings + bonuses - withdrawals, and COD collected -
+ * completed deposits), not stored fields, so there is nothing to overwrite. The
+ * correction is booked as a ledger entry that every wallet screen already counts:
+ *  - pocket balance up   -> a bonus transaction
+ *  - pocket balance down -> an approved withdrawal ("admin adjustment")
+ *  - cash in hand down   -> a completed deposit
+ *  - cash in hand up     -> a completed deposit with a negative amount
+ */
+export async function updateDeliveryPartnerWallet(deliveryId, { pocketBalance, cashInHand } = {}, adminUser = null) {
+    if (!deliveryId || !mongoose.Types.ObjectId.isValid(String(deliveryId))) {
+        throw new ValidationError('Invalid delivery partner id');
+    }
+    const wantsPocket = pocketBalance !== undefined && pocketBalance !== null && pocketBalance !== '';
+    const wantsCash = cashInHand !== undefined && cashInHand !== null && cashInHand !== '';
+    if (!wantsPocket && !wantsCash) {
+        throw new ValidationError('Provide pocketBalance and/or cashInHand');
+    }
+    const targetPocket = wantsPocket ? roundMoney(pocketBalance) : null;
+    const targetCash = wantsCash ? roundMoney(cashInHand) : null;
+    if ((wantsPocket && (!Number.isFinite(targetPocket) || targetPocket < 0)) ||
+        (wantsCash && (!Number.isFinite(targetCash) || targetCash < 0))) {
+        throw new ValidationError('Pocket balance and cash in hand must be non-negative numbers');
+    }
+
+    const partnerId = new mongoose.Types.ObjectId(String(deliveryId));
+    const partner = await FoodDeliveryPartner.findById(partnerId).lean();
+    if (!partner) throw new NotFoundError('Delivery partner not found');
+
+    const [before] = await computeDeliveryWalletRows([partner]);
+    const adminId = adminUser?.userId || adminUser?._id || adminUser?.id || undefined;
+    const note = 'Admin wallet adjustment';
+
+    if (wantsPocket) {
+        const delta = roundMoney(targetPocket - roundMoney(before.rawPocketBalance));
+        if (delta > 0) {
+            let transactionId = generateBonusTransactionId();
+            while (await DeliveryBonusTransaction.exists({ transactionId })) {
+                transactionId = generateBonusTransactionId();
+            }
+            await DeliveryBonusTransaction.create({
+                deliveryPartnerId: partnerId,
+                transactionId,
+                amount: delta,
+                reference: note,
+                createdByAdminId: adminId
+            });
+        } else if (delta < 0) {
+            if (Math.abs(delta) < 1) {
+                throw new ValidationError('Pocket balance can only be reduced by Rs 1 or more at a time');
+            }
+            await FoodDeliveryWithdrawal.create({
+                deliveryPartnerId: partnerId,
+                amount: Math.abs(delta),
+                status: 'approved',
+                paymentMethod: 'admin_adjustment',
+                adminNote: note,
+                transactionId: 'ADJ-' + Date.now(),
+                processedAt: new Date()
+            });
+        }
+    }
+
+    if (wantsCash) {
+        const delta = roundMoney(targetCash - roundMoney(before.rawCashInHand));
+        if (delta !== 0) {
+            // A positive deposit lowers cash in hand; a negative one raises it.
+            await FoodDeliveryCashDeposit.create({
+                deliveryPartnerId: partnerId,
+                amount: -delta,
+                paymentMethod: 'bank_transfer',
+                status: 'Completed',
+                adminId,
+                adminNote: note
+            });
+        }
+    }
+
+    const [after] = await computeDeliveryWalletRows([partner]);
+    return {
+        walletId: after.walletId,
+        deliveryId: String(partnerId),
+        pocketBalance: after.pocketBalance,
+        cashInHand: after.cashInHand,
+        remainingCashLimit: after.remainingCashLimit,
+        totalCashLimit: after.totalCashLimit
+    };
 }
 
 /**
@@ -7999,6 +8119,7 @@ export async function getSidebarBadges() {
             pendingRestaurantComplaints,
             pendingCashConfirmations,
             pendingRestaurantOffers,
+            pendingCategories,
         ] = await Promise.all([
             FoodRestaurant.countDocuments({ status: 'pending' }),
             FoodDeliveryPartner.countDocuments({ status: 'pending' }),
@@ -8023,13 +8144,16 @@ export async function getSidebarBadges() {
             countPendingCashConfirmations(),
             // Offers saved before approval existed have no status yet: they await review too.
             FoodRestaurantOffer.countDocuments({ approvalStatus: { $in: ['pending', null] } }),
+            // Restaurant-created categories wait for admin approval.
+            FoodCategory.countDocuments({ approvalStatus: 'pending' }),
         ]);
 
         return {
             restaurants: pendingRestaurants,
             deliveryPartners: pendingDeliveryPartners,
             foods: pendingFoods + pendingAddons,
-            foodApprovals: pendingFoods,
+            // The Food Approval page lists food items AND add-ons waiting for review.
+            foodApprovals: pendingFoods + pendingAddons,
             orders: pendingOrders,
             offlinePayments: pendingOfflinePayments,
             restaurantWithdrawals: pendingRestaurantWithdrawals,
@@ -8041,7 +8165,8 @@ export async function getSidebarBadges() {
             safetyReports: pendingSafetyReports,
             emergencyHelp: pendingEmergencyHelp,
             restaurantComplaints: pendingRestaurantComplaints,
-            restaurantOffers: pendingRestaurantOffers
+            restaurantOffers: pendingRestaurantOffers,
+            categories: pendingCategories
         };
     } catch (error) {
         console.error('Error fetching sidebar badges:', error);

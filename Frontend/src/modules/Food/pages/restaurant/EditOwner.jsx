@@ -985,7 +985,7 @@ export default function EditOwner() {
                       }}
                       className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-all ${
                         formData.foodType === "Veg"
-                          ? "bg-green-600 text-white border-green-600 shadow-sm"
+                          ? "bg-[#16A34A] text-white border-[#16A34A] shadow-sm"
                           : "bg-white text-gray-700 border-gray-200 hover:border-green-400"
                       }`}
                     >
@@ -1034,8 +1034,8 @@ export default function EditOwner() {
                       }}
                       className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-all ${
                         formData.foodType === "Mixed"
-                          ? "bg-[#2E7D52] text-white border-[#2E7D52] shadow-sm"
-                          : "bg-white text-gray-700 border-gray-200 hover:border-[#2E7D52]"
+                          ? "bg-amber-500 text-white border-amber-500 shadow-sm"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-amber-400"
                       }`}
                     >
                       <div className="w-2.5 h-2.5 rounded-full bg-amber-400 border border-white" />

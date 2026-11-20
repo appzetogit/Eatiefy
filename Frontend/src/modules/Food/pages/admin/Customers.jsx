@@ -565,6 +565,7 @@ export default function Customers() {
                   <th className="px-3 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Contact Info</th>
                   <th className="px-3 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Total Order</th>
                   <th className="px-3 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Total Amount</th>
+                  <th className="px-3 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Wallet Balance</th>
                   <th className="px-3 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Joining Date</th>
                   <th className="px-3 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Active/Inactive</th>
                   {globalCodBlockedFeatureEnabled && (
@@ -576,13 +577,13 @@ export default function Customers() {
               <tbody className="bg-white divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={globalCodBlockedFeatureEnabled ? 9 : 8} className="px-6 py-8 text-center">
+                    <td colSpan={globalCodBlockedFeatureEnabled ? 10 : 9} className="px-6 py-8 text-center">
                       <div className="text-sm text-slate-500">Loading customers...</div>
                     </td>
                   </tr>
                 ) : filteredCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan={globalCodBlockedFeatureEnabled ? 9 : 8} className="px-6 py-8 text-center">
+                    <td colSpan={globalCodBlockedFeatureEnabled ? 10 : 9} className="px-6 py-8 text-center">
                       <div className="text-sm text-slate-500">No customers found</div>
                     </td>
                   </tr>
@@ -592,8 +593,8 @@ export default function Customers() {
                       <td className="px-3 py-4 whitespace-nowrap">
                         <span className="text-sm font-medium text-slate-700">{(currentPage - 1) * pageSize + index + 1}</span>
                       </td>
-                      <td className="px-3 py-4">
-                        <div className="flex items-center gap-3">
+                      <td className="px-3 py-4 w-[260px] max-w-[260px]">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div 
                             className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden cursor-pointer hover:opacity-80 transition-all border border-slate-200"
                             style={{ background: 'linear-gradient(135deg, #E8EEF7 0%, #C5D3E5 100%)' }}
@@ -610,16 +611,16 @@ export default function Customers() {
                             />
                           </div>
                           <span 
-                            className="text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                            className="min-w-0 flex-1 text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors whitespace-normal [overflow-wrap:anywhere]"
                             onClick={() => handleViewDetails(customer._id || customer.id || customer.sl)}
                           >
                             {customer.name}
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm text-slate-700">{customer.email || "NA"}</span>
+                      <td className="px-3 py-4 max-w-[220px]">
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm text-slate-700 [overflow-wrap:anywhere]">{customer.email || "NA"}</span>
                           <span className="text-xs text-slate-500">{customer.phone}</span>
                         </div>
                       </td>
@@ -628,6 +629,9 @@ export default function Customers() {
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <span className="text-sm font-medium text-slate-900">{"\u20B9"} {(customer.totalOrderAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <span className="text-sm font-semibold text-emerald-700">{"₹"} {(customer.walletBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <span className="text-sm text-slate-700">{formatDateTime(customer.joiningDate)}</span>
@@ -806,7 +810,7 @@ export default function Customers() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <h3 className="text-lg font-bold text-slate-900">{userDetails.name}</h3>
+                      <h3 className="text-lg font-bold text-slate-900 [overflow-wrap:anywhere]">{userDetails.name}</h3>
                       {userDetails.isActive ? (
                         <span className="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />

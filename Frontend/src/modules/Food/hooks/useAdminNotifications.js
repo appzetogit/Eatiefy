@@ -100,6 +100,25 @@ const mapDeliveryJoinRequests = (response) => {
   }));
 };
 
+const mapPendingCategories = (response) => {
+  const payload = response?.data?.data;
+  const rows = payload?.categories || payload?.items || response?.data?.categories || [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.approvalStatus || "").toLowerCase() === "pending")
+    .map((item) => ({
+      id: `approval-category-${String(item?._id || item?.id || "")}`,
+      title: "Category Approval Pending",
+      message: `Category "${item?.name || "Category"}" is waiting for approval.`,
+      type: "approval",
+      category: "category_approval",
+      path: "/admin/food/categories",
+      createdAt: item?.requestedAt || item?.createdAt || item?.updatedAt,
+      timeLabel: toDateLabel(item?.requestedAt || item?.createdAt || item?.updatedAt),
+      metaLabel: joinMeta(item?.name, item?.foodTypeScope),
+    }));
+};
+
 const mapFoodApprovals = (response) => {
   const payload = response?.data?.data;
   const rows =
@@ -239,6 +258,7 @@ export default function useAdminNotifications(options = {}) {
         adminAPI.getPendingRestaurants(),
         adminAPI.getDeliveryPartnerJoinRequests({ page: 1, limit: 50, status: "pending" }),
         adminAPI.getPendingFoodApprovals({ page: 1, limit: 50 }),
+        adminAPI.getCategories({ page: 1, limit: 50, approvalStatus: "pending" }),
         supportAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
         adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
         adminAPI.getExpiredFssaiNotifications(),
@@ -249,6 +269,7 @@ export default function useAdminNotifications(options = {}) {
         restaurantsRes,
         deliveryJoinRes,
         foodApprovalRes,
+        categoryApprovalRes,
         supportRes,
         deliverySupportRes,
         fssaiExpiredRes,
@@ -267,6 +288,7 @@ export default function useAdminNotifications(options = {}) {
         ...mapPendingRestaurants(restaurantRows),
         ...mapDeliveryJoinRequests(deliveryJoinRes),
         ...mapFoodApprovals(foodApprovalRes),
+        ...mapPendingCategories(categoryApprovalRes),
         ...mapUserRestaurantSupport(supportRes),
         ...mapDeliverySupport(deliverySupportRes),
         ...mapExpiredFssai(fssaiExpiredRes),
@@ -306,7 +328,7 @@ export default function useAdminNotifications(options = {}) {
   useEffect(() => {
     const timer = window.setInterval(() => {
       loadNotifications();
-    }, 5 * 60 * 1000);
+    }, 2 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [loadNotifications]);
 

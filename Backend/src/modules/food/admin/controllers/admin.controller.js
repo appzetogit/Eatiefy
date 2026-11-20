@@ -1764,6 +1764,17 @@ export async function getDeliveryWallets(req, res, next) {
     }
 }
 
+export async function updateDeliveryPartnerWallet(req, res, next) {
+    try {
+        const { id } = req.params;
+        const { pocketBalance, cashInHand } = req.body || {};
+        const data = await adminService.updateDeliveryPartnerWallet(id, { pocketBalance, cashInHand }, req.user);
+        res.status(200).json({ success: true, message: 'Delivery wallet updated successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export async function getCashLimitSettlements(req, res, next) {
     try {
         const data = await adminService.getCashLimitSettlements(req.query || {});

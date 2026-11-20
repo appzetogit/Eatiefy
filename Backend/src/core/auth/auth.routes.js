@@ -2,6 +2,7 @@ import express from 'express';
 import {
     requestUserOtpController,
     verifyUserOtpController,
+    validateUserReferralCodeController,
     adminLoginController,
     refreshTokenController,
     requestRestaurantOtpController,
@@ -27,6 +28,7 @@ const router = express.Router();
 // Auth credential routes — AUTH_RATE_LIMIT_* only (api middleware skips these)
 router.post('/user/request-otp', authRateLimiter, requestUserOtpController);
 router.post('/user/verify-otp', authRateLimiter, verifyUserOtpController);
+router.get('/user/validate-referral', authRateLimiter, validateUserReferralCodeController);
 
 router.post('/restaurant/request-otp', authRateLimiter, requestRestaurantOtpController);
 router.post('/restaurant/verify-otp', authRateLimiter, verifyRestaurantOtpController);

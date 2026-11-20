@@ -173,6 +173,7 @@ function dispatchAdminListRefresh(counts, changedKeys) {
 function getBadgeKeyForPath(path = "") {
   const p = String(path || "").toLowerCase()
   if (p.includes("food-approval")) return "foodApprovals"
+  if (p.endsWith("/admin/food/categories")) return "categories"
   if (p.includes("restaurants/joining-request")) return "restaurants"
   if (p.includes("delivery-partners/join-request")) return "deliveryPartners"
   if (p.includes("orders/pending")) return "orders"
@@ -256,6 +257,7 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
 
     // Path-based (sub-menu items & direct links)
     if (p.includes("food-approval")) return badges.foodApprovals ?? 0
+    if (p.endsWith("/admin/food/categories")) return badges.categories ?? 0
     if (p.includes("restaurants/joining-request")) return badges.restaurants ?? 0
     if (p.includes("restaurants/complaints")) return badges.restaurantComplaints ?? 0
     if (p.includes("orders/pending")) return badges.orders ?? 0
@@ -275,6 +277,7 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
 
     // Label-based (expandable parents without paths)
     if (l.includes("food approval")) return badges.foodApprovals ?? 0
+    if (l === "categories" || l === "category") return badges.categories ?? 0
     if (l === "restaurants" || l.includes("new joining request")) return badges.restaurants ?? 0
     if (l.includes("restaurant complaints")) return badges.restaurantComplaints ?? 0
     if (l.includes("support tickets")) return l.includes("delivery") ? (badges.deliverySupportTickets ?? 0) : (badges.userSupportTickets ?? 0)
