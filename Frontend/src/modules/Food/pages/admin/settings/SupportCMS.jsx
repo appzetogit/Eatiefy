@@ -5,6 +5,7 @@ import { Textarea } from "@food/components/ui/textarea";
 import { legalHtmlToPlainText, plainTextToLegalHtml } from "@food/utils/legalContentFormat";
 
 const debugError = (...args) => {};
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
 
 export default function SupportCMS() {
   const [loading, setLoading] = useState(true);
@@ -74,6 +75,19 @@ export default function SupportCMS() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const email = supportData.email.trim();
+    const mobile = supportData.mobile.trim();
+    if (email && !EMAIL_REGEX.test(email)) {
+      toast.error("Please enter a valid support email address");
+      return;
+    }
+    if (mobile) {
+      const digits = mobile.replace(/\D/g, "");
+      if (!/^\+?[\d\s\-()]+$/.test(mobile) || digits.length < 10 || digits.length > 15) {
+        toast.error("Please enter a valid support mobile number (10-15 digits)");
+        return;
+      }
+    }
     try {
       setSaving(true);
       const htmlContent = plainTextToLegalHtml(supportData.content);
@@ -184,10 +198,15 @@ export default function SupportCMS() {
               </label>
               <input
                 id="support-mobile"
-                type="text"
+                type="tel"
+                inputMode="tel"
+                maxLength={20}
                 value={supportData.mobile}
                 onChange={(e) =>
-                  setSupportData((prev) => ({ ...prev, mobile: e.target.value }))
+                  setSupportData((prev) => ({
+                    ...prev,
+                    mobile: e.target.value.replace(/[^\d+\s\-()]/g, ""),
+                  }))
                 }
                 placeholder="+91 00000 00000"
                 className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-slate-700 font-medium"

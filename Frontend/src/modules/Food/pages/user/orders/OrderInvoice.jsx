@@ -230,28 +230,48 @@ export default function OrderInvoice() {
       doc.setFont("Roboto", "normal")
       doc.text(statusLabel, 56, yPos + 18)
 
+      // Right column is x=142..196 (54mm). Wrap text, hard-breaking unbroken
+      // long strings so nothing runs off the page.
+      const RIGHT_COL_W = 52
+      const wrapRight = (text) => {
+        const out = []
+        for (const line of doc.splitTextToSize(String(text || ""), RIGHT_COL_W)) {
+          let rest = line
+          while (rest.length > 1 && doc.getTextWidth(rest) > RIGHT_COL_W) {
+            let n = rest.length - 1
+            while (n > 1 && doc.getTextWidth(rest.slice(0, n)) > RIGHT_COL_W) n--
+            out.push(rest.slice(0, n))
+            rest = rest.slice(n)
+          }
+          out.push(rest)
+        }
+        return out
+      }
+
       // Restaurant & Customer (Right Column)
       doc.setFont("Roboto", "bold")
       doc.text("Restaurant:", 115, yPos)
       doc.setFont("Roboto", "normal")
-      const restLines = doc.splitTextToSize(restaurantName, 75)
+      const restLines = wrapRight(restaurantName)
       doc.text(restLines, 142, yPos)
 
       const afterRestY = yPos + (restLines.length * 5)
       doc.setFont("Roboto", "bold")
       doc.text("Customer:", 115, afterRestY + 2)
       doc.setFont("Roboto", "normal")
-      doc.text(customerName + (customerPhone ? ` (${customerPhone})` : ""), 142, afterRestY + 2)
+      const custLines = wrapRight(customerName + (customerPhone ? ` (${customerPhone})` : ""))
+      doc.text(custLines, 142, afterRestY + 2)
 
+      const deliverY = afterRestY + 2 + custLines.length * 5 + 1
       if (deliveryAddress) {
         doc.setFont("Roboto", "bold")
-        doc.text("Deliver To:", 115, afterRestY + 8)
+        doc.text("Deliver To:", 115, deliverY)
         doc.setFont("Roboto", "normal")
-        const addrLines = doc.splitTextToSize(deliveryAddress, 50)
-        doc.text(addrLines, 142, afterRestY + 8)
-        yPos = Math.max(yPos + 24, afterRestY + 8 + (addrLines.length * 5))
+        const addrLines = wrapRight(deliveryAddress)
+        doc.text(addrLines, 142, deliverY)
+        yPos = Math.max(yPos + 24, deliverY + (addrLines.length * 5))
       } else {
-        yPos = Math.max(yPos + 24, afterRestY + 14)
+        yPos = Math.max(yPos + 24, deliverY + 6)
       }
 
       yPos += 6
@@ -470,7 +490,7 @@ export default function OrderInvoice() {
                     <span>Billed To / Customer:</span>
                   </div>
                   <div className="space-y-1 text-xs text-gray-700 dark:text-gray-300">
-                    <p className="font-semibold text-gray-900 dark:text-white">{customerName}</p>
+                    <p className="font-semibold text-gray-900 dark:text-white break-all">{customerName}</p>
                     {customerPhone && <p>{customerPhone}</p>}
                     {deliveryAddress ? (
                       <div className="flex items-start gap-1 pt-1 text-muted-foreground">

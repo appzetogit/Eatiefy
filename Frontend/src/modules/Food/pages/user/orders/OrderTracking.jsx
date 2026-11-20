@@ -3095,7 +3095,7 @@ export default function OrderTracking() {
 
       {/* Floating Map Utility Bar on Top-Right */}
       {!isDeliveredOrder && orderStatus !== 'cancelled' && (
-        <div className="absolute top-16 right-4 z-30 hidden sm:flex items-center gap-2">
+        <div className="absolute top-20 right-4 z-30 hidden sm:flex items-center gap-2">
           {currentEta && !customerDeliveryOtp && (
             <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg border border-gray-100 dark:border-zinc-800 flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-gray-200">
               <Clock className="w-3.5 h-3.5 text-[#EB590E]" />

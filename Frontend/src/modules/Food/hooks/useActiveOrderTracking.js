@@ -5,6 +5,19 @@ import { orderAPI } from "@food/api";
 
 export const getOrderKey = (order) => order?.id || order?._id || order?.orderId || null;
 
+/** Restaurant name + photo for an order, tolerant of populated / flat payload shapes. */
+export const getOrderRestaurantInfo = (order) => {
+  const rest = order?.restaurantId && typeof order.restaurantId === "object" ? order.restaurantId : null;
+  const names = [order?.restaurantName, rest?.restaurantName, rest?.name, order?.restaurant]
+    .map((v) => (v == null || typeof v === "object" ? "" : String(v).trim()))
+    .filter(Boolean);
+  const name = names.find((n) => n.toLowerCase() !== "restaurant") || names[0] || "Restaurant";
+  const img = [order?.restaurantImage, rest?.profileImage, order?.restaurantProfileImage]
+    .map((v) => (v && typeof v === "object" ? v.url : v))
+    .find((v) => typeof v === "string" && v.trim());
+  return { name, image: img ? img.trim() : "" };
+};
+
 export const getOrderStatus = (order) =>
   String(order?.orderStatus || order?.status || order?.deliveryState?.status || "").toLowerCase();
 

@@ -1504,7 +1504,7 @@ const DeliveryTrackingMap = ({
 
           return (
             <div
-              className="absolute top-12 left-3 z-10 flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-lg max-w-[calc(100%-24px)]"
+              className="absolute top-32 left-3 z-10 flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-lg max-w-[calc(100%-24px)]"
               style={badgeStyle}
               role="status"
             >
@@ -1518,7 +1518,7 @@ const DeliveryTrackingMap = ({
       {/* Floating Distance & ETA Pill */}
       {!isTerminal && distanceText && (
         <div
-          className="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-lg"
+          className="absolute top-20 left-3 z-10 flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-lg"
           style={badgeStyle}
         >
           <span
@@ -1549,7 +1549,7 @@ const DeliveryTrackingMap = ({
               fitPrePickupBounds(map);
             }
           }}
-          className="absolute top-12 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 bg-white/95 dark:bg-zinc-900/95 text-gray-800 dark:text-gray-100 text-[11px] font-bold rounded-full shadow-lg border border-gray-200/80 dark:border-zinc-700/80 backdrop-blur-xs transition-transform active:scale-95 hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer"
+          className="absolute top-20 right-3 z-20 flex items-center gap-1.5 px-3 py-1.5 bg-white/95 dark:bg-zinc-900/95 text-gray-800 dark:text-gray-100 text-[11px] font-bold rounded-full shadow-lg border border-gray-200/80 dark:border-zinc-700/80 backdrop-blur-xs transition-transform active:scale-95 hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer"
           aria-label="Recenter map"
         >
           <svg

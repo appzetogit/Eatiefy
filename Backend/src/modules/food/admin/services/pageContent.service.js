@@ -65,6 +65,18 @@ export const upsertLegalPage = async (key, payload, updatedBy) => {
     const mobile = String(payload?.mobile || '').trim();
     const faq = decodeHtmlEntities(String(payload?.faq || '')).trim();
 
+    if (k.startsWith('support_')) {
+        if (email && !/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(email)) {
+            throw new ValidationError('Please enter a valid support email address');
+        }
+        if (mobile) {
+            const digits = mobile.replace(/\D/g, '');
+            if (!/^\+?[\d\s\-()]+$/.test(mobile) || digits.length < 10 || digits.length > 15) {
+                throw new ValidationError('Please enter a valid support mobile number (10-15 digits)');
+            }
+        }
+    }
+
     const doc = await FoodPageContent.findOneAndUpdate(
         { key: k },
         {
