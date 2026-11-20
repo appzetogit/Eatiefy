@@ -16,7 +16,7 @@ const THEMES = {
   },
   restaurant: {
     header: "bg-gradient-to-br from-[#2E7D52] to-[#1B5E3F]",
-    stay: "bg-green-700 hover:bg-green-800 shadow-green-700/20",
+    stay: "bg-[#2E7D52] hover:bg-[#1B5E3F] shadow-[#2E7D52]/20",
   },
 }
 
@@ -30,7 +30,13 @@ export default function OnboardingExitModal({
   exitLabel = "Exit Anyway",
   theme = "delivery",
 }) {
-  const palette = THEMES[theme] || THEMES.delivery
+  const isRestaurantRoute = typeof window !== "undefined" && (
+    window.location.pathname.startsWith("/food/restaurant") ||
+    window.location.pathname.startsWith("/restaurant") ||
+    document.documentElement.classList.contains("rt-panel")
+  )
+  const resolvedTheme = (theme === "delivery" && isRestaurantRoute) ? "restaurant" : (theme || "delivery")
+  const palette = THEMES[resolvedTheme] || THEMES.restaurant
 
   useEffect(() => {
     if (!open) return undefined

@@ -679,7 +679,7 @@ export default function AllOrdersPage() {
             </p>
 
             {/* Customer Info */}
-            <p className="text-sm text-gray-600 mb-3">
+            <p className="text-sm text-gray-600 mb-3 break-words [overflow-wrap:anywhere]">
               Ordered by {order.customer}
             </p>
 

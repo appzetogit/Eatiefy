@@ -1645,8 +1645,56 @@ export async function updateOrderInstructions(orderId, userId, instructions) {
     throw new ValidationError("Instructions can no longer be updated for this order");
   }
 
-  order.note = String(instructions || "").trim();
+  const trimmed = String(instructions || "").trim();
+  order.note = trimmed;
+  order.restaurantNote = trimmed;
   await order.save();
+
+  try {
+    const io = getIO();
+    if (io) {
+      const payload = {
+        _id: order._id.toString(),
+        id: order._id.toString(),
+        orderMongoId: order._id.toString(),
+        orderId: order._id.toString(),
+        displayOrderId: order.order_id || order.orderId || order._id.toString(),
+        order_id: order.order_id || order.orderId || order._id.toString(),
+        orderStatus: order.orderStatus,
+        status: order.orderStatus,
+        note: trimmed,
+        restaurantNote: trimmed,
+        deliveryInstructions: trimmed,
+        updatedAt: new Date().toISOString(),
+        message: "Order instructions updated",
+      };
+
+      if (order.restaurantId) {
+        io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", payload);
+      }
+      if (order.userId) {
+        io.to(rooms.user(order.userId)).emit("order_status_update", payload);
+      }
+      io.to(rooms.admins()).emit("order_status_update", payload);
+
+      const trackingIds = [
+        order._id?.toString?.(),
+        order.order_id ? String(order.order_id) : '',
+        order.orderId ? String(order.orderId) : '',
+        payload.displayOrderId,
+      ].filter(Boolean);
+      for (const tId of new Set(trackingIds)) {
+        io.to(rooms.tracking(tId)).emit("order_status_update", payload);
+      }
+
+      if (order.dispatch?.deliveryPartnerId) {
+        io.to(rooms.delivery(order.dispatch.deliveryPartnerId)).emit("order_status_update", payload);
+      }
+    }
+  } catch (err) {
+    logger.warn(`updateOrderInstructions socket emit failed: ${err?.message || err}`);
+  }
+
   return order;
 }
 

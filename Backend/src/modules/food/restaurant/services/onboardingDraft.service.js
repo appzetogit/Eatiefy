@@ -209,3 +209,27 @@ export const clearOnboardingDraft = async (phoneLast10) => {
         logger.warn(`[OnboardingDraft] Failed to clear draft for ${phoneLast10}: ${err?.message || err}`);
     }
 };
+
+/** Deletes all stored files and clears the draft uploads completely when onboarding is abandoned/logged out. */
+export const clearOnboardingDraftUploads = async (phoneLast10) => {
+    const emptyPayload = { profileImage: '', menuImages: [], panImage: '', gstImage: '', fssaiImage: '' };
+    if (!phoneLast10) return emptyPayload;
+    try {
+        const doc = await FoodRestaurantOnboardingDraft.findOne({ phoneLast10 }).lean();
+        if (doc?.uploads) {
+            if (doc.uploads.profileImage) await safeDelete(doc.uploads.profileImage);
+            if (doc.uploads.panImage) await safeDelete(doc.uploads.panImage);
+            if (doc.uploads.gstImage) await safeDelete(doc.uploads.gstImage);
+            if (doc.uploads.fssaiImage) await safeDelete(doc.uploads.fssaiImage);
+            if (Array.isArray(doc.uploads.menuImages)) {
+                for (const url of doc.uploads.menuImages) {
+                    await safeDelete(url);
+                }
+            }
+        }
+        await FoodRestaurantOnboardingDraft.deleteOne({ phoneLast10 });
+    } catch (err) {
+        logger.warn(`[OnboardingDraft] Failed to clear all draft uploads for ${phoneLast10}: ${err?.message || err}`);
+    }
+    return emptyPayload;
+};

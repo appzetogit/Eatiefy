@@ -1868,6 +1868,13 @@ export const restaurantAPI = {
       contextModule: "restaurant",
       _retry: true,
     }),
+  clearAllOnboardingUploads: (registrationToken) =>
+    apiClient.delete("/food/restaurant/onboarding/uploads", {
+      headers: { "X-Registration-Token": registrationToken },
+      data: { clearAll: true },
+      contextModule: "restaurant",
+      _retry: true,
+    }),
   /**
    * One-time onboarding payment.
    * A restaurant has no access token before approval, so these calls carry the

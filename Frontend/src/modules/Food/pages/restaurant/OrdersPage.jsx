@@ -511,7 +511,7 @@ export default function OrdersPage() {
                       <p className="text-gray-900 font-bold text-sm md:text-base mb-1 leading-tight">
                         Order #{order.id}
                       </p>
-                      <p className="text-gray-500 text-xs md:text-sm mb-1.5">
+                      <p className="text-gray-500 text-xs md:text-sm mb-1.5 break-words [overflow-wrap:anywhere]">
                         {order.items} Item{order.items !== 1 ? 's' : ''} � {order.customerName}
                       </p>
                       <div className="flex items-center gap-2 flex-wrap">
