@@ -168,6 +168,59 @@ export default function ViewOrderDetectDeliveryDialog({ isOpen, onOpenChange, or
             </div>
           </div>
 
+          {/* Billing Summary */}
+          {(() => {
+            const originalOrder = order?.originalOrder || order || {}
+            const pricing = originalOrder.pricing || {}
+            const subtotal = Number(pricing.subtotal ?? originalOrder.subtotal ?? 0)
+            const packagingFee = Number(pricing.packagingFee ?? originalOrder.packagingFee ?? order.packagingFee ?? 0)
+            const deliveryFee = Number(pricing.deliveryFee ?? originalOrder.deliveryCharge ?? originalOrder.deliveryFee ?? 0)
+            const platformFee = Number(pricing.platformFee ?? originalOrder.platformFee ?? order.platformFee ?? 0)
+            const tax = Number(pricing.tax ?? originalOrder.tax ?? 0)
+            const discount = Number(pricing.discount ?? originalOrder.discount ?? 0)
+            const total = Number(pricing.total ?? originalOrder.totalAmount ?? originalOrder.total ?? 0)
+
+            if (total <= 0 && subtotal <= 0) return null
+
+            return (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Billing Summary</h3>
+                <div className="bg-slate-50 rounded-lg p-4 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Subtotal</span>
+                    <span className="font-medium text-slate-900">₹{subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Packaging Charge</span>
+                    <span className="font-medium text-slate-900">₹{packagingFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Delivery Charge</span>
+                    <span className="font-medium text-slate-900">₹{deliveryFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Platform Charge</span>
+                    <span className="font-medium text-slate-900">₹{platformFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Tax</span>
+                    <span className="font-medium text-slate-900">₹{tax.toFixed(2)}</span>
+                  </div>
+                  {discount > 0 && (
+                    <div className="flex justify-between text-emerald-600 font-medium">
+                      <span>Discount</span>
+                      <span>-₹{discount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-sm text-slate-900">
+                    <span>Grand Total</span>
+                    <span>₹{total.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Order Date & Time */}
           <div className="mt-6 pt-6 border-t border-slate-200">
             <div className="flex items-center justify-between text-sm">

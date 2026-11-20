@@ -89,9 +89,26 @@ const buildInvoiceModel = (order) => {
     return sum + quantity * unitPrice
   }, 0)
 
-  const deliveryFee = toNumber(originalOrder.pricing?.deliveryFee ?? originalOrder.deliveryCharge ?? originalOrder.deliveryFee)
-  const taxAmount = toNumber(originalOrder.pricing?.tax ?? originalOrder.taxAmount ?? originalOrder.tax)
-  const discountAmount = toNumber(originalOrder.pricing?.discount ?? originalOrder.discountAmount ?? originalOrder.couponDiscount)
+  const pricing = originalOrder.pricing || {}
+  const packagingFee = toNumber(
+    pricing.packagingFee ??
+    originalOrder.packagingCharge ??
+    originalOrder.packagingFee ??
+    order.packagingCharge ??
+    order.packagingFee ??
+    0
+  )
+  const platformFee = toNumber(
+    pricing.platformFee ??
+    originalOrder.platformFee ??
+    originalOrder.platformCharge ??
+    order.platformFee ??
+    order.platformCharge ??
+    0
+  )
+  const deliveryFee = toNumber(pricing.deliveryFee ?? originalOrder.deliveryCharge ?? originalOrder.deliveryFee)
+  const taxAmount = toNumber(pricing.tax ?? originalOrder.taxAmount ?? originalOrder.tax)
+  const discountAmount = toNumber(pricing.discount ?? originalOrder.discountAmount ?? originalOrder.couponDiscount)
   const totalAmount = getOrderAmount(order)
   const createdAt = getOrderCreatedAt(order)
 
@@ -109,6 +126,8 @@ const buildInvoiceModel = (order) => {
     paymentType: originalOrder.payment?.method || originalOrder.paymentType || originalOrder.paymentMethod || "N/A",
     items,
     subtotal,
+    packagingFee,
+    platformFee,
     deliveryFee,
     taxAmount,
     discountAmount,
@@ -334,16 +353,18 @@ export function useGenericTableManagement(data, title, searchFields = []) {
 
       const summaryRows = [
         ["Subtotal", formatMoney(invoice.subtotal || invoice.totalAmount)],
+        ["Packaging Fee", formatMoney(invoice.packagingFee)],
         ["Delivery Fee", formatMoney(invoice.deliveryFee)],
+        ["Platform Fee", formatMoney(invoice.platformFee)],
         ["Tax", formatMoney(invoice.taxAmount)],
-        ["Discount", `- ${formatMoney(invoice.discountAmount)}`],
+        ...(invoice.discountAmount > 0 ? [["Discount", `- ${formatMoney(invoice.discountAmount)}`]] : []),
         ["Grand Total", formatMoney(invoice.totalAmount)],
       ]
 
-      const summaryBoxWidth = 76
+      const summaryBoxWidth = 80
       const summaryBoxX = pageWidth - 14 - summaryBoxWidth
       const summaryBoxY = startY - 4
-      const summaryBoxHeight = 40
+      const summaryBoxHeight = summaryRows.length * 6.5 + 4
 
       doc.setFillColor(248, 250, 252)
       doc.setDrawColor(226, 232, 240)
@@ -354,21 +375,21 @@ export function useGenericTableManagement(data, title, searchFields = []) {
         body: summaryRows,
         theme: "plain",
         styles: {
-          fontSize: 10,
+          fontSize: 9.5,
           textColor: [30, 30, 30],
-          cellPadding: { top: 1.8, right: 0, bottom: 1.8, left: 0 },
+          cellPadding: { top: 1.5, right: 0, bottom: 1.5, left: 0 },
           valign: "middle",
         },
         columnStyles: {
-          0: { cellWidth: 34, fontStyle: "bold", halign: "left" },
-          1: { cellWidth: 34, halign: "right" },
+          0: { cellWidth: 40, fontStyle: "bold", halign: "left" },
+          1: { cellWidth: 36, halign: "right" },
         },
-        margin: { left: summaryBoxX + 4, right: 14 },
-        tableWidth: 68,
+        margin: { left: summaryBoxX + 2, right: 14 },
+        tableWidth: 76,
         didParseCell: (hookData) => {
           if (hookData.row.index === summaryRows.length - 1) {
             hookData.cell.styles.fontStyle = "bold"
-            hookData.cell.styles.fontSize = 11
+            hookData.cell.styles.fontSize = 10.5
           }
         },
       })
