@@ -28,6 +28,7 @@ import { FoodOrder } from '../../orders/models/order.model.js';
 import { FoodRestaurantOutletTimings } from '../models/outletTimings.model.js';
 import { EATIEFY_99_PRICE, buildEatiefy99CandidateFilter, selectEatiefy99Foods } from '../utils/eatiefy99.js';
 import { buildActiveCategoryFoodClause, withActiveCategoryFilter } from '../../shared/inactiveCategories.js';
+import { getRestaurantIdsWithDishes, getRestaurantIdSetWithDishes } from '../../shared/orderableRestaurants.js';
 import { seedOutletTimingsForRestaurant } from './outletTimings.service.js';
 import { logger } from '../../../../utils/logger.js';
 import { fetchDrivingDistancesKmBatch, fetchDrivingDistanceKm } from '../../orders/utils/googleMaps.js';
@@ -1848,12 +1849,7 @@ export const listApprovedRestaurants = async (query = {}) => {
 
     // Restaurants with no orderable dish must never be visible to users.
     // Applied in the query (not post-filtered) so total/pagination stay correct.
-    const listableCategoryClause = await buildActiveCategoryFoodClause();
-    const restaurantIdsWithDishes = await FoodItem.distinct('restaurantId', {
-        isAvailable: true,
-        approvalStatus: 'approved',
-        ...(listableCategoryClause || {}),
-    });
+    const restaurantIdsWithDishes = await getRestaurantIdsWithDishes();
     filter._id = { $in: restaurantIdsWithDishes };
 
     const radiusKm = toFiniteNumber(query.radiusKm) ?? toFiniteNumber(query.maxDistance);
@@ -2258,6 +2254,7 @@ export const listPublicOffers = async (query = {}) => {
         .populate({ path: 'restaurantId', select: 'restaurantName restaurantNameNormalized profileImage estimatedDeliveryTime rating zoneId' })
         .lean();
 
+    const dishesIdSet = await getRestaurantIdSetWithDishes();
     const allOffers = list
         .filter((o) => {
             // Restaurant-selected coupon only belongs in a zone if its restaurant
@@ -2266,6 +2263,7 @@ export const listPublicOffers = async (query = {}) => {
             if (o.restaurantScope !== 'selected') return true;
             const restaurant = o.restaurantId && typeof o.restaurantId === 'object' ? o.restaurantId : null;
             if (!restaurant) return false; // selected scope with missing restaurant: skip
+            if (!dishesIdSet.has(String(restaurant._id))) return false; // restaurant with no dishes: skip
             if (!hasZone) return true;
             return String(restaurant.zoneId || '') === String(zoneIdRaw);
         })

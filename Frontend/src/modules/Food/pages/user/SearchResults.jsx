@@ -356,6 +356,7 @@ export default function SearchResults() {
           // Filter out restaurants with only default/mock data
           const restaurantsWithIds = restaurantsArray
             .filter((restaurant) => {
+              if (restaurant.hasDishes === false || restaurant.totalMenuItems === 0) return false;
               // Only include restaurants with real data (not just defaults)
               // At minimum, restaurant should have a name and either images or menu
               const hasName = restaurant.name && restaurant.name.trim().length > 0

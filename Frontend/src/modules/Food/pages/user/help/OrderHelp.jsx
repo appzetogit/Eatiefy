@@ -333,8 +333,8 @@ export default function OrderHelp() {
   }
 
   return (
-    <AnimatedPage className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-gray-50/30 dark:from-[#141414] dark:via-[#141414] dark:to-[#141414] p-4 md:p-6 lg:p-8">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto space-y-4 md:space-y-5 lg:space-y-6">
+    <AnimatedPage className="min-h-screen bg-gradient-to-b from-orange-50/30 via-white to-gray-50/30 dark:from-[#141414] dark:via-[#141414] dark:to-[#141414] p-4 md:p-6 lg:p-8 pb-32 md:pb-28">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto space-y-4 md:space-y-5 lg:space-y-6 pb-12">
         {/* Header */}
         <ScrollReveal>
           <div className="flex items-center gap-3 md:gap-4 mb-4 md:mb-6">
@@ -580,7 +580,7 @@ export default function OrderHelp() {
 
         {/* Navigation Footer */}
         <ScrollReveal delay={0.25}>
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-2 mb-4">
             <Link to={toFoodUserPath("/user/orders")} className="flex-1">
               <Button variant="outline" className="w-full rounded-xl border-slate-200 dark:border-zinc-800 text-xs sm:text-sm">
                 <ArrowLeft className="h-4 w-4 mr-1.5" />

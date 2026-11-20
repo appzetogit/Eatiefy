@@ -2535,6 +2535,7 @@ export default function Home() {
           // Transform API data to match expected format
           const transformedRestaurants = restaurantsArray
             .filter((restaurant) => {
+              if (restaurant.hasDishes === false || restaurant.totalMenuItems === 0) return false;
               const name = (restaurant.restaurantName || restaurant.name || "").toLowerCase()
               return true
             })

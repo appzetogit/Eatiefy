@@ -1,5 +1,6 @@
 import { FoodGourmetRestaurant } from '../models/gourmetRestaurant.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import { getRestaurantIdSetWithDishes } from '../../shared/orderableRestaurants.js';
 
 export const getPublicGourmetRestaurants = async (zoneId) => {
     const docs = await FoodGourmetRestaurant.find({ isActive: true })
@@ -7,7 +8,15 @@ export const getPublicGourmetRestaurants = async (zoneId) => {
         .lean();
 
     const restaurantIds = docs.map((d) => d.restaurantId);
-    const restaurantFilter = { _id: { $in: restaurantIds } };
+    // Restaurants with no orderable dish must never be visible to users.
+    const eligibleIdSet = await getRestaurantIdSetWithDishes({ restaurantId: { $in: restaurantIds } });
+    const eligibleRestaurantIds = restaurantIds.filter((id) => eligibleIdSet.has(String(id)));
+
+    if (!eligibleRestaurantIds.length) {
+        return [];
+    }
+
+    const restaurantFilter = { _id: { $in: eligibleRestaurantIds }, status: 'approved' };
     if (zoneId && String(zoneId).trim()) {
         restaurantFilter.zoneId = String(zoneId).trim();
     }
@@ -20,10 +29,10 @@ export const getPublicGourmetRestaurants = async (zoneId) => {
 
     return docs.map((item) => {
         const r = restaurantMap.get(item.restaurantId.toString());
-        if (!r && zoneId && String(zoneId).trim()) return null;
+        if (!r) return null;
         return {
             ...item,
-            restaurant: r ? {
+            restaurant: {
                 _id: r._id,
                 name: r.restaurantName,
                 restaurantName: r.restaurantName,
@@ -37,7 +46,7 @@ export const getPublicGourmetRestaurants = async (zoneId) => {
                 location: r.location,
                 estimatedDeliveryTime: r.estimatedDeliveryTime,
                 zoneId: r.zoneId
-            } : null
+            }
         };
     }).filter(Boolean);
 };
