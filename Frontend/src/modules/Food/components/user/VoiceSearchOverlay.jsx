@@ -26,20 +26,27 @@ const VoiceSearchOverlay = ({
     clearError,
   } = voiceSearch;
 
+  // NOTE: depend on a boolean, not the `externalVoiceSearch` object. The parent's
+  // useVoiceSearch() returns a fresh object every render, and onstart sets state,
+  // so depending on the object re-ran this effect right after recognition started
+  // and its cleanup (stopListening) killed the session — the overlay stayed on
+  // "Starting..." and nothing was ever searched.
+  const hasExternalVoiceSearch = Boolean(externalVoiceSearch);
+
   useEffect(() => {
     if (!isOpen) {
       stopListening();
       return undefined;
     }
 
-    if (autoStart && !externalVoiceSearch) {
+    if (autoStart && !hasExternalVoiceSearch) {
       void startListening();
     }
 
     return () => {
       stopListening();
     };
-  }, [isOpen, autoStart, externalVoiceSearch, startListening, stopListening]);
+  }, [isOpen, autoStart, hasExternalVoiceSearch, startListening, stopListening]);
 
   const handleRetry = () => {
     clearError();

@@ -5,6 +5,7 @@ import { FoodUserWallet } from '../models/userWallet.model.js';
 import { FoodReferralSettings } from '../../admin/models/referralSettings.model.js';
 import { FoodReferralLog } from '../../admin/models/referralLog.model.js';
 import { creditReferralReward } from './userWallet.service.js';
+import { logger } from '../../../../utils/logger.js';
 
 /**
  * Commission-mode user referral payout: referrer earns `referralCommissionPercent`
@@ -36,7 +37,7 @@ export const payUserReferralCommissionOnDelivery = async (order) => {
         // none, or it was already claimed by a concurrent/earlier delivery.
         const log = await FoodReferralLog.findOneAndUpdate(
             { refereeId: userId, role: 'USER', status: 'pending' },
-            { $set: { rewardAmount, creditedOrderId: order._id } },
+            { $set: { rewardAmount, creditedOrderId: order._id, status: 'credited' } },
             { new: true }
         );
         if (!log) return;
@@ -52,19 +53,29 @@ export const payUserReferralCommissionOnDelivery = async (order) => {
             return;
         }
 
-        await FoodReferralLog.updateOne({ _id: log._id }, { $set: { status: 'credited' } });
-
-        await Promise.all([
-            FoodUser.updateOne({ _id: log.referrerId }, { $inc: { referralCount: 1 } }),
-            creditReferralReward(log.referrerId, rewardAmount, {
+        try {
+            // Wallet first (idempotent per referral), so a failure can never leave a
+            // "credited" log with no money behind it.
+            await creditReferralReward(log.referrerId, rewardAmount, {
                 role: 'USER',
                 refereeId: String(userId),
                 referralLogId: String(log._id),
-                orderId: String(order._id)
-            })
-        ]);
+                orderId: String(order._id),
+                idempotencyKey: `referral-reward:${log._id}`
+            });
+            await FoodUser.updateOne({ _id: log.referrerId }, { $inc: { referralCount: 1 } });
+        } catch (creditError) {
+            // Put the referral back to pending so the next delivery can retry it.
+            await FoodReferralLog.updateOne(
+                { _id: log._id, status: 'credited' },
+                { $set: { status: 'pending', creditedOrderId: null } }
+            );
+            throw creditError;
+        }
     } catch (e) {
-        // Never fail an order-delivery transition due to a referral error.
+        // Never fail an order-delivery transition due to a referral error, but do
+        // record it: this used to be swallowed silently, hiding why rewards vanished.
+        logger.error(`User referral payout failed for order ${String(order?._id || '')}:`, e);
     }
 };
 

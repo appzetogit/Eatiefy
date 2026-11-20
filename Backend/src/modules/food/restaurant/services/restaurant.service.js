@@ -1842,6 +1842,16 @@ export const listApprovedRestaurants = async (query = {}) => {
         };
     }
 
+    // Restaurants with no orderable dish must never be visible to users.
+    // Applied in the query (not post-filtered) so total/pagination stay correct.
+    const listableCategoryClause = await buildActiveCategoryFoodClause();
+    const restaurantIdsWithDishes = await FoodItem.distinct('restaurantId', {
+        isAvailable: true,
+        approvalStatus: 'approved',
+        ...(listableCategoryClause || {}),
+    });
+    filter._id = { $in: restaurantIdsWithDishes };
+
     const radiusKm = toFiniteNumber(query.radiusKm) ?? toFiniteNumber(query.maxDistance);
     const sortBy = parseSortBy(query.sortBy);
 

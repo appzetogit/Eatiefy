@@ -9,6 +9,7 @@ import {
 import { serializeFoodVariants } from '../../admin/services/foodVariant.service.js';
 import {
   buildOrderItemsFromFoodCart,
+  loadAddonItemDocs,
 } from '../../user/services/foodCart.service.js';
 
 /**
@@ -35,6 +36,11 @@ export async function enforceMinimumFoodItemPrices(items = [], restaurantId = nu
         )
         .lean()
     : [];
+  // Add-ons are priced from their own collection; shape them like menu items.
+  const missingIds = validIds.filter((id) => !foodDocs.some((d) => String(d._id) === String(id)));
+  if (missingIds.length) {
+    foodDocs.push(...(await loadAddonItemDocs(missingIds)));
+  }
   const foodDocMap = new Map(foodDocs.map((doc) => [String(doc._id), doc]));
 
   const restaurantIds = [

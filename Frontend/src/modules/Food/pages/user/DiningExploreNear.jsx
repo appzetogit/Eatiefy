@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { MapPin, ChevronDown, Search, Mic, Wallet, SlidersHorizontal, Star, Compass, X, ArrowDownUp, Timer, IndianRupee, UtensilsCrossed, BadgePercent, ShieldCheck, Clock, Bookmark, ArrowLeft } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { Input } from "@food/components/ui/input"
+import { useVoiceSearch } from "@food/hooks/useVoiceSearch"
 import { Card, CardContent } from "@food/components/ui/card"
 import AnimatedPage from "@food/components/user/AnimatedPage"
 import { useSearchOverlay, useLocationSelector } from "@food/components/user/UserLayout"
@@ -104,6 +105,10 @@ export default function DiningExploreNear() {
   const navigate = useNavigate()
   const goBack = useAppBackNavigation()
   const [heroSearch, setHeroSearch] = useState("")
+  const { isListening: isVoiceListening, startListening, stopListening } = useVoiceSearch((transcript) => {
+    setHeroSearch(transcript)
+    navigate(`/user/search?q=${encodeURIComponent(transcript)}`)
+  })
   const [activeFilters, setActiveFilters] = useState(new Set())
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [activeFilterTab, setActiveFilterTab] = useState('sort')
@@ -261,11 +266,10 @@ export default function DiningExploreNear() {
                 variant="ghost"
                 size="icon"
                 className="absolute right-2 sm:right-3 md:right-4 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 rounded-full hover:bg-gray-100"
-                onClick={() => {
-                  // Voice search functionality
-                }}
+                aria-label={isVoiceListening ? "Stop voice search" : "Search by voice"}
+                onClick={() => (isVoiceListening ? stopListening() : startListening())}
               >
-                <Mic className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-gray-500" />
+                <Mic className={`h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 ${isVoiceListening ? "text-red-500 animate-pulse" : "text-gray-500"}`} />
               </Button>
             </div>
           </div>

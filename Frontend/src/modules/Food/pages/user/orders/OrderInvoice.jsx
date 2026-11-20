@@ -638,7 +638,7 @@ export default function OrderInvoice() {
 
         {/* Action Links */}
         <ScrollReveal delay={0.1}>
-          <div className="flex gap-3 no-print">
+          <div className="flex gap-3 no-print pb-[calc(6rem+env(safe-area-inset-bottom))]">
             <Link to={toFoodUserPath(`/user/orders/${displayOrderId}`)} className="flex-1">
               <Button variant="outline" className="w-full rounded-xl border-slate-200 dark:border-zinc-800 text-xs sm:text-sm h-10">
                 Track Order

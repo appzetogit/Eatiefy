@@ -190,13 +190,28 @@ export default function Help() {
   const [expandedCategory, setExpandedCategory] = useState(null)
   const [expandedQuestion, setExpandedQuestion] = useState(null)
 
-  const filteredCategories = helpCategories.filter(category =>
-    category.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    category.topics.some(topic =>
-      topic.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      topic.answer.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  )
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const isSearching = normalizedQuery.length > 0
+
+  // While searching, keep only matching topics per category (a category whose
+  // title/description matches keeps all its topics) and auto-expand results.
+  const filteredCategories = isSearching
+    ? helpCategories
+        .map((category) => {
+          const categoryMatches =
+            category.title.toLowerCase().includes(normalizedQuery) ||
+            category.description.toLowerCase().includes(normalizedQuery)
+          const topics = categoryMatches
+            ? category.topics
+            : category.topics.filter(
+                (topic) =>
+                  topic.question.toLowerCase().includes(normalizedQuery) ||
+                  topic.answer.toLowerCase().includes(normalizedQuery)
+              )
+          return { ...category, topics }
+        })
+        .filter((category) => category.topics.length > 0)
+    : helpCategories
 
   const toggleCategory = (categoryId) => {
     setExpandedCategory(expandedCategory === categoryId ? null : categoryId)
@@ -227,10 +242,10 @@ export default function Help() {
                 <Search className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 md:h-6 md:w-6 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Search for help topics, questions, or keywords..."
+                  placeholder="Search help topics or questions"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 md:pl-12 h-12 md:h-14 text-base md:text-lg"
+                  className="pl-10 md:pl-12 h-12 md:h-14 text-sm sm:text-base md:text-lg placeholder:text-sm sm:placeholder:text-base md:placeholder:text-lg"
                 />
               </div>
             </CardContent>
@@ -266,17 +281,19 @@ export default function Help() {
                 </div>
               </CardContent>
             </Link>
-            <CardContent className="p-4 md:p-5 lg:p-6">
-              <div className="flex items-center gap-3 md:gap-4">
-                <div className="p-2 md:p-3 bg-orange-100 rounded-lg">
-                  <MessageCircle className="h-5 w-5 md:h-6 md:w-6 text-[#1F6B45]" />
+            <Link to={toFoodUserPath("/user/profile/support")}>
+              <CardContent className="p-4 md:p-5 lg:p-6">
+                <div className="flex items-center gap-3 md:gap-4">
+                  <div className="p-2 md:p-3 bg-orange-100 rounded-lg">
+                    <MessageCircle className="h-5 w-5 md:h-6 md:w-6 text-[#1F6B45]" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm md:text-base font-semibold">Contact Support</h3>
+                    <p className="text-xs md:text-sm text-muted-foreground">Get help from our team</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm md:text-base font-semibold">Contact Support</h3>
-                  <p className="text-xs md:text-sm text-muted-foreground">Get help from our team</p>
-                </div>
-              </div>
-            </CardContent>
+              </CardContent>
+            </Link>
           </div>
         </ScrollReveal>
 
@@ -303,7 +320,7 @@ export default function Help() {
             ) : (
               filteredCategories.map((category, categoryIndex) => {
                 const Icon = category.icon
-                const isExpanded = expandedCategory === category.id
+                const isExpanded = isSearching || expandedCategory === category.id
 
                 return (
                   <Card key={category.id} className="shadow-lg">
@@ -341,8 +358,9 @@ export default function Help() {
                             >
                               <button
                                 onClick={() => toggleQuestion(questionIndex)}
+                                className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left"
                               >
-                                <span className="font-semibold pr-4">{topic.question}</span>
+                                <span className="font-semibold">{topic.question}</span>
                                 {isQuestionExpanded ? (
                                   <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                 ) : (
@@ -350,7 +368,7 @@ export default function Help() {
                                 )}
                               </button>
                               {isQuestionExpanded && (
-                                <div className="p-4 text-muted-foreground border-t bg-muted/30">
+                                <div className="px-4 py-3.5 text-sm text-muted-foreground border-t bg-muted/30">
                                   <p>{topic.answer}</p>
                                 </div>
                               )}

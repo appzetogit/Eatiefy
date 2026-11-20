@@ -1294,7 +1294,7 @@ export default function OrderTracking() {
     try {
       const payload = {
         restaurantRating,
-        deliveryPartnerRating: deliveryRating,
+        ...(isTakeawayOrder ? {} : { deliveryPartnerRating: deliveryRating }),
         restaurantComment: [
           ratingComment.trim(),
           selectedCompliments.length > 0 ? `Compliments: ${selectedCompliments.join(", ")}` : ""
@@ -2752,7 +2752,7 @@ export default function OrderTracking() {
             ) : (
               <div className="space-y-4">
                 {/* 2 Side-by-Side Cards (Food Quality & Delivery Experience) */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid gap-3 ${isTakeawayOrder ? "grid-cols-1" : "grid-cols-2"}`}>
                   {/* Food Quality Card */}
                   <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-100 dark:border-zinc-800 shadow-xs flex flex-col items-center text-center">
                     <div className="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-950/40 text-orange-500 flex items-center justify-center mb-2">
@@ -2786,7 +2786,8 @@ export default function OrderTracking() {
                     </span>
                   </div>
 
-                  {/* Delivery Experience Card */}
+                  {/* Delivery Experience Card (not applicable to takeaway orders) */}
+                  {!isTakeawayOrder && (
                   <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-100 dark:border-zinc-800 shadow-xs flex flex-col items-center text-center">
                     <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center mb-2">
                       <Bike className="w-5 h-5" />
@@ -2818,6 +2819,7 @@ export default function OrderTracking() {
                       {deliveryRating === 5 ? "⚡ Super Fast" : deliveryRating === 4 ? "😊 Polite & On-time" : deliveryRating === 3 ? "👍 Good" : deliveryRating === 2 ? "😐 Average" : "👎 Poor"}
                     </span>
                   </div>
+                  )}
                 </div>
 
                 {/* What did you like? Compliment tags */}
@@ -2828,11 +2830,11 @@ export default function OrderTracking() {
                   <div className="flex flex-wrap gap-2">
                     {[
                       { label: "Hot & Fresh", icon: "🔥" },
-                      { label: "Fast Delivery", icon: "⚡" },
+                      { label: "Fast Delivery", icon: "⚡", deliveryOnly: true },
                       { label: "Great Packaging", icon: "📦" },
                       { label: "Tasty Food", icon: "😋" },
-                      { label: "Polite Rider", icon: "😊" }
-                    ].map((chip) => {
+                      { label: "Polite Rider", icon: "😊", deliveryOnly: true }
+                    ].filter((chip) => !(isTakeawayOrder && chip.deliveryOnly)).map((chip) => {
                       const chipKey = `${chip.icon} ${chip.label}`;
                       const isSelected = selectedCompliments.includes(chipKey);
                       return (
@@ -3235,7 +3237,7 @@ export default function OrderTracking() {
                   <button
                     type="button"
                     onClick={handleCallRider}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-[#14512F] hover:bg-[#0F3D23] text-white rounded-2xl font-bold text-xs shadow-md shadow-[#14512F]/30 active:scale-95 transition-all cursor-pointer"
                   >
                     <Phone className="w-3.5 h-3.5" />
                     <span>Call</span>
@@ -3664,7 +3666,7 @@ export default function OrderTracking() {
                   <button
                     type="button"
                     onClick={handleCallRider}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-[#14512F] hover:bg-[#0F3D23] text-white rounded-2xl font-bold text-xs shadow-md shadow-[#14512F]/30 active:scale-95 transition-all cursor-pointer"
                   >
                     <Phone className="w-3.5 h-3.5" />
                     <span>Call</span>
