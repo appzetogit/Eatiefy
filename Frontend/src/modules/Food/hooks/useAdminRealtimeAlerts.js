@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react"
-import io from "socket.io-client"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@food/api/config"
+import { createAppSocket } from "@food/api/socketClient"
 
 // Sidebar badge key -> what to tell the admin when its pending count goes up.
 const BADGE_ALERTS = {
@@ -27,9 +26,10 @@ const BADGE_ALERTS = {
 /**
  * Live admin alerts over Socket.IO. Mount once in the admin shell.
  *  - admin_live_notification: every notification the backend sends admins.
- *  - admin_badges_update: pending counts changed (any cause) -> refresh the
- *    sidebar badges, the bell and the open list page immediately, and toast
- *    when a count went up and no notification already announced it.
+ *  - admin_new_order: realtime new order alerts.
+ *  - order_status_update: order transitions (accepted, cooking, delivered, etc.).
+ *  - admin_badges_update: pending counts changed -> refresh the sidebar badges,
+ *    the bell, and the active list page immediately without requiring a browser refresh.
  */
 export default function useAdminRealtimeAlerts({ onAlert, onNavigate } = {}) {
   const onAlertRef = useRef(onAlert)
@@ -38,19 +38,11 @@ export default function useAdminRealtimeAlerts({ onAlert, onNavigate } = {}) {
   onNavigateRef.current = onNavigate
 
   useEffect(() => {
-    const token = typeof localStorage !== "undefined" ? localStorage.getItem("admin_accessToken") : null
-    const configured = String(API_BASE_URL || "").replace(/\/api(\/v\d+)?\/?$/, "")
-    // Same-origin deployments leave the base URL empty.
-    const backendUrl = configured || (typeof window !== "undefined" ? window.location.origin : "")
-    if (!token || !backendUrl.startsWith("http")) return undefined
-
-    const socket = io(backendUrl, {
-      auth: { token },
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 15000,
+    const socket = createAppSocket({
+      role: "admin",
+      label: "AdminRealtimeAlerts",
     })
+    if (!socket) return undefined
 
     let lastCounts = null
     let lastLiveAt = 0
@@ -69,17 +61,59 @@ export default function useAdminRealtimeAlerts({ onAlert, onNavigate } = {}) {
       onAlertRef.current?.(payload)
     }
 
+    const handleNewOrder = (payload = {}) => {
+      lastLiveAt = Date.now()
+      const orderId = payload?.orderId || payload?.displayOrderId || payload?._id || "New"
+      const title = "New order received"
+      const body = payload?.restaurantName
+        ? `${payload.restaurantName} • Order #${orderId}`
+        : `Order #${orderId} has been placed`
+      const link = "/admin/food/orders/pending"
+
+      toast.info(title, {
+        id: `admin-order-${orderId}-${lastLiveAt}`,
+        description: body,
+        duration: 12000,
+        action: { label: "View Orders", onClick: () => goTo(link) },
+      })
+
+      window.dispatchEvent(new CustomEvent("refresh-sidebar-badges"))
+      window.dispatchEvent(new CustomEvent("admin-list-refresh", { detail: { changedKeys: ["orders"] } }))
+      onAlertRef.current?.({
+        id: `order-${orderId}-${lastLiveAt}`,
+        title,
+        body,
+        link,
+        type: "order",
+        createdAt: new Date().toISOString(),
+      })
+    }
+
+    const handleOrderStatusUpdate = (payload = {}) => {
+      window.dispatchEvent(new CustomEvent("refresh-sidebar-badges"))
+      window.dispatchEvent(new CustomEvent("admin-list-refresh", { detail: { changedKeys: ["orders"] } }))
+    }
+
     const handleBadges = ({ counts = {}, initial } = {}) => {
       const prev = lastCounts
       lastCounts = counts
-      // Pull the authoritative numbers + refresh the bell/list the same way the
-      // existing sidebar logic does for its own polling.
       window.dispatchEvent(new CustomEvent("refresh-sidebar-badges"))
+
       if (!prev) return
-      const increased = Object.keys(BADGE_ALERTS).filter((key) => Number(counts[key] || 0) > Number(prev[key] || 0))
+      const changedKeys = Object.keys({ ...prev, ...counts }).filter(
+        (key) => Number(prev[key] || 0) !== Number(counts[key] || 0)
+      )
+      if (changedKeys.length > 0) {
+        window.dispatchEvent(new CustomEvent("admin-list-refresh", { detail: { counts, changedKeys } }))
+      }
+
+      const increased = Object.keys(BADGE_ALERTS).filter(
+        (key) => Number(counts[key] || 0) > Number(prev[key] || 0)
+      )
       if (increased.length === 0) return
-      onAlertRef.current?.({ source: "badges", keys: increased })
-      // A real notification already announced this a moment ago.
+      onAlertRef.current?.({ source: "badges", keys: increased, counts })
+
+      // Real notification already announced this a moment ago.
       if (Date.now() - lastLiveAt < 6000 || initial) return
       increased.forEach((key) => {
         const [label, link] = BADGE_ALERTS[key]
@@ -95,10 +129,17 @@ export default function useAdminRealtimeAlerts({ onAlert, onNavigate } = {}) {
 
     socket.on("admin_live_notification", handleLive)
     socket.on("admin_new_registration", handleLive)
+    socket.on("admin_new_order", handleNewOrder)
+    socket.on("new_order", handleNewOrder)
+    socket.on("order_status_update", handleOrderStatusUpdate)
     socket.on("admin_badges_update", handleBadges)
+
     return () => {
       socket.off("admin_live_notification", handleLive)
       socket.off("admin_new_registration", handleLive)
+      socket.off("admin_new_order", handleNewOrder)
+      socket.off("new_order", handleNewOrder)
+      socket.off("order_status_update", handleOrderStatusUpdate)
       socket.off("admin_badges_update", handleBadges)
       socket.disconnect()
     }

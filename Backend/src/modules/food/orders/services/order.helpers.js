@@ -768,6 +768,15 @@ export async function notifyRestaurantNewOrder(orderDoc) {
         `[RestaurantOrders] Emitting new_order to ${rooms.restaurant(orderDoc.restaurantId)} for order ${orderMongoId}`,
       );
       io.to(rooms.restaurant(orderDoc.restaurantId)).emit("new_order", payload);
+      const adminOrderPayload = {
+        ...payload,
+        orderId: displayOrderId,
+        orderMongoId,
+        orderStatus: orderDoc.orderStatus || "pending",
+        restaurantName: orderDoc.restaurantName || payload?.restaurantName || "",
+      };
+      io.to(rooms.admins()).emit("admin_new_order", adminOrderPayload);
+      io.to(rooms.admins()).emit("new_order", adminOrderPayload);
     }
 
     await notifyOwnersSafely(

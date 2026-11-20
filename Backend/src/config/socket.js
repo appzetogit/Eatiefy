@@ -3,6 +3,7 @@ import { config } from './env.js';
 import { logger } from '../utils/logger.js';
 import { verifyAccessToken } from '../core/auth/token.util.js';
 import { getFirebaseDB } from './firebase.js';
+import { isAllowedOrigin } from './cors.js';
 
 let io = null;
 
@@ -45,7 +46,15 @@ const roomNames = {
 export const initSocket = async (server) => {
     io = new Server(server, {
         cors: {
-            origin: config.socketCorsOrigin,
+            origin: (origin, callback) => {
+                if (isAllowedOrigin(origin)) {
+                    callback(null, true);
+                    return;
+                }
+                logger.warn(`[Socket.IO CORS] Blocked origin: ${origin}`);
+                callback(new Error('CORS origin not allowed'));
+            },
+            credentials: true,
             methods: ['GET', 'POST']
         }
     });
@@ -141,6 +150,14 @@ export const initSocket = async (server) => {
                 });
             }
         }
+
+        // Explicit join for admin orders channel
+        socket.on('join-admin-orders', () => {
+            if (socket.user?.role === 'ADMIN' || socket.user?.role === 'SUB_ADMIN') {
+                socket.join(roomNames.admins());
+                socket.emit('admin-orders-room-joined', { room: roomNames.admins() });
+            }
+        });
 
         // Explicit join (used by existing restaurant client hook).
         socket.on('join-restaurant', (restaurantId) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@food/components/ui/card"
 import {
@@ -70,38 +70,58 @@ export default function AdminHome() {
   }, [])
 
   // Fetch dashboard stats from backend when filters change
-  useEffect(() => {
-    const fetchDashboardStats = async () => {
-      try {
-        setIsLoading(true)
-        const params = {
-          period: selectedPeriod,
-          ...(selectedZone !== "all" ? { zoneId: selectedZone } : {}),
-        }
-        const response = await adminAPI.getDashboardStats(params)
-        if (response.data?.success && response.data?.data) {
-          setDashboardData(response.data.data)
-          setLoadError(null)
-          debugLog("Dashboard stats fetched:", response.data.data)
-        } else {
-          setLoadError("The server returned an unexpected response.")
-          debugError("Invalid dashboard response format:", response.data)
-        }
-      } catch (error) {
-        const status = Number(error?.response?.status || 0)
+  const fetchDashboardStats = useCallback(async (silent = false) => {
+    try {
+      if (!silent) setIsLoading(true)
+      const params = {
+        period: selectedPeriod,
+        ...(selectedZone !== "all" ? { zoneId: selectedZone } : {}),
+      }
+      const response = await adminAPI.getDashboardStats(params)
+      if (response.data?.success && response.data?.data) {
+        setDashboardData(response.data.data)
+        setLoadError(null)
+        debugLog("Dashboard stats fetched:", response.data.data)
+      } else {
+        if (!silent) setLoadError("The server returned an unexpected response.")
+        debugError("Invalid dashboard response format:", response.data)
+      }
+    } catch (error) {
+      const status = Number(error?.response?.status || 0)
+      if (!silent) {
         setLoadError(
           status === 429
             ? "Too many requests. Please wait a moment and retry."
             : error?.response?.data?.message || "Could not load dashboard figures.",
         )
-        debugError("Error fetching dashboard stats:", error)
-      } finally {
-        setIsLoading(false)
       }
+      debugError("Error fetching dashboard stats:", error)
+    } finally {
+      if (!silent) setIsLoading(false)
     }
+  }, [selectedZone, selectedPeriod])
 
-    fetchDashboardStats()
-  }, [selectedZone, selectedPeriod, reloadKey])
+  useEffect(() => {
+    fetchDashboardStats(false)
+  }, [fetchDashboardStats, reloadKey])
+
+  // Live auto-refresh when orders, approvals or registrations occur
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchDashboardStats(true)
+    }
+    window.addEventListener("refresh-sidebar-badges", handleRefresh)
+    window.addEventListener("admin-list-refresh", handleRefresh)
+    const interval = setInterval(() => {
+      fetchDashboardStats(true)
+    }, 30000)
+
+    return () => {
+      window.removeEventListener("refresh-sidebar-badges", handleRefresh)
+      window.removeEventListener("admin-list-refresh", handleRefresh)
+      clearInterval(interval)
+    }
+  }, [fetchDashboardStats])
 
   // Get order stats from real data
   const getOrderStats = () => {

@@ -1720,6 +1720,8 @@ async function saveTokenByModule(moduleName, token, platform = "web") {
     await deliveryAPI.saveFcmToken(normalizedToken, platform, { voipToken, voipSkipReason });
   } else if (moduleName === "user") {
     await userAPI.saveFcmToken(normalizedToken, { platform });
+  } else if (moduleName === "admin") {
+    await adminAPI.saveFcmToken(normalizedToken, platform);
   } else {
     return;
   }
@@ -1925,6 +1927,7 @@ export function initPushNotificationClient() {
   attachServiceWorkerMessageListener();
 
   if (moduleName === "admin") {
+    setupFcmTokenRefreshOnVisibility(moduleName);
     return;
   }
 
@@ -2072,7 +2075,6 @@ const nativeRegistrationInFlight = new Set();
 
 export async function registerWebPushForCurrentModule(pathname = window.location.pathname) {
   const moduleName = normalizeModuleFromPath(pathname);
-  if (moduleName === "admin") return;
 
   initPushNotificationClient();
 

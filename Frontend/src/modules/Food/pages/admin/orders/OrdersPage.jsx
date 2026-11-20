@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useSearchParams } from "react-router-dom"
-import io from "socket.io-client"
+import { createAppSocket } from "@food/api/socketClient"
 import { FileText, Calendar, Package } from "lucide-react"
 import { adminAPI } from "@food/api"
-import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
 import OrdersTopbar from "@food/components/admin/orders/OrdersTopbar"
 import OrdersTable from "@food/components/admin/orders/OrdersTable"
@@ -17,6 +16,7 @@ import { OrdersDashboardSkeleton, TableSkeleton } from "@food/components/ui/load
 import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
 const alertSound = "/assets/media/alert.mp3"
 const originalSound = "/assets/media/original.mp3"
 const debugLog = (...args) => {}
@@ -765,32 +765,22 @@ export default function OrdersPage({ statusKey = "all" }) {
   }, [statusKey])
 
   useEffect(() => {
-    if (statusKey !== "all") return undefined
-
     const pollId = setInterval(() => {
       fetchOrders({ silent: true, withRingCheck: true })
-    }, 8000)
+    }, 10000)
 
     return () => clearInterval(pollId)
-  }, [statusKey, fetchOrders])
+  }, [fetchOrders])
+
+  // Auto-refresh orders list when sidebar badge count changes
+  useAdminBadgeListRefresh("orders", () => fetchOrders({ silent: true, withRingCheck: false }), [fetchOrders])
 
   useEffect(() => {
-    if (statusKey !== "all") return undefined
-
-    const backendUrl = API_BASE_URL.replace(/\/api\/?$/, "")
-    // Backend disconnected - do not open Socket.IO (new backend in progress)
-    if (!API_BASE_URL || !backendUrl || !backendUrl.startsWith("http")) {
-      return undefined
-    }
-
-    const socket = io(backendUrl, {
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
+    const socket = createAppSocket({
+      role: "admin",
+      label: "AdminOrdersPage",
     })
+    if (!socket) return undefined
     socketRef.current = socket
 
     const handleIncomingRealtimeOrder = (payload = {}) => {
@@ -828,11 +818,12 @@ export default function OrdersPage({ statusKey = "all" }) {
     }
 
     // When an order leaves the pending state (restaurant/admin accepted, or it
-    // was cancelled), stop the admin-side new-order alert so it doesn't keep ringing.
+    // was cancelled), stop the admin-side new-order alert and update the list.
     const handleOrderStatusUpdate = (payload = {}) => {
       const status = String(payload?.orderStatus || payload?.status || "").toLowerCase()
-      if (!status || status === "created" || status === "pending") return
-      stopOrderAlert()
+      if (status && status !== "created" && status !== "pending") {
+        stopOrderAlert()
+      }
       fetchOrders({ silent: true, withRingCheck: false })
     }
 
@@ -840,17 +831,19 @@ export default function OrdersPage({ statusKey = "all" }) {
       socket.emit("join-admin-orders")
     })
     socket.on("admin_new_order", handleIncomingRealtimeOrder)
+    socket.on("new_order", handleIncomingRealtimeOrder)
     socket.on("play_notification_sound", handleIncomingRealtimeOrder)
     socket.on("order_status_update", handleOrderStatusUpdate)
 
     return () => {
       socket.off("admin_new_order", handleIncomingRealtimeOrder)
+      socket.off("new_order", handleIncomingRealtimeOrder)
       socket.off("play_notification_sound", handleIncomingRealtimeOrder)
       socket.off("order_status_update", handleOrderStatusUpdate)
       socket.disconnect()
       socketRef.current = null
     }
-  }, [statusKey, fetchOrders, playDefaultRing, showBrowserNotification, startAlertLoop, stopOrderAlert])
+  }, [fetchOrders, playDefaultRing, showBrowserNotification, startAlertLoop, stopOrderAlert])
 
   useEffect(() => {
     const onVisibilityChange = () => {

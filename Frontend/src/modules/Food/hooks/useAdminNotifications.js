@@ -3,6 +3,7 @@ import { adminAPI, supportAPI } from "@food/api";
 
 const DISMISSED_STORAGE_KEY = "admin_notifications_dismissed_v1";
 const READ_STORAGE_KEY = "admin_notifications_read_v1";
+const REALTIME_STORAGE_KEY = "admin_notifications_realtime_v1";
 const UPDATE_EVENT = "adminNotificationsUpdated";
 
 const safeParse = (value, fallback) => {
@@ -29,9 +30,41 @@ const saveDismissedIds = (ids) => saveStoredIds(DISMISSED_STORAGE_KEY, ids);
 const getReadIds = () => getStoredIds(READ_STORAGE_KEY);
 const saveReadIds = (ids) => saveStoredIds(READ_STORAGE_KEY, ids);
 
-export const dispatchAdminNotificationsUpdated = () => {
+export const getRealtimeNotifications = () => {
+  if (typeof localStorage === "undefined") return [];
+  const parsed = safeParse(localStorage.getItem(REALTIME_STORAGE_KEY) || "[]", []);
+  return Array.isArray(parsed) ? parsed : [];
+};
+
+export const saveRealtimeNotifications = (items) => {
+  if (typeof localStorage === "undefined") return;
+  const toSave = (Array.isArray(items) ? items : []).slice(0, 50);
+  localStorage.setItem(REALTIME_STORAGE_KEY, JSON.stringify(toSave));
+};
+
+export const dispatchAdminNotificationsUpdated = (detail) => {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(UPDATE_EVENT));
+  if (detail && typeof detail === "object" && detail.title) {
+    try {
+      const liveId = String(detail.id || `live-${Date.now()}`);
+      const liveItem = {
+        id: liveId,
+        title: detail.title || "New notification",
+        message: detail.body || detail.message || "",
+        type: detail.type || "alert",
+        category: detail.category || detail.type || "admin_alert",
+        path: detail.link || detail.path || "",
+        createdAt: detail.createdAt || new Date().toISOString(),
+        timeLabel: toDateLabel(detail.createdAt || new Date()),
+        metaLabel: detail.metaLabel || detail.type || "Live alert",
+      };
+      const existing = getRealtimeNotifications().filter((i) => i.id !== liveId);
+      saveRealtimeNotifications([liveItem, ...existing]);
+    } catch {
+      // Storage errors shouldn't crash the event dispatch
+    }
+  }
+  window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail }));
 };
 
 const toDateValue = (value) => {
@@ -342,7 +375,10 @@ export default function useAdminNotifications(options = {}) {
             ? restaurantsRes.data.restaurants
             : []
 
+      const realtimeItems = getRealtimeNotifications();
+
       const aggregated = uniqueById([
+        ...realtimeItems,
         ...mapPendingRestaurants(restaurantRows),
         ...mapDeliveryJoinRequests(deliveryJoinRes),
         ...mapFoodApprovals(foodApprovalRes),
@@ -417,6 +453,7 @@ export default function useAdminNotifications(options = {}) {
     if (!id) return;
     const dismissed = [...new Set([...getDismissedIds(), id])];
     saveDismissedIds(dismissed);
+    saveRealtimeNotifications(getRealtimeNotifications().filter((i) => i.id !== id));
     setItems((prev) => prev.filter((item) => item.id !== id));
     dispatchAdminNotificationsUpdated();
   }, []);
@@ -426,6 +463,7 @@ export default function useAdminNotifications(options = {}) {
     if (ids.length) {
       saveDismissedIds([...new Set([...getDismissedIds(), ...ids])]);
     }
+    saveRealtimeNotifications([]);
     setItems([]);
     dispatchAdminNotificationsUpdated();
   }, [items]);

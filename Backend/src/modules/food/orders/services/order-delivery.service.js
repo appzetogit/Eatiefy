@@ -244,6 +244,7 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
         payload,
       );
       io.to(rooms.user(order.userId)).emit('order_status_update', payload);
+      io.to(rooms.admins()).emit('order_status_update', payload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -931,6 +932,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
       io.to(rooms.delivery(deliveryPartnerId)).emit('order_status_update', payload);
       io.to(rooms.restaurant(order.restaurantId)).emit('order_status_update', payload);
       io.to(rooms.user(order.userId)).emit('order_status_update', payload);
+      io.to(rooms.admins()).emit('order_status_update', payload);
     }
   } catch (error) {
     logger.error(`Error emitting order_claimed on accept: ${error?.message || error}`);
@@ -1117,7 +1119,7 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
     try {
       const io = getIO();
       if (io && order.userId) {
-        io.to(rooms.user(order.userId)).emit('order_status_update', {
+        const payload = {
           orderMongoId: order._id.toString(),
           orderId: order._id.toString(),
           displayOrderId: order.order_id || order._id.toString(),
@@ -1126,7 +1128,9 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
           deliveryPartnerId: null,
           deliveryState: order.deliveryState,
           updatedAt: new Date().toISOString(),
-        });
+        };
+        io.to(rooms.user(order.userId)).emit('order_status_update', payload);
+        io.to(rooms.admins()).emit('order_status_update', payload);
       }
     } catch (err) {
       logger.warn(`reject user emit failed: ${err?.message || err}`);

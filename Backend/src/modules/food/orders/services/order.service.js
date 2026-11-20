@@ -1531,6 +1531,7 @@ export async function cancelOrder(orderId, userId, reason, refundDestination = "
       io.to(rooms.restaurant(order.restaurantId)).emit("order_cancelled_by_user", payload);
       io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", payload);
       io.to(rooms.user(userId)).emit("order_status_update", payload);
+      io.to(rooms.admins()).emit("order_status_update", payload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -1873,9 +1874,10 @@ export async function updateOrderStatusRestaurant(
       const restRoom = rooms.restaurant(restaurantId);
       const userRoom = rooms.user(order.userId);
       
-      console.log(`[DEBUG] Emitting order_status_update to rooms: ${restRoom}, ${userRoom}`);
+      console.log(`[DEBUG] Emitting order_status_update to rooms: ${restRoom}, ${userRoom}, admins`);
       io.to(restRoom).emit("order_status_update", payload);
       io.to(userRoom).emit("order_status_update", payload);
+      io.to(rooms.admins()).emit("order_status_update", payload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -2813,6 +2815,7 @@ export async function completeTakeawayOrderRestaurant(orderId, restaurantId, otp
       };
       io.to(rooms.restaurant(restaurantId)).emit("order_status_update", payload);
       io.to(rooms.user(order.userId)).emit("order_status_update", payload);
+      io.to(rooms.admins()).emit("order_status_update", payload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -2919,6 +2922,7 @@ export async function acceptOrderAdmin(orderId, adminId) {
       };
       io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", restaurantPayload);
       io.to(rooms.user(order.userId)).emit("order_status_update", userPayload);
+      io.to(rooms.admins()).emit("order_status_update", userPayload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -3008,6 +3012,7 @@ export async function rejectOrderAdmin(orderId, reason, adminId) {
       };
       io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", restaurantPayload);
       io.to(rooms.user(order.userId)).emit("order_status_update", userPayload);
+      io.to(rooms.admins()).emit("order_status_update", userPayload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -3253,6 +3258,7 @@ export async function updateOrderStatusesAdmin(
       if (order.userId) {
         io.to(rooms.user(order.userId)).emit("order_status_update", payload);
       }
+      io.to(rooms.admins()).emit("order_status_update", payload);
       const trackingIds = [
         order._id?.toString?.(),
         order.order_id ? String(order.order_id) : '',
