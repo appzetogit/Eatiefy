@@ -118,14 +118,14 @@ export const backfillLegacyCategoryWorkflow = async (categories = []) => {
             next.createdByRestaurantId = category.restaurantId;
         }
 
-        if (!CATEGORY_APPROVAL_STATUSES.includes(currentApprovalStatus)) {
+        if (hasRestaurantOwner && (currentApprovalStatus === 'pending' || category?.isApproved === false)) {
+            next.approvalStatus = 'approved';
+            next.isApproved = true;
+            next.approvedAt = category?.approvedAt || category?.updatedAt || category?.createdAt || new Date();
+        } else if (!CATEGORY_APPROVAL_STATUSES.includes(currentApprovalStatus)) {
             let approvalStatus = 'approved';
             if (hasRestaurantOwner) {
-                if (Number(stats?.totalFoods || 0) > 0) {
-                    approvalStatus = 'approved';
-                } else if (category?.isApproved === false) {
-                    approvalStatus = 'pending';
-                }
+                approvalStatus = 'approved';
             } else if (category?.isApproved === false) {
                 approvalStatus = 'pending';
             }

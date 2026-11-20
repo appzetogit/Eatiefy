@@ -870,6 +870,9 @@ export default function Inventory() {
   // Tab bar ref for excluding swipe on topbar
   const tabBarRef = useRef(null)
 
+  // Search and filter container ref to prevent swipe when interacting with filters
+  const searchFilterRef = useRef(null)
+
   // Content container ref
   const contentContainerRef = useRef(null)
 
@@ -1277,11 +1280,28 @@ export default function Inventory() {
     }
   }
 
+  // Any open modal or bottom sheet owns gestures; touches on filters or inputs should not trigger tab switching
+  const shouldIgnoreSwipe = (target) => {
+    if (!target) return true
+    if (filterOpen || sequenceOpen || togglePopupOpen || showTimePicker || isMenuOpen) return true
+    if (tabBarRef.current?.contains(target)) return true
+    if (searchFilterRef.current?.contains(target)) return true
+    if (typeof target.closest === "function") {
+      if (
+        target.closest("[data-swipe-ignore]") ||
+        target.closest(".overflow-x-auto") ||
+        target.closest("input, textarea, select")
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
   // Handle swipe gestures
   const handleTouchStart = (e) => {
     const target = e.target
-    // Don't handle swipe if starting on topbar
-    if (tabBarRef.current?.contains(target)) return
+    if (shouldIgnoreSwipe(target)) return
 
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
@@ -1291,6 +1311,7 @@ export default function Inventory() {
 
   const handleTouchMove = (e) => {
     if (!isSwiping.current) {
+      if (shouldIgnoreSwipe(e.target)) return
       const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current)
       const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current)
 
@@ -1306,6 +1327,14 @@ export default function Inventory() {
   }
 
   const handleTouchEnd = () => {
+    if (filterOpen || sequenceOpen || togglePopupOpen || showTimePicker || isMenuOpen) {
+      touchStartX.current = 0
+      touchEndX.current = 0
+      touchStartY.current = 0
+      isSwiping.current = false
+      return
+    }
+
     if (!isSwiping.current) {
       touchStartX.current = 0
       touchEndX.current = 0
@@ -2025,8 +2054,7 @@ export default function Inventory() {
         onTouchEnd={handleTouchEnd}
         onMouseDown={(e) => {
           const target = e.target
-          // Don't handle swipe if starting on topbar
-          if (tabBarRef.current?.contains(target)) return
+          if (shouldIgnoreSwipe(target)) return
 
           mouseStartX.current = e.clientX
           mouseEndX.current = e.clientX
@@ -2082,7 +2110,11 @@ export default function Inventory() {
         }}
       >
         {/* Search and Filter */}
-        <div className="sticky top-0 z-30 -mx-4 px-4 pb-4 bg-[#f3f5f8]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f3f5f8]/80">
+        <div
+          ref={searchFilterRef}
+          data-swipe-ignore="true"
+          className="sticky top-0 z-30 -mx-4 px-4 pb-4 bg-[#f3f5f8]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f3f5f8]/80"
+        >
           <div className="overflow-hidden rounded-[28px] border border-white/80 bg-white/90 p-4 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.45)] backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -2164,7 +2196,14 @@ export default function Inventory() {
               )}
             </div>
 
-            <div className="mt-4 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+            <div
+              data-swipe-ignore="true"
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="mt-4 flex gap-2 overflow-x-auto scrollbar-hide pb-1"
+            >
               {activeFilterOptions.map((option) => {
                 const count = activeTab === "add-ons"
                   ? (addonFilterCounts[option.value] || 0)

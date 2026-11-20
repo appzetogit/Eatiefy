@@ -189,9 +189,12 @@ export default function HubFinance() {
   }, [financeData, pastCyclesData])
 
   const invoiceSummary = useMemo(() => {
-    const earnings = invoiceOrders.reduce((sum, order) => sum + (order.payout || order.restaurantEarning || 0), 0)
-    const commission = invoiceOrders.reduce((sum, order) => sum + (order.commission || 0), 0)
-    const gross = invoiceOrders.reduce((sum, order) => sum + (order.totalAmount || order.orderTotal || 0), 0)
+    const earnings = invoiceOrders.reduce((sum, order) => sum + (Number(order.payout || order.restaurantEarning || 0) || 0), 0)
+    const commission = invoiceOrders.reduce((sum, order) => sum + (Number(order.commission || 0) || 0), 0)
+    const gross = invoiceOrders.reduce((sum, order) => {
+      const orderGross = order.restaurantGross ?? order.grossAmount ?? ((Number(order.payout || order.restaurantEarning || 0) || 0) + (Number(order.commission || 0) || 0))
+      return sum + (Number(orderGross) || 0)
+    }, 0)
     return { earnings, commission, gross, count: invoiceOrders.length }
   }, [invoiceOrders])
 
@@ -576,7 +579,7 @@ export default function HubFinance() {
       const orderDate = order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : (order.deliveredAt ? new Date(order.deliveredAt).toLocaleDateString('en-IN') : 'N/A')
       const foodItems = order.foodNames || (order.items && order.items.map(item => item.name).join(', ')) || 'N/A'
       const itemQuantities = order.items ? order.items.map(item => (item.quantity || 1).toString()).join(', ') : 'N/A'
-      const orderAmount = order.totalAmount || order.orderTotal || order.amount || 0
+      const orderAmount = (order.restaurantGross ?? order.grossAmount ?? ((Number(order.payout || order.restaurantEarning || 0) || 0) + (Number(order.commission || 0) || 0))) || order.orderTotal || 0
       const earning = order.payout || order.restaurantEarning || 0
 
       return `
@@ -1322,24 +1325,27 @@ export default function HubFinance() {
                 <p className="text-sm text-gray-500">No invoice data available for selected range.</p>
               ) : (
                 <div className="space-y-2">
-                  {invoiceOrders.map((order, index) => (
-                    <div key={`${order.orderId || index}-invoice`} className="border border-gray-100 rounded-md p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">Order: {order.orderId || "N/A"}</p>
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            {order.paymentMethod || "N/A"} | {order.orderStatus || "N/A"}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-gray-900">
-                            ₹{(order.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                          <p className="text-xs text-gray-500">Total</p>
+                  {invoiceOrders.map((order, index) => {
+                    const orderGross = order.restaurantGross ?? order.grossAmount ?? ((Number(order.payout || order.restaurantEarning || 0) || 0) + (Number(order.commission || 0) || 0))
+                    return (
+                      <div key={`${order.orderId || index}-invoice`} className="border border-gray-100 rounded-md p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Order: {order.orderId || "N/A"}</p>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              {order.paymentMethod || "N/A"} | {order.orderStatus || "N/A"}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-gray-900">
+                              ₹{(Number(orderGross) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-xs text-gray-500">Gross</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

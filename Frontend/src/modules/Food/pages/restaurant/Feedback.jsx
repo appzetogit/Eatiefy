@@ -34,6 +34,8 @@ const extractReviewRating = (order) =>
   normalizeRating(
     order?.review?.rating ??
       order?.ratings?.restaurant?.rating ??
+      order?.ratings?.restaurantRating ??
+      order?.restaurantRating ??
       order?.feedback?.rating ??
       order?.rating
   )
@@ -43,6 +45,8 @@ const extractReviewText = (order) => {
     order?.review?.comment ??
     order?.review?.text ??
     order?.ratings?.restaurant?.comment ??
+    order?.ratings?.restaurantComment ??
+    order?.restaurantComment ??
     order?.feedback?.comment ??
     order?.feedback?.text ??
     ""
@@ -487,12 +491,12 @@ export default function Feedback() {
                       </div>
                       
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-bold text-gray-400">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-bold text-gray-400 shrink-0">
                           {complaint.userId?.name?.[0] || 'U'}
                         </div>
-                        <div>
-                          <p className="font-bold text-gray-900 dark:text-white text-sm">{complaint.userId?.name || 'Customer'}</p>
-                          <p className="text-[10px] text-gray-500 font-bold uppercase">Order #{complaint.orderId?.orderId || 'N/A'}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-gray-900 dark:text-white text-sm break-words">{complaint.userId?.name || 'Customer'}</p>
+                          <p className="text-[10px] text-gray-500 font-bold uppercase truncate">Order #{complaint.orderId?.orderId || 'N/A'}</p>
                         </div>
                       </div>
  
@@ -588,20 +592,26 @@ export default function Feedback() {
                     <span>{review.date}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <img src={review.userImage} className="w-8 h-8 rounded-full border border-gray-100 dark:border-gray-800" />
-                    <p className="font-bold text-gray-900 dark:text-white text-sm">{review.userName}</p>
+                    <img
+                      src={review.userImage}
+                      alt={review.userName}
+                      className="w-8 h-8 rounded-full border border-gray-100 dark:border-gray-800 shrink-0 object-cover"
+                    />
+                    <p className="font-bold text-gray-900 dark:text-white text-sm flex-1 min-w-0 break-words [overflow-wrap:anywhere]">
+                      {review.userName}
+                    </p>
                     {review.rating != null ? (
-                      <div className={`ml-auto flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold text-white ${
+                      <div className={`ml-auto shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold text-white ${
                         review.rating >= 4 ? "bg-green-600" : review.rating >= 3 ? "bg-amber-500" : "bg-red-500"
                       }`}>
                         {review.rating} <Star className="w-3 h-3 fill-current" />
                       </div>
                     ) : (
-                      <span className="ml-auto text-[10px] text-gray-400 font-medium italic">No rating</span>
+                      <span className="ml-auto shrink-0 text-[10px] text-gray-400 font-medium italic">No rating</span>
                     )}
                   </div>
                   <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
-                    <p className="text-sm text-gray-800 dark:text-gray-200 font-medium italic">"{review.reviewText}"</p>
+                    <p className="text-sm text-gray-800 dark:text-gray-200 font-medium italic break-words">"{review.reviewText}"</p>
                   </div>
                 </div>
               ))}

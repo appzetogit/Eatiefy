@@ -12,6 +12,7 @@ import { getRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { getRestaurantDietType } from "./RestaurantsList"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -988,23 +989,17 @@ export default function JoiningRequest() {
                             </div>
                           ) : null
                         })()}
-                        {r?.pureVegRestaurant != null && (
-                          <div className="flex items-center gap-3">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              r.pureVeganRestaurant
-                                ? "bg-emerald-100 text-emerald-800"
-                                : r.pureVegRestaurant
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-orange-100 text-orange-700"
-                            }`}>
-                              {r.pureVeganRestaurant
-                                ? "Pure Vegan"
-                                : r.pureVegRestaurant
-                                  ? "Pure Veg"
-                                  : "Mixed Menu"}
-                            </span>
-                          </div>
-                        )}
+                        {(() => {
+                          const diet = getRestaurantDietType(r)
+                          return (
+                            <div className="flex items-center gap-3">
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${diet.badgeClass}`}>
+                                <span className={`w-2 h-2 rounded-full ${diet.dotClass}`} />
+                                {diet.label}
+                              </span>
+                            </div>
+                          )
+                        })()}
                         {(r?.primaryContactNumber || r?.phone) && (
                           <div className="flex items-center gap-3">
                             <Phone className="w-5 h-5 text-slate-400" />

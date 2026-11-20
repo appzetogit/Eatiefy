@@ -82,8 +82,7 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
                     ]
                 },
                 {
-                    restaurantId: context.restaurantId,
-                    $or: APPROVED_CATEGORY_FILTER
+                    restaurantId: context.restaurantId
                 }
             ]
         }
@@ -312,35 +311,16 @@ export async function createRestaurantCategory(restaurantId, body = {}) {
         sortOrder: Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0,
         restaurantId: context.restaurantId,
         createdByRestaurantId: context.restaurantId,
-        approvalStatus: 'pending',
-        isApproved: false,
+        approvalStatus: 'approved',
+        isApproved: true,
         rejectionReason: '',
         requestedAt: new Date(),
+        approvedAt: new Date(),
         zoneId: context.zoneId && mongoose.Types.ObjectId.isValid(context.zoneId)
             ? new mongoose.Types.ObjectId(context.zoneId)
             : undefined
     });
     await doc.save();
-
-    // Tell admins a category is waiting for approval: push + live panel alert.
-    // Best effort - it must never fail the restaurant's request.
-    try {
-        const restaurantDoc = await FoodRestaurant.findById(context.restaurantId).select('restaurantName').lean();
-        const restaurantName = restaurantDoc?.restaurantName || 'A restaurant';
-        const link = '/admin/food/categories';
-        const message = `${restaurantName} submitted the category "${name}" for approval.`;
-        const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
-        void notifyAdminsSafely({
-            title: 'Category Approval Pending',
-            body: message,
-            link,
-            idempotencyKey: `category_approval:${String(doc._id)}`,
-            data: { type: 'category_approval', subType: 'category', id: String(doc._id) }
-        });
-    } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to notify admins of pending category:', err?.message || err);
-    }
 
     return doc.toObject();
 }
@@ -397,20 +377,10 @@ export async function updateRestaurantCategory(restaurantId, id, body = {}) {
     }
 
     doc.createdByRestaurantId = doc.createdByRestaurantId || context.restaurantId;
-
-    // Only a change admins review (name, image, type, diet scope, order) sends the
-    // category back for approval. Switching it on/off is the restaurant's own
-    // availability decision and used to wrongly reset an approved category.
-    const reviewedFields = ['name', 'image', 'type', 'foodTypeScope', 'sortOrder'];
-    const needsReapproval = reviewedFields.some((field) => doc.isModified(field));
-    if (needsReapproval) {
-        doc.approvalStatus = 'pending';
-        doc.isApproved = false;
-        doc.rejectionReason = '';
-        doc.requestedAt = new Date();
-        doc.approvedAt = undefined;
-        doc.rejectedAt = undefined;
-    }
+    // Private restaurant categories do not require approval
+    doc.approvalStatus = 'approved';
+    doc.isApproved = true;
+    doc.approvedAt = doc.approvedAt || new Date();
 
     const activeChanged = doc.isModified('isActive');
     await doc.save();

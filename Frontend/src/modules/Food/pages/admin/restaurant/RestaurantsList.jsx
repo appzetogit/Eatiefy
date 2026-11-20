@@ -40,6 +40,63 @@ const approvalStatusBadgeClass = (status) => {
   return "bg-amber-100 text-amber-700"
 }
 
+export const getRestaurantDietType = (restaurant) => {
+  if (!restaurant) {
+    return {
+      type: "mixed",
+      label: "Mixed",
+      badgeClass: "bg-amber-100 text-amber-800 border-amber-200",
+      dotClass: "bg-amber-500",
+      pillClass: "bg-amber-50 text-amber-700 border-amber-200",
+    }
+  }
+
+  const rawFt = String(restaurant.foodType || restaurant.onboarding?.step1?.foodType || "").trim().toLowerCase()
+  const isPureVeg =
+    rawFt === "veg" ||
+    rawFt === "pure-veg" ||
+    rawFt === "pure veg" ||
+    rawFt === "pure-vegan" ||
+    rawFt === "pure vegan" ||
+    restaurant.pureVegRestaurant === true ||
+    restaurant.pureVeganRestaurant === true ||
+    restaurant.onboarding?.step1?.pureVegRestaurant === true
+
+  if (isPureVeg) {
+    return {
+      type: "pure_veg",
+      label: "Pure Veg",
+      badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-200",
+      dotClass: "bg-emerald-600",
+      pillClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    }
+  }
+
+  const isNonVeg =
+    rawFt === "non-veg" ||
+    rawFt === "non veg" ||
+    restaurant.hasNonVegMenuOnly === true ||
+    restaurant.onboarding?.step1?.foodType === "Non-Veg"
+
+  if (isNonVeg) {
+    return {
+      type: "non_veg",
+      label: "Non-Veg",
+      badgeClass: "bg-rose-100 text-rose-800 border-rose-200",
+      dotClass: "bg-rose-600",
+      pillClass: "bg-rose-50 text-rose-700 border-rose-200",
+    }
+  }
+
+  return {
+    type: "mixed",
+    label: "Mixed",
+    badgeClass: "bg-amber-100 text-amber-800 border-amber-200",
+    dotClass: "bg-amber-500",
+    pillClass: "bg-amber-50 text-amber-700 border-amber-200",
+  }
+}
+
 const normalizeTimeValue = (value) => {
   const raw = String(value || "").trim()
   if (!raw) return ""
@@ -353,6 +410,8 @@ export default function RestaurantsList() {
             isActive: false,
             rating: restaurant.ratings?.average || restaurant.rating || 0,
             logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+            foodType: restaurant.foodType,
+            pureVegRestaurant: restaurant.pureVegRestaurant,
             originalData: restaurant,
           }
         })
@@ -385,6 +444,8 @@ export default function RestaurantsList() {
             isActive: false,
             rating: restaurant.ratings?.average || restaurant.rating || 0,
             logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+            foodType: restaurant.foodType,
+            pureVegRestaurant: restaurant.pureVegRestaurant,
             originalData: restaurant,
           }
         })
@@ -407,6 +468,8 @@ export default function RestaurantsList() {
             isActive: false,
             rating: restaurant.ratings?.average || restaurant.rating || 0,
             logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+            foodType: restaurant.foodType,
+            pureVegRestaurant: restaurant.pureVegRestaurant,
             originalData: restaurant,
           }
         })
@@ -433,6 +496,8 @@ export default function RestaurantsList() {
             isActive: restaurant.isActive !== false && restaurant.status !== 'banned',
             rating: restaurant.ratings?.average || restaurant.rating || 0,
             logo: getPrimaryRestaurantImage(restaurant, PLACEHOLDER_40),
+            foodType: restaurant.foodType,
+            pureVegRestaurant: restaurant.pureVegRestaurant,
             originalData: restaurant,
           }
         })
@@ -1022,6 +1087,7 @@ export default function RestaurantsList() {
       const payload = {
         name: detailsForm.name.trim(),
         foodType: detailsForm.foodType,
+        pureVegRestaurant: detailsForm.foodType === "Veg",
         pureVeganRestaurant: detailsForm.pureVeganRestaurant === true,
         isSweetShop: detailsForm.isSweetShop === true,
         ownerName: detailsForm.ownerName.trim(),
@@ -1056,9 +1122,13 @@ export default function RestaurantsList() {
                 isActive: updatedRestaurant.isActive !== false,
                 approvalStatus: normalizeApprovalStatus(updatedRestaurant),
                 logo: getPrimaryRestaurantImage(updatedRestaurant, item.logo),
+                foodType: updatedRestaurant.foodType || detailsForm.foodType || item.foodType,
+                pureVegRestaurant: (updatedRestaurant.foodType || detailsForm.foodType) === "Veg",
                 originalData: {
                   ...(item.originalData || {}),
                   ...updatedRestaurant,
+                  foodType: updatedRestaurant.foodType || detailsForm.foodType,
+                  pureVegRestaurant: (updatedRestaurant.foodType || detailsForm.foodType) === "Veg",
                 },
               }
               : item,
@@ -1505,12 +1575,23 @@ export default function RestaurantsList() {
                               />
                             </div>
                             <div className="flex flex-col">
-                              <span 
-                                className="text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
-                                onClick={() => handleViewDetails(restaurant)}
-                              >
-                                {restaurant.name}
-                              </span>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span 
+                                  className="text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
+                                  onClick={() => handleViewDetails(restaurant)}
+                                >
+                                  {restaurant.name}
+                                </span>
+                                {(() => {
+                                  const diet = getRestaurantDietType(restaurant.originalData || restaurant)
+                                  return (
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${diet.pillClass}`}>
+                                      <span className={`w-1.5 h-1.5 rounded-full ${diet.dotClass}`} />
+                                      {diet.label}
+                                    </span>
+                                  )
+                                })()}
+                              </div>
                               <span className="text-xs text-slate-500">ID #{formatRestaurantId(restaurant.originalData?.restaurantId || restaurant.originalData?._id || restaurant._id || restaurant.id)}</span>
                               <span className="text-xs text-slate-500">{renderStars(restaurant.rating)}</span>
                             </div>
@@ -1850,6 +1931,7 @@ export default function RestaurantsList() {
               {!loadingDetails && !isEditingDetails && (restaurantDetails || selectedRestaurant) && (() => {
                 const r = restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant
                 const detailsApprovalStatus = normalizeApprovalStatus(r)
+                const dietInfo = getRestaurantDietType(r)
                 const profileImgUrl = getPrimaryRestaurantImage(r)
                 const coverImages = Array.isArray(r?.coverImages) ? r.coverImages.map(normalizeImageUrl).filter(Boolean) : []
                 const displayAddress = getRestaurantDisplayAddress(r)
@@ -1926,7 +2008,7 @@ export default function RestaurantsList() {
                         <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">
                           {r?.restaurantName || r?.name || "N/A"}
                         </h3>
-                        <div className="flex items-center justify-center md:justify-start gap-2">
+                        <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
                           {detailsApprovalStatus === "banned" ? (
                             <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700">
                               Banned
@@ -1938,6 +2020,15 @@ export default function RestaurantsList() {
                           ) : (
                             <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${r?.isActive !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                               {r?.isActive !== false ? 'Active' : 'Inactive'}
+                            </span>
+                          )}
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border ${dietInfo.badgeClass}`}>
+                            <span className={`w-2 h-2 rounded-full ${dietInfo.dotClass}`} />
+                            {dietInfo.label}
+                          </span>
+                          {r?.isSweetShop && (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+                              Sweet Shop / Bakery
                             </span>
                           )}
                         </div>
@@ -2056,8 +2147,39 @@ export default function RestaurantsList() {
                     </div>
                   </div>
 
-                  {/* Timings */}
-                  <div className="grid grid-cols-1 gap-6">
+                  {/* Diet, Category & Timings */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="text-lg font-semibold text-slate-900 mb-4">Diet & Category</h4>
+                      <div className="space-y-4 bg-slate-50/70 p-4 rounded-2xl border border-slate-100">
+                        <div>
+                          <p className="text-xs text-slate-500 mb-1.5 font-medium">Diet Type</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${dietInfo.badgeClass}`}>
+                              <span className={`w-2 h-2 rounded-full ${dietInfo.dotClass}`} />
+                              {dietInfo.label}
+                            </span>
+                            {r?.isSweetShop && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+                                Sweet Shop / Bakery
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {cuisinesList && cuisinesList.length > 0 && (
+                          <div>
+                            <p className="text-xs text-slate-500 mb-1.5 font-medium">Cuisines</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {cuisinesList.map((c, i) => (
+                                <span key={i} className="px-2.5 py-1 bg-white text-slate-700 rounded-lg text-xs font-medium border border-slate-200 shadow-2xs">
+                                  {c}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                     <div>
                       <h4 className="text-lg font-semibold text-slate-900 mb-4">Timings & Status</h4>

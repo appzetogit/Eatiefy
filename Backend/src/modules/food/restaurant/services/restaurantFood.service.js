@@ -179,7 +179,10 @@ const resolveCategoryForRestaurant = async (context, body = {}) => {
 
     await backfillLegacyCategoryWorkflow([category]);
 
-    if (String(category.approvalStatus || '') !== 'approved') {
+    const isOwnPrivateCategory = Boolean(
+        category?.restaurantId && String(category.restaurantId) === String(context.restaurantId)
+    );
+    if (!isOwnPrivateCategory && String(category.approvalStatus || '') !== 'approved') {
         throw new ValidationError('This category is awaiting admin approval');
     }
     if (context.foodType === 'Veg' && String(category.foodTypeScope || '') === 'Non-Veg') {
