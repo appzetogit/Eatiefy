@@ -3,6 +3,8 @@ node_modules/
 /dist
 /dist-ssr
 *.local
+init
+
 
 # Editor directories and files
 .vscode/*
