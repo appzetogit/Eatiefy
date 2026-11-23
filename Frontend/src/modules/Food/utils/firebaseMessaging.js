@@ -1741,6 +1741,14 @@ function showForegroundNotification(payload = {}) {
     return;
   }
 
+  // Lets screens (e.g. Settings -> "Send test notification") know this browser
+  // really received the push, regardless of whether a banner was then shown.
+  try {
+    window.dispatchEvent(new CustomEvent("eatiefy-push-received", { detail: payload }));
+  } catch {
+    /* ignore */
+  }
+
   // In the Flutter-wrapped app, native FCM handlers own all OS notifications.
   if (isFlutterWebView()) {
     const notificationType = String(payload?.data?.type || "").toLowerCase();

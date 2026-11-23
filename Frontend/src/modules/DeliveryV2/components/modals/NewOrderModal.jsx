@@ -5,6 +5,7 @@ import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { computePickupMetrics } from '@/modules/DeliveryV2/utils/pickupMetrics';
 import { PickupMetricsValue } from '@/modules/DeliveryV2/components/orders/NewOrderCard';
+import OrderNoteBanner from '@/modules/DeliveryV2/components/orders/OrderNoteBanner';
 import { toast } from 'sonner';
 import { getEatiefyIncentiveBreakdown, formatEatiefyIncentiveLine } from '@/modules/DeliveryV2/utils/earningBreakdown';
 import { formatOrderAddress } from '@food/utils/orderAddress';
@@ -241,6 +242,8 @@ export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted =
               </div>
             </div>
           </div>
+
+           <OrderNoteBanner order={order} />
 
            <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
              <div className="p-3 sm:p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2.5 sm:gap-3">

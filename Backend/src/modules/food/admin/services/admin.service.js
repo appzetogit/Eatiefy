@@ -2435,6 +2435,84 @@ export async function getSupportTickets(query = {}) {
     return { tickets, total, page, limit };
 }
 
+/**
+ * Tell the person who raised a support ticket that the admin answered it:
+ * inbox row (survives refresh / re-login) + live nudge to an open app + push.
+ * Best effort - never fails the admin's save.
+ *
+ * @param {{ownerType: 'USER'|'RESTAURANT'|'DELIVERY_PARTNER', ownerId: any, ticketId: any,
+ *          reply?: string, status?: string, link: string}} args
+ */
+async function notifyTicketOwnerOfAdminUpdate({ ownerType, ownerId, ticketId, reply = '', status = '', link }) {
+    try {
+        if (!ownerId || !ticketId) return;
+        const replied = Boolean(String(reply || '').trim());
+        const title = replied ? 'Support replied to your ticket' : 'Your support ticket was updated';
+        const preview = replied
+            ? String(reply).trim().slice(0, 140)
+            : `Status: ${String(status || '').replace(/[-_]/g, ' ')}`;
+        const message = replied ? preview : `Your ticket is now ${String(status || '').replace(/[-_]/g, ' ')}.`;
+
+        // One id per reply, shared by the live socket event and the push, so the
+        // app collapses them into a single notification.
+        const eventRef = `${String(ticketId)}-${Date.now()}`;
+
+        let inboxRow = null;
+        try {
+            const { FoodNotification } = await import('../../../../core/notifications/models/notification.model.js');
+            inboxRow = await FoodNotification.findOneAndUpdate(
+                { ownerType, ownerId, source: 'SUPPORT_TICKET_REPLY', 'metadata.ticketId': String(ticketId) },
+                {
+                    $set: {
+                        title,
+                        message,
+                        link,
+                        category: 'support',
+                        isRead: false,
+                        readAt: null,
+                        dismissedAt: null,
+                        metadata: { ticketId: String(ticketId), status: String(status || ''), repliedAt: new Date().toISOString() }
+                    }
+                },
+                { new: true, upsert: true, setDefaultsOnInsert: true }
+            ).lean();
+        } catch (e) {
+            logger.warn(`[TICKET-REPLY] inbox write failed: ${e?.message || e}`);
+        }
+
+        try {
+            const io = getIO();
+            const room = ownerType === 'USER' ? rooms.user(ownerId)
+                : ownerType === 'RESTAURANT' ? rooms.restaurant(ownerId)
+                    : rooms.delivery(ownerId);
+            io?.to(room).emit('admin_notification', {
+                id: eventRef,
+                title,
+                message,
+                link,
+                createdAt: inboxRow?.createdAt || new Date().toISOString()
+            });
+        } catch (e) {
+            logger.warn(`[TICKET-REPLY] socket emit failed: ${e?.message || e}`);
+        }
+
+        const { notifyOwnerSafely } = await import('../../../../core/notifications/firebase.service.js');
+        await notifyOwnerSafely(
+            { ownerType, ownerId: String(ownerId) },
+            {
+                title,
+                body: message,
+                link,
+                // Must equal `broadcast:<socket payload id>` - see useUserNotifications.
+                idempotencyKey: `broadcast:${eventRef}`,
+                data: { type: 'support_ticket_reply', ticketId: String(ticketId), link }
+            }
+        );
+    } catch (err) {
+        logger.warn(`[TICKET-REPLY] notify failed: ${err?.message || err}`);
+    }
+}
+
 export async function updateSupportTicket(id, body = {}) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
     const source = String(body.source || 'user').toLowerCase();
@@ -2442,7 +2520,7 @@ export async function updateSupportTicket(id, body = {}) {
 
     // Read the stored status first: a transition can only be judged against
     // what is actually persisted, not against what the client believes.
-    const current = await model.findById(id).select('status').lean();
+    const current = await model.findById(id).select('status adminResponse userId restaurantId').lean();
     if (!current) return null;
 
     const set = {};
@@ -2457,6 +2535,24 @@ export async function updateSupportTicket(id, body = {}) {
 
     const updated = await model.findByIdAndUpdate(id, { $set: set }, { new: true }).lean();
     if (!updated) return null;
+
+    // Notify only when something the customer cares about actually changed:
+    // a new/edited reply, or a status change.
+    const newReply = typeof set.adminResponse === 'string' ? set.adminResponse.trim() : '';
+    const replyChanged = Boolean(newReply) && newReply !== String(current.adminResponse || '').trim();
+    const statusChanged = set.status !== undefined && set.status !== current.status;
+    if (replyChanged || statusChanged) {
+        const isRestaurantTicket = source === 'restaurant';
+        void notifyTicketOwnerOfAdminUpdate({
+            ownerType: isRestaurantTicket ? 'RESTAURANT' : 'USER',
+            ownerId: isRestaurantTicket ? updated.restaurantId : updated.userId,
+            ticketId: updated._id,
+            reply: replyChanged ? newReply : '',
+            status: updated.status,
+            link: isRestaurantTicket ? '/food/restaurant/help-centre/support' : '/food/user/profile/support'
+        });
+    }
+
     return {
         ...updated,
         source: source === 'restaurant' ? 'restaurant' : 'user',
@@ -5796,6 +5892,8 @@ export async function updateDeliverySupportTicket(id, body = {}) {
     const ticket = await DeliverySupportTicket.findById(id);
     if (!ticket) return null;
     const { status, adminResponse } = body || {};
+    const previousStatus = ticket.status;
+    const previousReply = String(ticket.adminResponse || '').trim();
     if (status !== undefined && status !== null && String(status) !== '') {
         // Judged against the persisted status, and rejected outright when the
         // move is not part of the lifecycle — silently ignoring it used to let
@@ -5808,6 +5906,20 @@ export async function updateDeliverySupportTicket(id, body = {}) {
         if (ticket.adminResponse) ticket.respondedAt = new Date();
     }
     await ticket.save();
+
+    const newReply = String(ticket.adminResponse || '').trim();
+    const replyChanged = Boolean(newReply) && newReply !== previousReply;
+    if (replyChanged || ticket.status !== previousStatus) {
+        void notifyTicketOwnerOfAdminUpdate({
+            ownerType: 'DELIVERY_PARTNER',
+            ownerId: ticket.deliveryPartnerId,
+            ticketId: ticket._id,
+            reply: replyChanged ? newReply : '',
+            status: ticket.status,
+            link: `/food/delivery/help/tickets/${ticket._id}`
+        });
+    }
+
     return {
         ...ticket.toObject(),
         allowedStatusTransitions: getAllowedTicketTransitions('delivery', ticket.status)

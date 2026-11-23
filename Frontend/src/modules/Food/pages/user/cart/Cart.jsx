@@ -2861,8 +2861,8 @@ export default function Cart() {
                       <div key={item.id} className="transition-all duration-300">
                         <div className="flex items-center gap-4">
                           {/* Veg/Non-veg indicator */}
-                          <div className={`w-4 h-4 border-2 ${isVegMenuItem(item, restaurantData) ? 'border-green-600' : 'border-red-600'} flex items-center justify-center flex-shrink-0 rounded-[2px]`}>
-                            <div className={`w-2 h-2 rounded-full ${isVegMenuItem(item, restaurantData) ? 'bg-green-600' : 'bg-red-600'}`} />
+                          <div className={`w-4 h-4 border-2 ${isVegMenuItem(item, restaurantData) ? 'border-[#15803D]' : 'border-red-600'} flex items-center justify-center flex-shrink-0 rounded-[2px]`}>
+                            <div className={`w-2 h-2 rounded-full ${isVegMenuItem(item, restaurantData) ? 'bg-[#15803D]' : 'bg-red-600'}`} />
                           </div>
 
                           <div className="flex-1 min-w-0 flex items-center gap-4">
@@ -3014,8 +3014,8 @@ export default function Cart() {
                               className="w-full h-28 md:h-36 object-cover rounded-lg md:rounded-xl"
                             />
                             <div className="absolute top-1 md:top-2 left-1 md:left-2">
-                              <div className="w-3.5 h-3.5 md:w-4 md:h-4 bg-white border border-green-600 flex items-center justify-center rounded">
-                                <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-green-600" />
+                              <div className="w-3.5 h-3.5 md:w-4 md:h-4 bg-white border-2 border-[#15803D] flex items-center justify-center rounded">
+                                <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#15803D]" />
                               </div>
                             </div>
                             <button

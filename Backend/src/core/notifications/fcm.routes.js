@@ -288,10 +288,25 @@ router.post('/test', authMiddleware, async (req, res, next) => {
         }
 
         const result = await sendTestNotification({ ownerType, ownerId, platform });
+        const delivered = Number(result?.successCount || 0);
+        const attempted = delivered + Number(result?.failureCount || 0);
+        // Be honest: "sent" only when Firebase accepted at least one device. The
+        // old response said success even when this account had no registered
+        // device, so a push that was never attempted looked like it was sent.
+        if (delivered > 0) {
+            return res.status(200).json({
+                success: true,
+                message: `Test notification sent to ${delivered} device${delivered === 1 ? '' : 's'}`,
+                data: { ...result, delivered }
+            });
+        }
+        const reason = attempted === 0
+            ? `No ${platform === 'mobile' ? 'mobile' : 'web'} push device is registered for this account. Allow notifications on this device (or open the app on your phone) and try again.`
+            : (result?.error || 'Firebase rejected the push for every registered device (the token may be expired). Re-enable notifications on this device and try again.');
         return res.status(200).json({
-            success: true,
-            message: 'Test notification sent',
-            data: result
+            success: false,
+            message: reason,
+            data: { ...result, delivered: 0 }
         });
     } catch (error) {
         next(error);

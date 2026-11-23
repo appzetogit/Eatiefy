@@ -3083,8 +3083,8 @@ function RestaurantDetailsContent() {
                               <div className="flex-1 min-w-0">
                                 <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight flex items-start gap-2">
                                   {isVeg ? (
-                                    <div className="w-4 h-4 border-2 border-green-600 flex items-center justify-center rounded-sm flex-shrink-0 p-[2px] mt-1">
-                                      <div className="w-full h-full bg-green-600 rounded-full"></div>
+                                    <div className="w-4 h-4 border-2 border-[#15803D] flex items-center justify-center rounded-sm flex-shrink-0 p-[2px] mt-1">
+                                      <div className="w-full h-full bg-[#15803D] rounded-full"></div>
                                     </div>
                                   ) : (
                                     <div className="w-4 h-4 border-2 border-red-600 flex items-center justify-center rounded-sm flex-shrink-0 p-[2px] mt-1">
@@ -3320,12 +3320,12 @@ function RestaurantDetailsContent() {
                                         <div className="flex-1 min-w-0">
                                           <h3 className="font-bold text-gray-800 dark:text-white text-lg leading-tight flex items-start gap-2">
                                             {isVeg ? (
-                                              <div className="w-4 h-4 border-2 border-[#8CC63F] flex items-center justify-center rounded-sm flex-shrink-0 p-[2px] mt-1">
-                                                <div className="w-full h-full bg-[#8CC63F] rounded-full"></div>
+                                              <div className="w-4 h-4 border-2 border-[#15803D] flex items-center justify-center rounded-sm flex-shrink-0 p-[2px] mt-1">
+                                                <div className="w-full h-full bg-[#15803D] rounded-full"></div>
                                               </div>
                                             ) : (
-                                              <div className="w-4 h-4 border-2 border-[#1F6B45] flex items-center justify-center rounded-sm flex-shrink-0 p-[2px] mt-1">
-                                                <div className="w-full h-full bg-[#1F6B45] rounded-full"></div>
+                                              <div className="w-4 h-4 border-2 border-red-600 flex items-center justify-center rounded-sm flex-shrink-0 p-[2px] mt-1">
+                                                <div className="w-full h-full bg-red-600 rounded-full"></div>
                                               </div>
                                             )}
                                             <span className="min-w-0">{item.name}</span>
@@ -4111,8 +4111,8 @@ function RestaurantDetailsContent() {
                     {/* Item Name and Indicator */}
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-2 flex-1">
-                        <div className={`h-5 w-5 rounded border-2 ${isVegMenuItem(selectedItem, restaurant) ? "border-green-600 bg-green-50" : "border-red-600 bg-red-50"} dark:border-gray-600 dark:bg-[#2e2e2e]/30 flex items-center justify-center flex-shrink-0`}>
-                          <div className={`h-2.5 w-2.5 rounded-full ${isVegMenuItem(selectedItem, restaurant) ? "bg-green-600" : "bg-red-600"}`} />
+                        <div className={`h-5 w-5 rounded border-2 ${isVegMenuItem(selectedItem, restaurant) ? "border-[#15803D] bg-green-50" : "border-red-600 bg-red-50"} dark:border-gray-600 dark:bg-[#2e2e2e]/30 flex items-center justify-center flex-shrink-0`}>
+                          <div className={`h-2.5 w-2.5 rounded-full ${isVegMenuItem(selectedItem, restaurant) ? "bg-[#15803D]" : "bg-red-600"}`} />
                         </div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                           {selectedItem.name}

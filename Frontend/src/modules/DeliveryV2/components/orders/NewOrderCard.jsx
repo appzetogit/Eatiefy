@@ -15,6 +15,7 @@ import {
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { computePickupMetrics, formatPickupRouteSummary } from '@/modules/DeliveryV2/utils/pickupMetrics';
+import OrderNoteBanner from '@/modules/DeliveryV2/components/orders/OrderNoteBanner';
 import { getEatiefyIncentiveBreakdown, formatEatiefyIncentiveLine } from '@/modules/DeliveryV2/utils/earningBreakdown';
 import { formatOrderAddress } from '@food/utils/orderAddress';
 import { toast } from 'sonner';
@@ -296,6 +297,8 @@ export default function NewOrderCard({
               </div>
             </div>
           </div>
+
+          <OrderNoteBanner order={order} />
 
           <div className="grid grid-cols-2 gap-2">
             <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2">

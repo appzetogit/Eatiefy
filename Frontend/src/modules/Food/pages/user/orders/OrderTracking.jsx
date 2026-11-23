@@ -3125,7 +3125,7 @@ export default function OrderTracking() {
         </div>
 
         {/* Desktop Scrollable Content */}
-        <div className="overflow-y-auto px-6 py-5 space-y-4.5 flex-1 overscroll-contain">
+        <div className="overflow-y-auto px-6 py-5 space-y-4.5 flex-1 min-h-0 overscroll-contain">
           {/* Main Status Hero */}
           <div className="bg-gradient-to-br from-orange-50 via-white to-amber-50/40 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-850 rounded-3xl p-5 shadow-xs border border-orange-100/70 dark:border-zinc-800 relative overflow-hidden">
             <div className="flex items-start justify-between">
@@ -3431,7 +3431,7 @@ export default function OrderTracking() {
                 from: location.pathname,
                 backTo: location.pathname
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-[#EB590E] transition-colors"
+              className="relative z-10 inline-flex items-center gap-1.5 px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-[#EB590E] transition-colors touch-manipulation"
             >
               <HelpCircle className="w-3.5 h-3.5" />
               <span>Need help with this order? Contact Support</span>
@@ -3554,7 +3554,7 @@ export default function OrderTracking() {
         )}
 
         {/* Mobile Scrollable Area (Rendered when half or expanded) */}
-        <div className={`overflow-y-auto px-4 sm:px-6 py-4 space-y-4 flex-1 overscroll-contain pb-12 ${sheetMode === 'compact' ? 'hidden' : 'block'}`}>
+        <div className={`overflow-y-auto px-4 sm:px-6 py-4 space-y-4 flex-1 min-h-0 overscroll-contain pb-[calc(4rem+env(safe-area-inset-bottom))] ${sheetMode === 'compact' ? 'hidden' : 'block'}`}>
           {/* Main Status Hero */}
           <div className="bg-gradient-to-br from-orange-50 via-white to-amber-50/40 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-850 rounded-3xl p-5 shadow-xs border border-orange-100/70 dark:border-zinc-800 relative overflow-hidden">
             <div className="flex items-start justify-between">
@@ -3860,7 +3860,7 @@ export default function OrderTracking() {
                 from: location.pathname,
                 backTo: location.pathname
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-[#EB590E] transition-colors"
+              className="relative z-10 inline-flex items-center gap-1.5 px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-[#EB590E] transition-colors touch-manipulation"
             >
               <HelpCircle className="w-3.5 h-3.5" />
               <span>Need help with this order? Contact Support</span>

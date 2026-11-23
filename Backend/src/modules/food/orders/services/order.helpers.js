@@ -566,7 +566,11 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     customerPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
     userName: order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "",
     userPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
-    note: order?.note || "",
+    // The customer's note for the restaurant must reach the rider on every screen.
+    // It lives in restaurantNote (and note on orders created before the two were
+    // kept in sync), so send both with the same value.
+    restaurantNote: order?.restaurantNote || order?.note || "",
+    note: order?.restaurantNote || order?.note || "",
     riderEarning: order?.riderEarning || 0,
     // Never fall back to customer deliveryFee — that is not rider payout
     earnings: Number(order?.riderEarning || 0) || 0,
