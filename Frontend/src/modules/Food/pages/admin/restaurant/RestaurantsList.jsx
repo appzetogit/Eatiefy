@@ -1572,12 +1572,6 @@ export default function RestaurantsList() {
                                 />
                               </div>
                               <div className="flex flex-col">
-                                <span
-                                  className="text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
-                                  onClick={() => handleViewDetails(restaurant)}
-                                >
-                                  {restaurant.name}
-                                </span>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span
                                     className="text-sm font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors"
@@ -2008,7 +2002,6 @@ export default function RestaurantsList() {
                           <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">
                             {r?.restaurantName || r?.name || "N/A"}
                           </h3>
-                          <div className="flex items-center justify-center md:justify-start gap-2">
                             <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
                               {detailsApprovalStatus === "banned" ? (
                                 <span className="px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700">
@@ -2148,8 +2141,6 @@ export default function RestaurantsList() {
                         </div>
                       </div>
 
-                      {/* Timings */}
-                      <div className="grid grid-cols-1 gap-6">
                         {/* Diet, Category & Timings */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
