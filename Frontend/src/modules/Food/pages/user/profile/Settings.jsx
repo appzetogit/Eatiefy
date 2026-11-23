@@ -1,11 +1,9 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Trash2, AlertTriangle, User, BellRing, Loader2 } from "lucide-react";
+import { ArrowLeft, Trash2, AlertTriangle, User } from "lucide-react";
 import { Button } from "@food/components/ui/button";
-import { authAPI, userAPI } from "@food/api";
-import { enableWebPushFromUserGesture, getWebPushPromptState } from "@food/utils/firebaseMessaging";
-import { isFlutterBridgeAvailable } from "@food/utils/imageUploadUtils";
+import { authAPI } from "@food/api";
 import { clearModuleAuth } from "@food/utils/auth";
 import { toast } from "sonner";
 import { showAccountDeletedToast } from "@/shared/utils/customToasts";
@@ -16,94 +14,6 @@ export default function Settings() {
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [deleteCaptcha, setDeleteCaptcha] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isSendingTestPush, setIsSendingTestPush] = useState(false);
-
-  // Sends a real push to this account's registered device(s) through the same
-  // pipeline order / support notifications use.
-  const handleSendTestPush = async () => {
-    if (isSendingTestPush) return;
-    setIsSendingTestPush(true);
-    try {
-      const inApp = isFlutterBridgeAvailable();
-      if (!inApp) {
-        // Say the real reason instead of a generic "not granted".
-        const state = getWebPushPromptState();
-        if (state === "ios-needs-install") {
-          toast.error(
-            "On iPhone, web push only works from the Home Screen app. Tap Share -> Add to Home Screen, open Eatiefy from there and try again.",
-            { duration: 8000 },
-          );
-          return;
-        }
-        if (state === "unsupported") {
-          toast.error(
-            "This browser can't receive web push (needs HTTPS or localhost, service worker and Push support). If you are testing in DevTools phone mode, switch the device to an Android phone or use normal desktop mode.",
-            { duration: 8000 },
-          );
-          return;
-        }
-        if (state === "denied") {
-          toast.error("Notifications are blocked. Allow them in the browser's site settings, then try again.", { duration: 6000 });
-          return;
-        }
-        // Registers this browser for push (asks permission on first use).
-        const result = await enableWebPushFromUserGesture("user");
-        if (result === "unsupported") {
-          toast.error("This browser can't receive web push notifications.");
-          return;
-        }
-        if (result !== "granted") {
-          toast.error("You dismissed or declined the notification prompt. Click the lock icon next to the address bar, set Notifications to Allow, and try again.", { duration: 7000 });
-          return;
-        }
-      }
-      if (!inApp) {
-        // A visible tab only gets an in-app banner; the OS notification appears
-        // when the tab is in the background. Give time to switch away.
-        toast.info("Sending in 5 seconds - switch to another tab or minimise the browser NOW to see the system notification.", { duration: 5500 });
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-      }
-
-      // Start listening before sending, so a fast push is not missed.
-      let received = false;
-      const onReceived = (event) => {
-        if (String(event?.detail?.data?.type || "") === "test") received = true;
-      };
-      window.addEventListener("eatiefy-push-received", onReceived);
-      let body = {};
-      try {
-        const response = await userAPI.testFcmNotification({ platform: inApp ? "mobile" : "web" });
-        body = response?.data || {};
-        if (body.success === false) {
-          toast.error(body.message || "No push device is registered for this account.", { duration: 9000 });
-          return;
-        }
-        if (!inApp) {
-          for (let i = 0; i < 20 && !received; i += 1) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
-      } finally {
-        window.removeEventListener("eatiefy-push-received", onReceived);
-      }
-
-      if (inApp || received) {
-        toast.success(`${body.message || "Test notification sent."} ${received ? "This browser received it." : ""}`.trim(), { duration: 6000 });
-      } else {
-        toast.error(
-          "Firebase accepted the push but THIS browser did not receive it. Check: (1) chrome://settings/content/notifications - localhost:5180 must be Allow, (2) Windows Settings > System > Notifications - Chrome on and Focus assist/Do not disturb off, (3) DevTools > Application > Service Workers - firebase-messaging-sw.js should be 'activated and running'. Then send again.",
-          { duration: 15000 },
-        );
-      }
-    } catch (error) {
-      toast.error(
-        error?.response?.data?.message ||
-          "Could not send the test notification. Make sure notifications are enabled for this device.",
-      );
-    } finally {
-      setIsSendingTestPush(false);
-    }
-  };
 
   const handleDeleteAccount = async () => {
     if (isDeleting || deleteCaptcha !== "DELETE") return;
@@ -168,30 +78,6 @@ export default function Settings() {
               </div>
             </div>
           </Link>
-
-          {/* Test push notification */}
-          <button
-            type="button"
-            onClick={handleSendTestPush}
-            disabled={isSendingTestPush}
-            className="block w-full text-left group border-b border-gray-200/80 dark:border-gray-800/80 py-4 disabled:opacity-60"
-          >
-            <div className="flex items-center gap-3 transition-all duration-150">
-              {isSendingTestPush ? (
-                <Loader2 className="h-5 w-5 animate-spin text-gray-500 dark:text-gray-400" />
-              ) : (
-                <BellRing className="h-5 w-5 text-gray-500 dark:text-gray-400 group-hover:text-red-500 transition-colors" />
-              )}
-              <div className="flex-1 min-w-0">
-                <h3 className="text-[17px] font-semibold text-gray-900 dark:text-white group-hover:text-red-500 transition-colors">
-                  Send test notification
-                </h3>
-                <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                  Check that push notifications reach this device
-                </p>
-              </div>
-            </div>
-          </button>
 
           {/* Delete Account */}
           <div 
