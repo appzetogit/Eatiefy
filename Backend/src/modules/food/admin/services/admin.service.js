@@ -4775,15 +4775,28 @@ export async function createRestaurantByAdmin(body) {
     const normalizedClosingTime = normalizeRestaurantTime(body.closingTime) || '';
     validateOpeningClosingTimes(normalizedOpeningTime, normalizedClosingTime);
 
+    let foodType = 'Mixed';
+    let pureVegRestaurant = false;
+    if (body.foodType !== undefined) {
+        const ft = String(body.foodType).trim();
+        if (!['Veg', 'Non-Veg', 'Mixed'].includes(ft)) {
+            throw new ValidationError('foodType must be Veg, Non-Veg, or Mixed');
+        }
+        foodType = ft;
+        pureVegRestaurant = ft === 'Veg';
+    } else if (body.pureVegRestaurant !== undefined) {
+        pureVegRestaurant = parseBooleanLike(body.pureVegRestaurant, 'pureVegRestaurant');
+        foodType = pureVegRestaurant ? 'Veg' : 'Mixed';
+    }
+
     const doc = {
         restaurantName: toStr(body.restaurantName) || toStr(body.name),
         ownerName: toStr(body.ownerName),
         ownerEmail: toStr(body.ownerEmail),
         ownerPhone: toStr(body.ownerPhone),
         primaryContactNumber: toStr(body.primaryContactNumber) || toStr(body.ownerPhone),
-        pureVegRestaurant: body.pureVegRestaurant !== undefined
-            ? parseBooleanLike(body.pureVegRestaurant, 'pureVegRestaurant')
-            : false,
+        foodType,
+        pureVegRestaurant,
         // DISABLED: "Pure Vegan" cannot be set on create any more.
         pureVeganRestaurant: body.pureVeganRestaurant !== undefined
             ? (parseBooleanLike(body.pureVeganRestaurant, 'pureVeganRestaurant') && false)
@@ -6306,16 +6319,15 @@ export async function getRestaurantEarnings(query = {}) {
         filter.restaurantId = { $in: existingRestaurantIds };
     }
 
-    // Zone filter
+    // Zone filter - strictly scope to restaurants located in this zone
     if (query.zoneId && query.zoneId !== 'all') {
         const zoneOid = parseZoneFilter(query.zoneId);
         if (zoneOid) {
             const restaurantIds = await getRestaurantIdsInZone(zoneOid);
-            const zoneOr = [{ zoneId: zoneOid }];
-            if (restaurantIds.length > 0) {
-                zoneOr.push({ restaurantId: { $in: restaurantIds } });
-            }
-            filter.$and = [...(Array.isArray(filter.$and) ? filter.$and : []), { $or: zoneOr }];
+            filter.$and = [
+                ...(Array.isArray(filter.$and) ? filter.$and : []),
+                { restaurantId: { $in: restaurantIds } }
+            ];
         }
     }
 
@@ -6410,8 +6422,8 @@ export async function getRestaurantEarnings(query = {}) {
         const packagingFee = Number(pricing.packagingFee ?? 0) || 0;
         const commission = Number(pricing.restaurantCommission ?? 0) || 0;
         const amount = Math.max(0, Math.round((baseSubtotal + packagingFee - commission) * 100) / 100);
-        const zoneName = order?.zoneId?.name || order?.zoneId?.zoneName || restaurant?.zoneId?.name || restaurant?.zoneId?.zoneName || 'N/A';
-        const zoneId = order?.zoneId?._id || restaurant?.zoneId?._id || null;
+        const zoneName = restaurant?.zoneId?.name || restaurant?.zoneId?.zoneName || order?.zoneId?.name || order?.zoneId?.zoneName || 'N/A';
+        const zoneId = restaurant?.zoneId?._id || order?.zoneId?._id || null;
         const restaurantPhone = restaurant?.phone || restaurant?.ownerPhone || restaurant?.primaryContactNumber || 'N/A';
 
         return {

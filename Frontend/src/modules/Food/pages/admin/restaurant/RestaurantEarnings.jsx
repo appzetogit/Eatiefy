@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { Search, Download, ChevronDown, Store, IndianRupee, FileText, Loader2, MapPin, Building2 } from "lucide-react"
+import { Search, Download, ChevronDown, Store, IndianRupee, FileText, FileSpreadsheet, Loader2, MapPin, Building2 } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { toast } from "sonner"
@@ -158,14 +158,19 @@ export default function RestaurantEarnings() {
       return
     }
 
+    const formatMoney = (val) => {
+      const num = Number(val)
+      return Number.isFinite(num) ? num.toFixed(2) : "0.00"
+    }
+
     const headers = [
       { key: "sl", label: "SI" },
       { key: "restaurantName", label: "Restaurant" },
       { key: "zoneName", label: "Zone" },
       { key: "restaurantPhone", label: "Phone" },
       { key: "orderId", label: "Order ID" },
-      { key: "amount", label: "Earning" },
-      { key: "orderTotal", label: "Order Total" },
+      { key: "amount", label: "Earning (INR)" },
+      { key: "orderTotal", label: "Order Total (INR)" },
       { key: "orderStatus", label: "Status" },
       { key: "createdAt", label: "Date" },
     ]
@@ -176,8 +181,8 @@ export default function RestaurantEarnings() {
       zoneName: item.zoneName || 'N/A',
       restaurantPhone: item.restaurantPhone || 'N/A',
       orderId: item.orderId || 'N/A',
-      amount: formatCurrency(item.amount),
-      orderTotal: formatCurrency(item.orderTotal),
+      amount: formatMoney(item.amount),
+      orderTotal: formatMoney(item.orderTotal),
       orderStatus: item.orderStatus || 'N/A',
       createdAt: formatDate(item.createdAt)
     }))
@@ -186,9 +191,9 @@ export default function RestaurantEarnings() {
       case "csv": {
         const csvContent = [
           headers.map(h => h.label).join(","),
-          ...data.map(row => headers.map(h => `"${row[h.key] || ''}"`).join(","))
+          ...data.map(row => headers.map(h => `"${String(row[h.key] || '').replace(/"/g, '""')}"`).join(","))
         ].join("\n")
-        const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const csvBlob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" })
         const csvLink = document.createElement("a")
         csvLink.href = URL.createObjectURL(csvBlob)
         csvLink.download = `restaurant_earnings_${new Date().toISOString().split('T')[0]}.csv`
@@ -196,9 +201,29 @@ export default function RestaurantEarnings() {
         toast.success("CSV exported successfully")
         break
       }
+      case "excel": {
+        const escapeHtml = (str) => String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        const htmlContent = `<html><head><meta charset="utf-8">
+<style>
+  table { border-collapse: collapse; font-family: sans-serif; }
+  th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+  th { background-color: #f1f5f9; font-weight: bold; }
+</style></head><body>
+<table>
+<thead><tr>${headers.map(h => `<th>${escapeHtml(h.label)}</th>`).join("")}</tr></thead>
+<tbody>${data.map(row => `<tr>${headers.map(h => `<td>${escapeHtml(row[h.key])}</td>`).join("")}</tr>`).join("")}</tbody>
+</table></body></html>`
+        const excelBlob = new Blob([htmlContent], { type: "application/vnd.ms-excel;charset=utf-8" })
+        const excelLink = document.createElement("a")
+        excelLink.href = URL.createObjectURL(excelBlob)
+        excelLink.download = `restaurant_earnings_${new Date().toISOString().split('T')[0]}.xls`
+        excelLink.click()
+        toast.success("Excel exported successfully")
+        break
+      }
       case "json": {
         const jsonContent = JSON.stringify(data, null, 2)
-        const jsonBlob = new Blob([jsonContent], { type: "application/json" })
+        const jsonBlob = new Blob([jsonContent], { type: "application/json;charset=utf-8" })
         const jsonLink = document.createElement("a")
         jsonLink.href = URL.createObjectURL(jsonBlob)
         jsonLink.download = `restaurant_earnings_${new Date().toISOString().split('T')[0]}.json`
@@ -391,6 +416,10 @@ export default function RestaurantEarnings() {
                 <DropdownMenuItem onClick={() => handleExport("csv")}>
                   <FileText className="w-4 h-4 mr-2" />
                   Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("excel")}>
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Export as Excel
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleExport("json")}>
                   <FileText className="w-4 h-4 mr-2" />
