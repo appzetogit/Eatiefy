@@ -68,8 +68,10 @@ export default function RestaurantStatus() {
         const data = response?.data?.data?.restaurant || response?.data?.restaurant
         if (data) {
           setRestaurantData(data)
-          if (data.takeawaySettings) {
-            setTakeawayStatus(data.takeawaySettings.isEnabled)
+          if (data.takeawaySettings?.isEnabled !== undefined) {
+            setTakeawayStatus(Boolean(data.takeawaySettings.isEnabled))
+          } else if (data.isTakeawayEnabled !== undefined) {
+            setTakeawayStatus(Boolean(data.isTakeawayEnabled))
           }
         }
       } catch (error) {
@@ -164,8 +166,10 @@ export default function RestaurantStatus() {
           } else {
             setDeliveryStatus(false)
           }
-          if (restaurant.takeawaySettings) {
-            setTakeawayStatus(restaurant.takeawaySettings.isEnabled)
+          if (restaurant.takeawaySettings?.isEnabled !== undefined) {
+            setTakeawayStatus(Boolean(restaurant.takeawaySettings.isEnabled))
+          } else if (restaurant.isTakeawayEnabled !== undefined) {
+            setTakeawayStatus(Boolean(restaurant.isTakeawayEnabled))
           }
         }
       } catch (error) {

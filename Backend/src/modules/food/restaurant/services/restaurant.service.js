@@ -280,6 +280,7 @@ const toRestaurantProfile = (doc) => {
             // Lets the user app offer "Pay at Pickup" for this restaurant.
             payAtPickupEnabled: doc.takeawaySettings?.payAtPickupEnabled === true
         },
+        isTakeawayEnabled: doc.takeawaySettings?.isEnabled === true,
         isAcceptingOrders: doc.isAcceptingOrders !== false,
         status: doc.status || null,
         rejectionReason: doc.rejectionReason || null,
@@ -1051,14 +1052,23 @@ export const updateCurrentRestaurantTakeawaySettings = async (restaurantId, body
         return Boolean(fallback);
     };
 
+    const rawEnabled = body.isEnabled !== undefined ? body.isEnabled : body.isTakeawayEnabled;
+    const nextIsEnabled = parseBoolean(rawEnabled, currentTakeawaySettings.isEnabled);
+
+    const updateSet = {
+        'takeawaySettings.isEnabled': nextIsEnabled
+    };
+    if (body.payAtPickupEnabled !== undefined) {
+        updateSet['takeawaySettings.payAtPickupEnabled'] = parseBoolean(
+            body.payAtPickupEnabled,
+            currentTakeawaySettings.payAtPickupEnabled
+        );
+    }
+
     const doc = await FoodRestaurant.findByIdAndUpdate(
         restaurantId,
         {
-            $set: {
-                takeawaySettings: {
-                    isEnabled: parseBoolean(body.isEnabled, currentTakeawaySettings.isEnabled)
-                }
-            }
+            $set: updateSet
         },
         {
             new: true,

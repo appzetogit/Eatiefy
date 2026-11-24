@@ -106,12 +106,21 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
     }
     applyZoneVisibilityFilter(filter.$and, zoneIdRaw);
 
-    if (compact) {
-        if (context.foodType === 'Veg') {
-            filter.$and.push({ foodTypeScope: 'Veg' });
-        } else if (context.foodType === 'Non-Veg') {
-            filter.$and.push({ foodTypeScope: 'Non-Veg' });
+    const requestedScope = typeof query.foodTypeScope === 'string' ? query.foodTypeScope.trim() : '';
+    if (requestedScope && ['Veg', 'Non-Veg', 'Both'].includes(requestedScope)) {
+        if ((context.foodType === 'Veg' || context.pureVegRestaurant) && (requestedScope === 'Non-Veg' || requestedScope.toLowerCase() === 'non-veg')) {
+            filter.$and.push({ _id: null });
+        } else if (context.foodType === 'Non-Veg' && requestedScope === 'Veg') {
+            filter.$and.push({ _id: null });
+        } else {
+            filter.$and.push({ foodTypeScope: requestedScope });
         }
+    } else if (context.foodType === 'Veg' || context.pureVegRestaurant) {
+        // Pure veg restaurants must never see non-veg categories
+        filter.$and.push({ foodTypeScope: { $nin: ['Non-Veg', 'non-veg'] } });
+    } else if (context.foodType === 'Non-Veg') {
+        // Non-veg exclusive restaurants must never see pure veg categories
+        filter.$and.push({ foodTypeScope: { $nin: ['Veg', 'veg'] } });
     }
 
     const queryBuilder = FoodCategory.find(filter)

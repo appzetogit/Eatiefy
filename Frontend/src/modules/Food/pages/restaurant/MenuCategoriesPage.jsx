@@ -116,10 +116,19 @@ export default function MenuCategoriesPage() {
   // just not editable.
   const ownCategories = useMemo(
     () =>
-      (Array.isArray(categories) ? categories : []).filter(
-        (category) => category && typeof category === "object" && (category.ownedByRestaurant || category.isGlobal),
-      ),
-    [categories],
+      (Array.isArray(categories) ? categories : []).filter((category) => {
+        if (!category || typeof category !== "object") return false
+        if (!category.ownedByRestaurant && !category.isGlobal) return false
+        const scope = String(category.foodTypeScope || "").trim().toLowerCase()
+        if (isPureVegRestaurant && (scope === "non-veg" || scope === "nonveg" || scope === "non veg")) {
+          return false
+        }
+        if (restaurantFoodType === "Non-Veg" && (scope === "veg" || scope === "pure-veg" || scope === "pure veg")) {
+          return false
+        }
+        return true
+      }),
+    [categories, isPureVegRestaurant, restaurantFoodType],
   )
 
   /**
