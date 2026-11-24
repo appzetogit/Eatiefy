@@ -6,6 +6,7 @@ import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ const TABS = [
 ]
 
 export default function DeliveryWithdrawal() {
+  const { canEdit } = useAdminPermissions()
   const [activeTab, setActiveTab] = useState("All")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -45,6 +47,8 @@ export default function DeliveryWithdrawal() {
   const [processingAction, setProcessingAction] = useState(null)
   const [rejectionReason, setRejectionReason] = useState("")
   const [showRejectModal, setShowRejectModal] = useState(false)
+  const [approveTarget, setApproveTarget] = useState(null)
+  const [transactionId, setTransactionId] = useState("")
   // Zone picked in the header: only withdrawals of riders in that zone.
   const { zones, zonesLoading, zoneId, setZoneId } = useAdminZoneFilter()
 
@@ -107,13 +111,35 @@ export default function DeliveryWithdrawal() {
     setIsViewOpen(true)
   }
 
-  const handleApprove = async (id) => {
-    if (!confirm("Are you sure you want to approve this withdrawal request?")) return
+  const openApproveDialog = (req) => {
+    setApproveTarget(req)
+    setTransactionId("")
+  }
+
+  const closeApproveDialog = () => {
+    setApproveTarget(null)
+    setTransactionId("")
+  }
+
+  // Approval needs the bank/UPI reference of the payout just made; it is stored with the
+  // withdrawal so a later dispute can be settled against it.
+  const handleApprove = async () => {
+    const id = approveTarget?.id
+    const txnId = transactionId.trim()
+    if (!id) return
+    if (txnId.length < 4) {
+      toast.error("Enter the transaction ID of the payout (at least 4 characters)")
+      return
+    }
     try {
       setProcessingAction(id)
-      const response = await adminAPI.updateDeliveryWithdrawalStatus(id, { status: "Approved" })
+      const response = await adminAPI.updateDeliveryWithdrawalStatus(id, {
+        status: "Approved",
+        transactionId: txnId,
+      })
       if (response?.data?.success) {
         toast.success("Withdrawal request approved successfully")
+        closeApproveDialog()
         refreshSidebarBadges("deliveryWithdrawals")
         fetchRequests()
       }
@@ -286,10 +312,10 @@ export default function DeliveryWithdrawal() {
                             >
                               <Eye className="w-4 h-4 text-amber-600" />
                             </button>
-                            {req.status === "Pending" && (
+                            {req.status === "Pending" && canEdit && (
                               <>
                                 <button
-                                  onClick={() => handleApprove(req.id)}
+                                  onClick={() => openApproveDialog(req)}
                                   disabled={processingAction === req.id}
                                   className="p-2 rounded-lg bg-green-50 hover:bg-green-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Approve"
@@ -427,6 +453,12 @@ export default function DeliveryWithdrawal() {
                     </span>
                   </p>
                 </div>
+                {selectedRequest.transactionId && (
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase">Transaction ID</label>
+                    <p className="text-sm font-medium text-slate-900 mt-1 font-mono break-all">{selectedRequest.transactionId}</p>
+                  </div>
+                )}
                 {selectedRequest.rejectionReason && (
                   <div>
                     <label className="text-xs font-semibold text-slate-500 uppercase">Rejection reason</label>
@@ -441,6 +473,52 @@ export default function DeliveryWithdrawal() {
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-all"
               >
                 Close
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Approve modal: asks for the payout's transaction ID */}
+        <Dialog open={Boolean(approveTarget)} onOpenChange={(open) => { if (!open) closeApproveDialog() }}>
+          <DialogContent className="max-w-md bg-white p-0">
+            <DialogHeader className="px-6 pt-6 pb-4">
+              <DialogTitle>Approve withdrawal request</DialogTitle>
+            </DialogHeader>
+            <div className="px-6 pb-6 space-y-4">
+              <p className="text-sm text-slate-600">
+                {approveTarget?.deliveryName || "Delivery partner"} · {approveTarget ? formatCurrency(approveTarget.amount) : ""}
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Transaction ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={transactionId}
+                  onChange={(e) => setTransactionId(e.target.value)}
+                  placeholder="Bank / UPI reference of the payout"
+                  maxLength={64}
+                  autoFocus
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none font-mono"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Saved with this withdrawal as proof of payment. It can't be changed later.
+                </p>
+              </div>
+            </div>
+            <DialogFooter className="px-6 pb-6 flex gap-2">
+              <button
+                onClick={closeApproveDialog}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApprove}
+                disabled={processingAction === approveTarget?.id || transactionId.trim().length < 4}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {processingAction === approveTarget?.id ? "Approving…" : "Approve"}
               </button>
             </DialogFooter>
           </DialogContent>

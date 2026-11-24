@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminZoneFilter, getZoneId, getZoneLabel } from "@food/hooks/useAdminZoneFilter"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -28,8 +29,11 @@ export default function EarningAddon() {
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedAddon, setSelectedAddon] = useState(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  // Zones for the offer's "Zone" field (the list itself is not zone-filtered here).
+  const { zones, zonesLoading } = useAdminZoneFilter()
   const [visibleColumns, setVisibleColumns] = useState({
     title: true,
+    zone: true,
     requiredOrders: true,
     earningAmount: true,
     startDate: true,
@@ -41,6 +45,7 @@ export default function EarningAddon() {
 
   // Form state
   const [formData, setFormData] = useState({
+    zoneId: "",
     title: "",
     requiredOrders: "",
     earningAmount: "",
@@ -95,6 +100,7 @@ export default function EarningAddon() {
       setSelectedAddon(addon)
       setIsEditMode(true)
       setFormData({
+        zoneId: addon.zoneId ? String(addon.zoneId) : "",
         title: addon.title || "",
         requiredOrders: addon.requiredOrders?.toString() || "",
         earningAmount: addon.earningAmount?.toString() || "",
@@ -106,6 +112,7 @@ export default function EarningAddon() {
       setSelectedAddon(null)
       setIsEditMode(false)
       setFormData({
+        zoneId: "",
         title: "",
         requiredOrders: "",
         earningAmount: "",
@@ -122,6 +129,7 @@ export default function EarningAddon() {
     setSelectedAddon(null)
     setIsEditMode(false)
     setFormData({
+      zoneId: "",
       title: "",
       requiredOrders: "",
       earningAmount: "",
@@ -165,6 +173,8 @@ export default function EarningAddon() {
 
     try {
       const payload = {
+        // null = the offer applies to every zone
+        zoneId: formData.zoneId || null,
         title: formData.title.trim(),
         requiredOrders: parseInt(formData.requiredOrders),
         earningAmount: parseFloat(formData.earningAmount),
@@ -251,6 +261,7 @@ export default function EarningAddon() {
   const resetColumns = () => {
     setVisibleColumns({
       title: true,
+      zone: true,
       requiredOrders: true,
       earningAmount: true,
       startDate: true,
@@ -263,6 +274,7 @@ export default function EarningAddon() {
 
   const columnsConfig = {
     title: "Title",
+    zone: "Zone",
     requiredOrders: "Required Orders",
     earningAmount: "Earning Amount",
     startDate: "Start Date",
@@ -344,6 +356,13 @@ export default function EarningAddon() {
                         </div>
                       </th>
                     )}
+                    {visibleColumns.zone && (
+                      <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+                        <div className="flex items-center gap-2">
+                          <span>Zone</span>
+                        </div>
+                      </th>
+                    )}
                     {visibleColumns.requiredOrders && (
                       <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">
                         <div className="flex items-center gap-2">
@@ -396,7 +415,7 @@ export default function EarningAddon() {
                 <tbody className="bg-white divide-y divide-slate-100">
                   {earningAddons.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
                         No earning addons found. Create your first offer!
                       </td>
                     </tr>
@@ -411,6 +430,11 @@ export default function EarningAddon() {
                                 <p className="text-xs text-slate-500 mt-1">{addon.description}</p>
                               )}
                             </div>
+                          </td>
+                        )}
+                        {visibleColumns.zone && (
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-slate-700">{addon.zoneName || "All zones"}</span>
                           </td>
                         )}
                         {visibleColumns.requiredOrders && (
@@ -524,6 +548,29 @@ export default function EarningAddon() {
             </DialogHeader>
           </div>
           <form onSubmit={handleSubmit} className="px-5 py-5 space-y-4">
+            {/* Zone Field */}
+            <div className="space-y-1.5">
+              <label className="block text-sm font-semibold text-slate-700">Zone</label>
+              <select
+                value={formData.zoneId}
+                onChange={(e) => setFormData({ ...formData, zoneId: e.target.value })}
+                disabled={zonesLoading && zones.length === 0}
+                className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all text-sm disabled:opacity-60"
+              >
+                <option value="">{zonesLoading && zones.length === 0 ? "Loading zones..." : "All zones"}</option>
+                {zones.map((zone) => {
+                  const id = getZoneId(zone)
+                  return (
+                    <option key={id} value={id}>
+                      {getZoneLabel(zone)}
+                      {zone?.isActive === false ? " (Inactive)" : ""}
+                    </option>
+                  )
+                })}
+              </select>
+              <p className="text-xs text-slate-500">Only delivery partners of the chosen zone can earn this offer. "All zones" applies to everyone.</p>
+            </div>
+
             {/* Title Field */}
             <div className="space-y-1.5">
               <label className="block text-sm font-semibold text-slate-700">
@@ -535,7 +582,7 @@ export default function EarningAddon() {
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="w-full px-3 py-2.5 border-2 border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all text-sm"
-                placeholder="e.g., Complete 50 orders and earn \u20B9500"
+                placeholder={"e.g., Complete 50 orders and earn ₹500"}
               />
             </div>
 

@@ -23,6 +23,44 @@ export const ProfileDocsV2 = () => {
   const [uploadField, setUploadField] = useState(null)
   const fileInputRef = useRef(null);
 
+  const viewerHistoryPushedRef = useRef(false);
+  const isClosingViaHistoryBackRef = useRef(false);
+
+  useEffect(() => {
+    if (showViewer) {
+      if (!viewerHistoryPushedRef.current) {
+        window.history.pushState({ docViewerOpen: true }, "");
+        viewerHistoryPushedRef.current = true;
+      }
+
+      const handlePopState = () => {
+        if (isClosingViaHistoryBackRef.current) {
+          isClosingViaHistoryBackRef.current = false;
+          viewerHistoryPushedRef.current = false;
+          return;
+        }
+        viewerHistoryPushedRef.current = false;
+        setShowViewer(null);
+      };
+
+      window.addEventListener("popstate", handlePopState);
+      return () => {
+        window.removeEventListener("popstate", handlePopState);
+      };
+    } else {
+      viewerHistoryPushedRef.current = false;
+    }
+  }, [showViewer]);
+
+  const closeViewer = () => {
+    setShowViewer(null);
+    if (viewerHistoryPushedRef.current) {
+      isClosingViaHistoryBackRef.current = true;
+      viewerHistoryPushedRef.current = false;
+      window.history.back();
+    }
+  };
+
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -196,11 +234,16 @@ export const ProfileDocsV2 = () => {
        <AnimatePresence>
           {showViewer && (
              <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowViewer(null)} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeViewer} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
                 <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="relative w-full max-w-lg bg-white rounded-3xl overflow-hidden shadow-2xl">
                    <div className="flex items-center justify-between p-6 border-b border-gray-100">
-                      <h3 className="text-lg font-black text-gray-950 uppercase tracking-widest">{showViewer.title}</h3>
-                      <button onClick={() => setShowViewer(null)} className="p-3 bg-gray-50 rounded-full text-gray-400"><X className="w-6 h-6" /></button>
+                      <div className="flex items-center gap-3">
+                         <button onClick={closeViewer} className="p-2 rounded-xl text-gray-700 hover:bg-gray-100 active:scale-95 transition-all" aria-label="Back">
+                            <ArrowLeft className="w-5 h-5" />
+                         </button>
+                         <h3 className="text-lg font-black text-gray-950 uppercase tracking-widest">{showViewer.title}</h3>
+                      </div>
+                      <button onClick={closeViewer} className="p-3 bg-gray-50 rounded-full text-gray-400" aria-label="Close"><X className="w-6 h-6" /></button>
                    </div>
                    <div className="p-2">
                       <img src={showViewer.url} className="w-full h-full object-contain rounded-2xl max-h-[70vh]" alt="Identity Doc" />

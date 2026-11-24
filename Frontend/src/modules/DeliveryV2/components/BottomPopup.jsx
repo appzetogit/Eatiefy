@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { X, ChevronDown } from "lucide-react"
+import { X, ChevronDown, ArrowLeft } from "lucide-react"
 import { useKeyboardAwareSheet } from "@food/hooks/useIsKeyboardOpen"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -36,7 +36,9 @@ export default function BottomPopup({
   collapsedContent = null, // Content to show when collapsed (e.g., Reached pickup button)
   showBackdrop = true, // Show backdrop overlay
   backdropBlocksInteraction = true, // Whether backdrop blocks pointer events
-  closeOnHandleClick = false // Close instead of collapse when handle is clicked
+  closeOnHandleClick = false, // Close instead of collapse when handle is clicked
+  showBackButton = false,
+  onBack = null
 }) {
   const popupRef = useRef(null)
   const handleRef = useRef(null)
@@ -70,6 +72,10 @@ export default function BottomPopup({
       e.stopPropagation()
       e.preventDefault()
     }
+    if (!collapsedContent) {
+      handleClose()
+      return
+    }
     setIsCollapsed(prev => {
       const newState = !prev
       debugLog('?? Collapse toggle:', prev, '->', newState)
@@ -83,21 +89,14 @@ export default function BottomPopup({
     const target = e.target
     const isHandle = handleRef.current?.contains(target)
 
-    // If clicking on handle, don't start swipe - handle will toggle collapse
-    if (isHandle) {
-      return
-    }
-
-    // Check if touch is in handle area or top portion of popup
     const rect = popupRef.current?.getBoundingClientRect()
     if (!rect) return
 
     const touchY = e.touches[0].clientY
-    const handleArea = rect.top + 80 // Top 80px is swipeable area
+    const handleArea = rect.top + 90 // Top 90px (handle + header) is swipeable area
 
-    // Allow swipe if touching top area (but not handle)
-    if (touchY <= handleArea) {
-      e.stopPropagation()
+    // Allow swipe if touching handle or top header area
+    if (isHandle || touchY <= handleArea) {
       swipeStartY.current = touchY
       isSwiping.current = true
       setIsDragging(true)
@@ -113,9 +112,7 @@ export default function BottomPopup({
     const deltaY = currentY - swipeStartY.current
 
     // Only allow downward swipe (positive deltaY)
-    // Don't call preventDefault - CSS touch-action: none handles scrolling prevention
     if (deltaY > 0) {
-      // e.preventDefault() // Removed to avoid passive listener error - CSS touch-action handles it
       e.stopPropagation()
       setDragY(deltaY)
     }
@@ -123,12 +120,7 @@ export default function BottomPopup({
 
   // Handle touch end - determine if should close
   const handleTouchEnd = (e) => {
-    if (disableSwipeToClose) {
-      isSwiping.current = false
-      setIsDragging(false)
-      return
-    }
-    if (!isSwiping.current) {
+    if (disableSwipeToClose || !isSwiping.current) {
       isSwiping.current = false
       setIsDragging(false)
       return
@@ -136,11 +128,11 @@ export default function BottomPopup({
 
     e.stopPropagation()
 
-    const deltaY = swipeStartY.current - e.changedTouches[0].clientY
-    const threshold = 100 // Minimum swipe distance to close
+    const movedY = dragY
+    const threshold = 70 // Minimum swipe distance to close (70px)
 
-    // If swiped down enough, close the popup
-    if (deltaY < -threshold) {
+    // If swiped down enough, close the whole popup
+    if (movedY > threshold) {
       handleClose()
     } else {
       // Reset position with animation
@@ -154,27 +146,17 @@ export default function BottomPopup({
 
   // Handle mouse events for desktop drag support
   const handleMouseDown = (e) => {
-    // Don't allow swipe if disabled
     if (disableSwipeToClose) return
 
     const target = e.target
     const isHandle = handleRef.current?.contains(target)
-
-    // If clicking on handle, don't start swipe - handle will toggle collapse
-    if (isHandle) {
-      e.stopPropagation()
-      return
-    }
-
     const rect = popupRef.current?.getBoundingClientRect()
     if (!rect) return
 
     const mouseY = e.clientY
-    const handleArea = rect.top + 80
+    const handleArea = rect.top + 90
 
-    if (mouseY <= handleArea) {
-      e.preventDefault()
-      e.stopPropagation()
+    if (isHandle || mouseY <= handleArea) {
       swipeStartY.current = mouseY
       isSwiping.current = true
       setIsDragging(true)
@@ -182,30 +164,27 @@ export default function BottomPopup({
   }
 
   const handleMouseMove = (e) => {
-    // Don't allow swipe if disabled
     if (disableSwipeToClose || !isSwiping.current || !isOpen) return
 
     const currentY = e.clientY
     const deltaY = currentY - swipeStartY.current
 
     if (deltaY > 0) {
-      // e.preventDefault() // Not needed for mouse events, but keeping for consistency
       setDragY(deltaY)
     }
   }
 
   const handleMouseUp = (e) => {
-    // Don't allow swipe if disabled
     if (disableSwipeToClose || !isSwiping.current) {
       isSwiping.current = false
       setIsDragging(false)
       return
     }
 
-    const deltaY = swipeStartY.current - e.clientY
-    const threshold = 100
+    const movedY = dragY
+    const threshold = 70
 
-    if (deltaY < -threshold) {
+    if (movedY > threshold) {
       handleClose()
     } else {
       setDragY(0)
@@ -321,41 +300,22 @@ export default function BottomPopup({
                 type="button"
                 className="flex flex-col items-center pt-3 pb-2 cursor-pointer select-none bg-white sticky top-0 z-10 w-full border-0 outline-none p-0"
                 onClick={(e) => {
-                  debugLog('??? Handle clicked, current collapsed:', isCollapsed)
                   e.stopPropagation()
                   e.preventDefault()
-                  if (closeOnHandleClick) {
+                  if (closeOnHandleClick || !collapsedContent) {
                     handleClose()
                   } else {
                     handleCollapseToggle(e)
                   }
                 }}
-                onTouchStart={(e) => {
-                  // Store touch start for click detection
-                  e.stopPropagation()
-                }}
-                onTouchEnd={(e) => {
-                  // Handle touch end for mobile collapse toggle
-                  debugLog('?? Handle touched, current collapsed:', isCollapsed)
-                  e.stopPropagation()
-                  e.preventDefault()
-                  handleCollapseToggle(e)
-                }}
-                onMouseDown={(e) => {
-                  // Prevent drag when clicking handle
-                  e.stopPropagation()
-                }}
                 style={{
-                  touchAction: 'manipulation',
+                  touchAction: 'none',
                   WebkitTapHighlightColor: 'transparent',
                   pointerEvents: 'auto',
                   userSelect: 'none',
                   background: 'transparent'
                 }}
               >
-                <ChevronDown
-                  className="w-6 h-6 text-gray-400 mb-1 pointer-events-none"
-                />
                 <div
                   className="w-12 h-1.5 bg-gray-300 rounded-full pointer-events-none"
                 />
@@ -363,13 +323,29 @@ export default function BottomPopup({
             )}
 
             {/* Header */}
-            {(title || showCloseButton) && (
+            {(title || showCloseButton || showBackButton || onBack) && (
               <div className={`flex items-center justify-between px-4 pb-3 border-b border-gray-100 ${!showHandle ? 'pt-5' : ''}`}>
-                {title && (
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {title}
-                  </h3>
-                )}
+                <div className="flex items-center gap-3">
+                  {(showBackButton || onBack) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (onBack) onBack()
+                        else handleClose()
+                      }}
+                      className="p-1.5 -ml-1 rounded-xl text-gray-700 hover:bg-gray-100 active:scale-95 transition-all"
+                      aria-label="Back"
+                    >
+                      <ArrowLeft className="w-5 h-5" />
+                    </button>
+                  )}
+                  {title && (
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {title}
+                    </h3>
+                  )}
+                </div>
                 {showCloseButton && (
                   <button
                     onClick={handleClose}

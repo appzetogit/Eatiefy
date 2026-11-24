@@ -281,6 +281,14 @@ export async function calculateOrderPricing(userId, dto) {
         couponError = "This coupon is valid on your first order only";
       }
 
+      if (
+        !couponError &&
+        (Number(restaurantOffers?.discount) > 0 ||
+          (Array.isArray(restaurantOffers?.appliedOffers) && restaurantOffers.appliedOffers.length > 0))
+      ) {
+        couponError = "Two coupons cannot be applied together. This order already has a restaurant offer/discount.";
+      }
+
       if (!couponError) {
         if (offer.discountType === "percentage") {
           const raw = subtotal * (Number(offer.discountValue) / 100);

@@ -2,10 +2,12 @@ import { useEffect, useState, useCallback } from "react"
 import { Edit, Upload, Info, Trash2, Plus, Calendar, Link as LinkIcon, Save, X, Loader2, Image as ImageIcon } from "lucide-react"
 import api from "@food/api"
 import { invalidatePublicAppConfig } from "@food/services/publicAppConfig"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const debugError = (...args) => {}
 
 export default function PromotionalBanner() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [banners, setBanners] = useState([])
   const [restaurants, setRestaurants] = useState([])
   const [zones, setZones] = useState([])
@@ -289,13 +291,15 @@ export default function PromotionalBanner() {
               <p className="text-slate-500 text-sm mt-0.5">Manage sliding banners visible below pure veg/99 options</p>
             </div>
           </div>
-          <button
-            onClick={() => { resetForm(); setEditingBanner(null); setShowAddModal(true); }}
-            className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-md active:scale-95 font-semibold text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add New Banner</span>
-          </button>
+          {(canCreate || canEdit) && (
+            <button
+              onClick={() => { resetForm(); setEditingBanner(null); setShowAddModal(true); }}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-md active:scale-95 font-semibold text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New Banner</span>
+            </button>
+          )}
         </div>
 
         {loading ? (
@@ -310,12 +314,14 @@ export default function PromotionalBanner() {
             </div>
             <h3 className="text-lg font-bold text-slate-900 mb-2">No Banners Found</h3>
             <p className="text-slate-500 max-w-xs mx-auto mb-6">Create your first promotional banner to start attracting customers.</p>
-            <button
-               onClick={() => { resetForm(); setEditingBanner(null); setShowAddModal(true); }}
-               className="text-blue-600 font-bold hover:underline"
-            >
-              Add your first banner now
-            </button>
+            {(canCreate || canEdit) && (
+              <button
+                 onClick={() => { resetForm(); setEditingBanner(null); setShowAddModal(true); }}
+                 className="text-blue-600 font-bold hover:underline"
+              >
+                Add your first banner now
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -324,30 +330,46 @@ export default function PromotionalBanner() {
                 <div className="relative aspect-[2/1] bg-slate-100 overflow-hidden">
                   <img src={banner.imageUrl} alt={banner.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"  loading="lazy" decoding="async" />
                   <div className="absolute top-2 right-2 flex gap-2">
-                    <button 
-                      onClick={() => openEdit(banner)}
-                      className="p-2 bg-white/90 backdrop-blur-md rounded-lg shadow-sm hover:bg-white text-slate-700 transition-colors"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(banner._id)}
-                      className="p-2 bg-red-500/90 backdrop-blur-md rounded-lg shadow-sm hover:bg-red-500 text-white transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {canEdit && (
+                      <button 
+                        onClick={() => openEdit(banner)}
+                        className="p-2 bg-white/90 backdrop-blur-md rounded-lg shadow-sm hover:bg-white text-slate-700 transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button 
+                        onClick={() => handleDelete(banner._id)}
+                        className="p-2 bg-red-500/90 backdrop-blur-md rounded-lg shadow-sm hover:bg-red-500 text-white transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                   <div className="absolute bottom-2 left-2">
-                    <button
-                      onClick={() => handleToggleStatus(banner._id, banner.isActive)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md transition-all ${
-                        banner.isActive 
-                          ? "bg-green-500/90 text-white" 
-                          : "bg-slate-500/90 text-white"
-                      }`}
-                    >
-                      {banner.isActive ? "Active" : "Paused"}
-                    </button>
+                    {canEdit ? (
+                      <button
+                        onClick={() => handleToggleStatus(banner._id, banner.isActive)}
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md transition-all ${
+                          banner.isActive 
+                            ? "bg-green-500/90 text-white" 
+                            : "bg-slate-500/90 text-white"
+                        }`}
+                      >
+                        {banner.isActive ? "Active" : "Paused"}
+                      </button>
+                    ) : (
+                      <span
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md transition-all ${
+                          banner.isActive 
+                            ? "bg-green-500/90 text-white" 
+                            : "bg-slate-500/90 text-white"
+                        }`}
+                      >
+                        {banner.isActive ? "Active" : "Paused"}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="p-4">

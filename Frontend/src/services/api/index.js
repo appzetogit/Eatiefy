@@ -402,6 +402,15 @@ export const adminAPI = {
     apiClient.get("/food/admin/customization-settings", { contextModule: "admin" }),
   updateCustomizationSettings: (data) =>
     apiClient.patch("/food/admin/customization-settings", data, { contextModule: "admin" }),
+  /** Zone scope of Customization Settings: effective values, defaults and which switches the zone overrides. */
+  getZoneCustomizationSettings: (zoneId) =>
+    apiClient.get("/food/admin/customization-settings/zones", {
+      params: { zoneId: zoneId || undefined },
+      contextModule: "admin",
+    }),
+  /** Body: { zoneId, [switch]: true | false | null } - null makes the zone follow the platform default again. */
+  updateZoneCustomizationSettings: (data) =>
+    apiClient.patch("/food/admin/customization-settings/zones", data, { contextModule: "admin" }),
   getTakeawayCodStatus: () =>
     apiClient.get("/food/admin/customization-settings/takeaway-cod", { contextModule: "admin" }),
   /** Query: zoneId (omit for the platform default). */
@@ -787,16 +796,25 @@ export const adminAPI = {
   getZoneById: (id) =>
     apiClient.get(`/food/admin/zones/${id}`, { contextModule: "admin" }),
   /** Create zone. Body: name, zoneName?, country?, unit?, coordinates, isActive? */
+  // getZones is cached (30s). Every zone mutation must drop that cache, otherwise
+  // the zone list shows stale data until a manual refresh. Invalidated in
+  // `finally` so a failed/partial request can't leave stale data behind either.
   createZone: (body) =>
-    apiClient.post("/food/admin/zones", body ?? {}, { contextModule: "admin" }),
+    apiClient
+      .post("/food/admin/zones", body ?? {}, { contextModule: "admin" })
+      .finally(() => invalidateAdminReadCache("/food/admin/zones")),
   /** Update zone. Body: name?, zoneName?, country?, unit?, coordinates?, isActive? */
   updateZone: (id, body) =>
-    apiClient.patch(`/food/admin/zones/${id}`, body ?? {}, {
-      contextModule: "admin",
-    }),
+    apiClient
+      .patch(`/food/admin/zones/${id}`, body ?? {}, {
+        contextModule: "admin",
+      })
+      .finally(() => invalidateAdminReadCache("/food/admin/zones")),
   /** Delete zone */
   deleteZone: (id) =>
-    apiClient.delete(`/food/admin/zones/${id}`, { contextModule: "admin" }),
+    apiClient
+      .delete(`/food/admin/zones/${id}`, { contextModule: "admin" })
+      .finally(() => invalidateAdminReadCache("/food/admin/zones")),
 
   /** Feedback Experience (admin) */
   getFeedbackExperiences: (params = {}) =>
@@ -873,6 +891,12 @@ export const adminAPI = {
   /** Delivery Earnings (admin) */
   getDeliveryEarnings: (params = {}) =>
     apiClient.get("/food/admin/delivery/earnings", {
+      params,
+      contextModule: "admin",
+    }),
+  /** What the platform itself earns (commission, fees, taxes, subscriptions) minus what it pays out. */
+  getAdminEarnings: (params = {}) =>
+    apiClient.get("/food/admin/admin-earnings", {
       params,
       contextModule: "admin",
     }),
@@ -2668,8 +2692,8 @@ export const deliveryAPI = {
     const isProbablyOrderIdentity = (value) => {
       const raw = String(value || "").trim();
       if (!raw) return false;
-      // Mongo ObjectId
-      return /^[a-f0-9]{24}$/i.test(raw);
+      // Mongo ObjectId or readable Order ID (e.g. FOD-123456, ORD-123456)
+      return /^[a-f0-9]{24}$/i.test(raw) || /^FOD-[a-zA-Z0-9_-]+$/i.test(raw) || /^ORD-[a-zA-Z0-9_-]+$/i.test(raw) || raw.length >= 3;
     };
 
     return (orderId) => {
@@ -2906,8 +2930,11 @@ export const deliveryAPI = {
 };
 
 export const userAPI = {
-  getCustomizationSettings: () =>
-    apiClient.get("/food/public/customization-settings"),
+  /** Pass a zone id to get that zone's payment switches (COD / wallet / online). */
+  getCustomizationSettings: (zoneId) =>
+    apiClient.get("/food/public/customization-settings", {
+      params: zoneId ? { zoneId: String(zoneId) } : undefined,
+    }),
   /** Get current user profile (Bearer USER). */
   getProfile: () =>
     getUserMeOnce().then((res) => {

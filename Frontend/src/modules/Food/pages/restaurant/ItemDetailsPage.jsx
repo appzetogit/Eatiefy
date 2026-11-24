@@ -432,11 +432,24 @@ export default function ItemDetailsPage() {
       setLoadingCategories(true)
       const response = await restaurantAPI.getCategories()
       if (response.data.success && response.data.data.categories) {
-        const formattedCategories = response.data.data.categories.map(cat => ({
-          id: cat._id || cat.id,
-          name: cat.name,
-          foodTypeScope: cat.foodTypeScope || "Both",
-        }))
+        const isPureVeg = restaurantFoodType === "Veg"
+        const formattedCategories = response.data.data.categories
+          .filter(cat => {
+            if (!cat) return false
+            const scope = String(cat.foodTypeScope || "").trim().toLowerCase()
+            if (isPureVeg && (scope === "non-veg" || scope === "nonveg" || scope === "non veg")) {
+              return false
+            }
+            if (restaurantFoodType === "Non-Veg" && (scope === "veg" || scope === "pure-veg" || scope === "pure veg")) {
+              return false
+            }
+            return true
+          })
+          .map(cat => ({
+            id: cat._id || cat.id,
+            name: cat.name,
+            foodTypeScope: cat.foodTypeScope || "Both",
+          }))
         setCategories(formattedCategories)
         return formattedCategories
       }

@@ -72,9 +72,18 @@ export default function EarningAddonHistory() {
     fetchHistory()
   }, [currentPage, pageSize, debouncedSearch])
 
-  const fetchHistory = async () => {
+  // New completions are added by the server as riders deliver orders, so keep the list
+  // fresh while the page is open (quietly: no loading flash, and only for a visible tab).
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") fetchHistory({ silent: true })
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [currentPage, pageSize, debouncedSearch])
+
+  const fetchHistory = async ({ silent = false } = {}) => {
     try {
-      setIsLoading(true)
+      if (!silent) setIsLoading(true)
       const response = await adminAPI.getEarningAddonHistory({
         page: currentPage,
         limit: pageSize,
@@ -92,6 +101,8 @@ export default function EarningAddonHistory() {
       }
     } catch (error) {
       debugError("Error fetching earning addon history:", error)
+      // A failed background refresh keeps the list as it is instead of blanking it.
+      if (silent) return
       const errorMessage = error.response?.data?.message || error.message || "Failed to fetch earning addon history"
       toast.error(errorMessage)
       setHistory([])
@@ -608,8 +619,8 @@ export default function EarningAddonHistory() {
 
       {/* Settings Dialog */}
       <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent className="max-w-md bg-white">
-          <DialogHeader>
+        <DialogContent className="max-w-md bg-white p-6 sm:p-8">
+          <DialogHeader className="pr-10 mb-4">
             <DialogTitle className="flex items-center gap-2">
               <Settings className="w-5 h-5" />
               Table Settings

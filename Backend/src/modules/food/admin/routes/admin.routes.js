@@ -80,6 +80,7 @@ router.patch('/restaurants/complaints/:id', adminController.updateRestaurantComp
 router.get('/restaurants', adminController.getRestaurants);
 router.get('/restaurants/counts', adminController.getRestaurantCounts);
 router.get('/restaurants/earnings', adminController.getRestaurantEarnings);
+router.get('/admin-earnings', adminController.getAdminEarnings);
 router.get('/dashboard-stats', adminController.getDashboardStats);
 router.get('/reports/restaurants', adminController.getRestaurantReport);
 router.get('/reports/transactions', adminController.getTransactionReport);
@@ -301,6 +302,8 @@ router.get('/notifications/fssai-expired', adminController.getExpiredFssaiNotifi
 // ----- Customization Settings -----
 router.get('/customization-settings', systemConfigController.getCustomizationSettings);
 router.patch('/customization-settings', systemConfigController.updateCustomizationSettings);
+router.get('/customization-settings/zones', systemConfigController.getZoneCustomizationSettings);
+router.patch('/customization-settings/zones', systemConfigController.updateZoneCustomizationSettings);
 router.get('/customization-settings/takeaway-cod', systemConfigController.getTakeawayCodStatus);
 
 // ----- Restaurant Settings -----

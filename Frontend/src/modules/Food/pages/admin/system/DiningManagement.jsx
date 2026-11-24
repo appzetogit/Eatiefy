@@ -6,12 +6,14 @@ import { Input } from "@food/components/ui/input"
 import { Label } from "@food/components/ui/label"
 import { Button } from "@food/components/ui/button"
 import { prepareUploadFile } from "@/shared/utils/imageCompressor"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function DiningManagement() {
+    const { canCreate, canEdit, canDelete } = useAdminPermissions()
     const [activeTab, setActiveTab] = useState('categories')
 
     // Categories
@@ -246,39 +248,41 @@ export default function DiningManagement() {
                 {/* Content */}
                 {activeTab === 'categories' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="lg:col-span-1">
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                                <div className="flex items-center justify-between gap-3 mb-4">
-                                    <h2 className="text-lg font-bold text-slate-900">{editingCategoryId ? "Edit Category" : "Add Category"}</h2>
-                                    {editingCategoryId && (
-                                        <Button type="button" variant="outline" onClick={resetCategoryForm} className="gap-2">
-                                            <X className="w-4 h-4" />
-                                            Cancel
-                                        </Button>
-                                    )}
-                                </div>
-                                <div className="space-y-4">
-                                    <div>
-                                        <Label>Name</Label>
-                                        <Input value={categoryName} onChange={e => setCategoryName(e.target.value)} placeholder="Category Name" className="mt-1" />
-                                    </div>
-                                    <div>
-                                        <Label>{editingCategoryId ? "Replace Image" : "Image"}</Label>
-                                        <Input type="file" ref={categoryFileInputRef} onChange={e => setCategoryFile(e.target.files[0])} accept="image/*" className="mt-1" />
-                                        {editingCategoryId && editingCategoryImageUrl && !categoryFile && (
-                                            <div className="mt-3">
-                                                <img src={editingCategoryImageUrl} alt={categoryName || "Current category"} className="w-24 h-24 rounded-lg object-cover border border-slate-200" />
-                                                <p className="text-xs text-slate-500 mt-2">Current image will be kept unless you select a new one.</p>
-                                            </div>
+                        {(canCreate || canEdit) && (
+                            <div className="lg:col-span-1">
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                                    <div className="flex items-center justify-between gap-3 mb-4">
+                                        <h2 className="text-lg font-bold text-slate-900">{editingCategoryId ? "Edit Category" : "Add Category"}</h2>
+                                        {editingCategoryId && (
+                                            <Button type="button" variant="outline" onClick={resetCategoryForm} className="gap-2">
+                                                <X className="w-4 h-4" />
+                                                Cancel
+                                            </Button>
                                         )}
                                     </div>
-                                    <Button onClick={handleSubmitCategory} disabled={categoriesUploading} className="w-full bg-blue-600 hover:bg-blue-700">
-                                        {categoriesUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingCategoryId ? "Update Category" : "Create Category")}
-                                    </Button>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <Label>Name</Label>
+                                            <Input value={categoryName} onChange={e => setCategoryName(e.target.value)} placeholder="Category Name" className="mt-1" />
+                                        </div>
+                                        <div>
+                                            <Label>{editingCategoryId ? "Replace Image" : "Image"}</Label>
+                                            <Input type="file" ref={categoryFileInputRef} onChange={e => setCategoryFile(e.target.files[0])} accept="image/*" className="mt-1" />
+                                            {editingCategoryId && editingCategoryImageUrl && !categoryFile && (
+                                                <div className="mt-3">
+                                                    <img src={editingCategoryImageUrl} alt={categoryName || "Current category"} className="w-24 h-24 rounded-lg object-cover border border-slate-200" />
+                                                    <p className="text-xs text-slate-500 mt-2">Current image will be kept unless you select a new one.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <Button onClick={handleSubmitCategory} disabled={categoriesUploading} className="w-full bg-blue-600 hover:bg-blue-700">
+                                            {categoriesUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingCategoryId ? "Update Category" : "Create Category")}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="lg:col-span-2">
+                        )}
+                        <div className={canCreate || canEdit ? "lg:col-span-2" : "col-span-full"}>
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                                 <h2 className="text-lg font-bold text-slate-900 mb-4">Categories List</h2>
                                 {categoriesLoading ? <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div> : (
@@ -290,12 +294,16 @@ export default function DiningManagement() {
                                                     <p className="font-medium text-slate-900">{cat.name}</p>
                                                 </div>
                                                 <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => handleEditCategory(cat)} className="p-1.5 bg-blue-100 text-blue-600 rounded-full">
-                                                        <Edit className="w-4 h-4" />
-                                                    </button>
-                                                    <button onClick={() => handleDeleteCategory(cat._id)} className="p-1.5 bg-red-100 text-red-600 rounded-full">
-                                                        {categoriesDeleting === cat._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                                                    </button>
+                                                    {canEdit && (
+                                                        <button onClick={() => handleEditCategory(cat)} className="p-1.5 bg-blue-100 text-blue-600 rounded-full">
+                                                            <Edit className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    {canDelete && (
+                                                        <button onClick={() => handleDeleteCategory(cat._id)} className="p-1.5 bg-red-100 text-red-600 rounded-full">
+                                                            {categoriesDeleting === cat._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -309,41 +317,43 @@ export default function DiningManagement() {
 
                 {activeTab === 'banners' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="lg:col-span-1">
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                                <h2 className="text-lg font-bold text-slate-900 mb-2">Add Dining Page Banner</h2>
-                                <p className="text-sm text-slate-500 mb-4">
-                                    This banner shows on the user dining page and is not linked to any restaurant.
-                                </p>
-                                <div className="space-y-4">
-                                    <div>
-                                        <Label>Image</Label>
-                                        <Input
-                                            type="file"
-                                            ref={bannerFileInputRef}
-                                            onChange={e => {
-                                                setBannerFile(e.target.files[0] || null)
-                                                setError(null)
-                                            }}
-                                            accept="image/*"
-                                            className="mt-1"
-                                        />
+                        {(canCreate || canEdit) && (
+                            <div className="lg:col-span-1">
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                                    <h2 className="text-lg font-bold text-slate-900 mb-2">Add Dining Page Banner</h2>
+                                    <p className="text-sm text-slate-500 mb-4">
+                                        This banner shows on the user dining page and is not linked to any restaurant.
+                                    </p>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <Label>Image</Label>
+                                            <Input
+                                                type="file"
+                                                ref={bannerFileInputRef}
+                                                onChange={e => {
+                                                    setBannerFile(e.target.files[0] || null)
+                                                    setError(null)
+                                                }}
+                                                accept="image/*"
+                                                className="mt-1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label>Promo Text</Label>
+                                            <Input value={bannerPercentageOff} onChange={e => { setBannerPercentageOff(e.target.value); setError(null) }} placeholder="Optional, e.g. 50% OFF" className="mt-1" />
+                                        </div>
+                                        <div>
+                                            <Label>Tagline</Label>
+                                            <Input value={bannerTagline} onChange={e => { setBannerTagline(e.target.value); setError(null) }} placeholder="Optional, e.g. Weekend dining specials" className="mt-1" />
+                                        </div>
+                                        <Button onClick={handleSubmitBanner} disabled={bannersUploading} className="w-full bg-blue-600 hover:bg-blue-700">
+                                            {bannersUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Banner"}
+                                        </Button>
                                     </div>
-                                    <div>
-                                        <Label>Promo Text</Label>
-                                        <Input value={bannerPercentageOff} onChange={e => { setBannerPercentageOff(e.target.value); setError(null) }} placeholder="Optional, e.g. 50% OFF" className="mt-1" />
-                                    </div>
-                                    <div>
-                                        <Label>Tagline</Label>
-                                        <Input value={bannerTagline} onChange={e => { setBannerTagline(e.target.value); setError(null) }} placeholder="Optional, e.g. Weekend dining specials" className="mt-1" />
-                                    </div>
-                                    <Button onClick={handleSubmitBanner} disabled={bannersUploading} className="w-full bg-blue-600 hover:bg-blue-700">
-                                        {bannersUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create Banner"}
-                                    </Button>
                                 </div>
                             </div>
-                        </div>
-                        <div className="lg:col-span-2">
+                        )}
+                        <div className={canCreate || canEdit ? "lg:col-span-2" : "col-span-full"}>
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                                 <h2 className="text-lg font-bold text-slate-900 mb-4">Dining Page Banners</h2>
                                 {bannersLoading ? <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div> : (
@@ -358,9 +368,11 @@ export default function DiningManagement() {
                                                         {banner.isActive === false ? "Inactive" : "Active on dining page"}
                                                     </p>
                                                 </div>
-                                                <button onClick={() => handleDeleteBanner(banner._id)} className="absolute top-2 right-2 p-1.5 bg-red-100 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {bannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                                                </button>
+                                                {canDelete && (
+                                                    <button onClick={() => handleDeleteBanner(banner._id)} className="absolute top-2 right-2 p-1.5 bg-red-100 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {bannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                         {banners.length === 0 && <p className="text-slate-500 text-center col-span-full py-8">No banners found.</p>}

@@ -2,6 +2,7 @@ import { useState, useMemo } from "react"
 import { exportToCSV, exportToExcel, exportToPDF, exportToJSON } from "./ordersExportUtils"
 import eatiefyLogo from "@food/assets/logo.png"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
+import { resolveRestaurantItemUnitPrice, resolveItemMarkupUnit } from "@food/utils/restaurantOrderPricing"
 const debugError = () => {}
 
 
@@ -312,19 +313,26 @@ export function useOrdersManagement(orders, statusKey, title, options = {}) {
       const logoDataUrl = await imageUrlToDataUrl(logoUrl)
 
       const items = Array.isArray(order.items) ? order.items : []
-      const itemsSubtotal = items.reduce((sum, item) => {
+      const computedBase = items.reduce((sum, item) => {
         const qty = toNumber(item?.quantity || 1)
-        const unitPrice = toNumber(item?.price)
-        return sum + (qty * unitPrice)
+        return sum + (qty * resolveRestaurantItemUnitPrice(item))
       }, 0)
-      const subtotal = itemsSubtotal > 0
-        ? itemsSubtotal
-        : toNumber(
-            order.totalItemAmount ??
-            order.subtotal ??
-            order.pricing?.subtotal ??
-            order.totalAmount
-          )
+      const computedMarkup = items.reduce((sum, item) => {
+        const qty = toNumber(item?.quantity || 1)
+        return sum + (qty * resolveItemMarkupUnit(item))
+      }, 0)
+      const baseSubtotal = toNumber(
+        order.baseSubtotal ??
+        order.pricing?.baseSubtotal ??
+        (computedBase > 0 ? computedBase : order.totalItemAmount) ??
+        0
+      )
+      const markupTotal = toNumber(
+        order.markupTotal ??
+        order.pricing?.markupTotal ??
+        computedMarkup ??
+        0
+      )
       const packagingFee = toNumber(
         order.packagingCharge ??
         order.packagingFee ??
@@ -353,7 +361,7 @@ export function useOrdersManagement(orders, statusKey, title, options = {}) {
         order.discountAmount ??
         order.pricing?.discount
       )
-      const computedTotal = subtotal + packagingFee + deliveryFee + platformFee + taxAmount - discountAmount
+      const computedTotal = baseSubtotal + markupTotal + packagingFee + deliveryFee + platformFee + taxAmount - discountAmount
       const totalAmount = toNumber(
         order.totalAmount ??
         order.pricing?.total ??
@@ -522,7 +530,7 @@ export function useOrdersManagement(orders, statusKey, title, options = {}) {
         ? items.map((item) => {
           const qty = toNumber(item.quantity || 1)
           const title = item.name || item.itemName || item.title || "Item"
-          const unitPrice = toNumber(item.price)
+          const unitPrice = resolveRestaurantItemUnitPrice(item)
           const lineTotal = qty * unitPrice
           return [qty, title, formatMoney(unitPrice), formatMoney(lineTotal)]
         })
@@ -561,12 +569,13 @@ export function useOrdersManagement(orders, statusKey, title, options = {}) {
       })
 
       const summaryRows = [
-        ["Subtotal", formatMoney(subtotal)],
+        ["Subtotal (Restaurant)", formatMoney(baseSubtotal)],
+        ...(markupTotal > 0 ? [["Admin Pricing", `+ ${formatMoney(markupTotal)}`]] : []),
         ["Packaging Fee", formatMoney(packagingFee)],
         ["Delivery Fee", formatMoney(deliveryFee)],
         ["Platform Fee", formatMoney(platformFee)],
         ["Tax", formatMoney(taxAmount)],
-        ...(discountAmount > 0 ? [["Discount", `- ${formatMoney(discountAmount)}`]] : []),
+        ...(discountAmount > 0 ? [["Coupon Discount", `- ${formatMoney(discountAmount)}`]] : []),
         ["Grand Total", formatMoney(totalAmount)],
       ]
 

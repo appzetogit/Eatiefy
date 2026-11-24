@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Checkbox } from "@food/components/ui/checkbox"
 import { prepareUploadFile, prepareUploadFiles } from "@/shared/utils/imageCompressor"
 import { isDiningEnabled } from "@food/config/featureFlags";
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -50,6 +51,7 @@ const findMatchingExploreIcon = (list = [], slotId = "") => {
 };
 
 export default function LandingPageManagement() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [activeTab, setActiveTab] = useState('banners')
   const [exploreMoreSubTab, setExploreMoreSubTab] = useState('icons')
 
@@ -1466,64 +1468,66 @@ export default function LandingPageManagement() {
         {activeTab === 'banners' && (
           <>
             {/* Upload Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Banner(s)</h2>
-              <div
-                className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50/30 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50/50"
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  const files = Array.from(e.dataTransfer.files)
-                  if (files.length > 0) handleBannerFileSelect({ files })
-                }}
-                onClick={() => bannersFileInputRef.current?.click()}
-              >
-                <input
-                  ref={bannersFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleBannerFileSelect}
-                  className="hidden"
-                  disabled={bannersUploading}
-                />
-                {bannersUploading ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                    <p className="text-blue-600 font-medium">
-                      Uploading image {bannersUploadProgress.current} of {bannersUploadProgress.total}...
-                    </p>
-                    {bannersUploadProgress.total > 0 && (
-                      <div className="w-full max-w-xs">
-                        <div className="w-full bg-blue-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(bannersUploadProgress.current / bannersUploadProgress.total) * 100}%` }}
-                          />
+            {(canCreate || canEdit) && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Banner(s)</h2>
+                <div
+                  className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50/30 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50/50"
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const files = Array.from(e.dataTransfer.files)
+                    if (files.length > 0) handleBannerFileSelect({ files })
+                  }}
+                  onClick={() => bannersFileInputRef.current?.click()}
+                >
+                  <input
+                    ref={bannersFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleBannerFileSelect}
+                    className="hidden"
+                    disabled={bannersUploading}
+                  />
+                  {bannersUploading ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                      <p className="text-blue-600 font-medium">
+                        Uploading image {bannersUploadProgress.current} of {bannersUploadProgress.total}...
+                      </p>
+                      {bannersUploadProgress.total > 0 && (
+                        <div className="w-full max-w-xs">
+                          <div className="w-full bg-blue-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${(bannersUploadProgress.current / bannersUploadProgress.total) * 100}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <Upload className="w-8 h-8 text-blue-600" />
-                    <div>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); bannersFileInputRef.current?.click(); }}
-                        className="text-blue-600 font-medium hover:text-blue-700 underline"
-                      >
-                        Click to upload
-                      </button>
-                      <span className="text-slate-600"> or drag and drop</span>
+                      )}
                     </div>
-                    <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB each (Max 5 images at once)</p>
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex flex-col items-center gap-3">
+                      <Upload className="w-8 h-8 text-blue-600" />
+                      <div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); bannersFileInputRef.current?.click(); }}
+                          className="text-blue-600 font-medium hover:text-blue-700 underline"
+                        >
+                          Click to upload
+                        </button>
+                        <span className="text-slate-600"> or drag and drop</span>
+                      </div>
+                      <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB each (Max 5 images at once)</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Banners List */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -1561,35 +1565,47 @@ export default function LandingPageManagement() {
                       </div>
                       <div className="p-4 bg-white">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleBannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowUp className="w-4 h-4 text-slate-600" />
-                            </button>
-                            <button onClick={() => handleBannerOrderChange(banner._id, 'down')} disabled={index === banners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowDown className="w-4 h-4 text-slate-600" />
-                            </button>
-                          </div>
+                          {canEdit && (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleBannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowUp className="w-4 h-4 text-slate-600" />
+                              </button>
+                              <button onClick={() => handleBannerOrderChange(banner._id, 'down')} disabled={index === banners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowDown className="w-4 h-4 text-slate-600" />
+                              </button>
+                            </div>
+                          )}
                           <div className="flex items-center gap-2 flex-wrap">
-                            <button
-                              onClick={() => {
-                                setSelectedBannerId(banner._id)
-                                setSelectedRestaurantIds(banner.linkedRestaurants?.map(r => r._id || r) || [])
-                                if (allRestaurants.length === 0) {
-                                  fetchAllRestaurants()
-                                }
-                                setShowRestaurantModal(true)
-                              }}
-                              className="px-3 py-1.5 rounded text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 flex items-center gap-1"
-                            >
-                              <Megaphone className="w-4 h-4" />
-                              Advertise
-                            </button>
-                            <button onClick={() => handleToggleBannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                              {banner.isActive ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button onClick={() => handleDeleteBanner(banner._id)} disabled={bannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
-                              {bannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => {
+                                  setSelectedBannerId(banner._id)
+                                  setSelectedRestaurantIds(banner.linkedRestaurants?.map(r => r._id || r) || [])
+                                  if (allRestaurants.length === 0) {
+                                    fetchAllRestaurants()
+                                  }
+                                  setShowRestaurantModal(true)
+                                }}
+                                className="px-3 py-1.5 rounded text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 flex items-center gap-1"
+                              >
+                                <Megaphone className="w-4 h-4" />
+                                Advertise
+                              </button>
+                            )}
+                            {canEdit ? (
+                              <button onClick={() => handleToggleBannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                {banner.isActive ? 'Deactivate' : 'Activate'}
+                              </button>
+                            ) : (
+                              <span className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                {banner.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            )}
+                            {canDelete && (
+                              <button onClick={() => handleDeleteBanner(banner._id)} disabled={bannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
+                                {bannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                              </button>
+                            )}
                           </div>
                         </div>
                         {banner.linkedRestaurants && banner.linkedRestaurants.length > 0 && (
@@ -1616,64 +1632,66 @@ export default function LandingPageManagement() {
         {activeTab === 'under-250' && (
           <>
             {/* Upload Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Banner(s)</h2>
-              <div
-                className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50/30 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50/50"
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  const files = Array.from(e.dataTransfer.files)
-                  if (files.length > 0) handleUnder250BannerFileSelect({ files })
-                }}
-                onClick={() => under250BannersFileInputRef.current?.click()}
-              >
-                <input
-                  ref={under250BannersFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleUnder250BannerFileSelect}
-                  className="hidden"
-                  disabled={under250BannersUploading}
-                />
-                {under250BannersUploading ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                    <p className="text-blue-600 font-medium">
-                      Uploading image {under250BannersUploadProgress.current} of {under250BannersUploadProgress.total}...
-                    </p>
-                    {under250BannersUploadProgress.total > 0 && (
-                      <div className="w-full max-w-xs">
-                        <div className="w-full bg-blue-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(under250BannersUploadProgress.current / under250BannersUploadProgress.total) * 100}%` }}
-                          />
+            {(canCreate || canEdit) && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Banner(s)</h2>
+                <div
+                  className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50/30 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50/50"
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const files = Array.from(e.dataTransfer.files)
+                    if (files.length > 0) handleUnder250BannerFileSelect({ files })
+                  }}
+                  onClick={() => under250BannersFileInputRef.current?.click()}
+                >
+                  <input
+                    ref={under250BannersFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleUnder250BannerFileSelect}
+                    className="hidden"
+                    disabled={under250BannersUploading}
+                  />
+                  {under250BannersUploading ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                      <p className="text-blue-600 font-medium">
+                        Uploading image {under250BannersUploadProgress.current} of {under250BannersUploadProgress.total}...
+                      </p>
+                      {under250BannersUploadProgress.total > 0 && (
+                        <div className="w-full max-w-xs">
+                          <div className="w-full bg-blue-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${(under250BannersUploadProgress.current / under250BannersUploadProgress.total) * 100}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <Upload className="w-8 h-8 text-blue-600" />
-                    <div>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); under250BannersFileInputRef.current?.click(); }}
-                        className="text-blue-600 font-medium hover:text-blue-700 underline"
-                      >
-                        Click to upload
-                      </button>
-                      <span className="text-slate-600"> or drag and drop</span>
+                      )}
                     </div>
-                    <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB each (Max 5 images at once)</p>
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex flex-col items-center gap-3">
+                      <Upload className="w-8 h-8 text-blue-600" />
+                      <div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); under250BannersFileInputRef.current?.click(); }}
+                          className="text-blue-600 font-medium hover:text-blue-700 underline"
+                        >
+                          Click to upload
+                        </button>
+                        <span className="text-slate-600"> or drag and drop</span>
+                      </div>
+                      <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB each (Max 5 images at once)</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Banners List */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -1711,20 +1729,30 @@ export default function LandingPageManagement() {
                       </div>
                       <div className="p-4 bg-white">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleUnder250BannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowUp className="w-4 h-4 text-slate-600" />
+                          {canEdit && (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleUnder250BannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowUp className="w-4 h-4 text-slate-600" />
+                              </button>
+                              <button onClick={() => handleUnder250BannerOrderChange(banner._id, 'down')} disabled={index === under250Banners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowDown className="w-4 h-4 text-slate-600" />
+                              </button>
+                            </div>
+                          )}
+                          {canEdit ? (
+                            <button onClick={() => handleToggleUnder250BannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                              {banner.isActive ? 'Deactivate' : 'Activate'}
                             </button>
-                            <button onClick={() => handleUnder250BannerOrderChange(banner._id, 'down')} disabled={index === under250Banners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowDown className="w-4 h-4 text-slate-600" />
+                          ) : (
+                            <span className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                              {banner.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          )}
+                          {canDelete && (
+                            <button onClick={() => handleDeleteUnder250Banner(banner._id)} disabled={under250BannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
+                              {under250BannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                             </button>
-                          </div>
-                          <button onClick={() => handleToggleUnder250BannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                            {banner.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button onClick={() => handleDeleteUnder250Banner(banner._id)} disabled={under250BannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
-                            {under250BannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                          </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1739,64 +1767,66 @@ export default function LandingPageManagement() {
         {activeTab === 'dining' && (
           <>
             {/* Upload Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Dining Banner(s)</h2>
-              <div
-                className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50/30 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50/50"
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  const files = Array.from(e.dataTransfer.files)
-                  if (files.length > 0) handleDiningBannerFileSelect({ files })
-                }}
-                onClick={() => diningBannersFileInputRef.current?.click()}
-              >
-                <input
-                  ref={diningBannersFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleDiningBannerFileSelect}
-                  className="hidden"
-                  disabled={diningBannersUploading}
-                />
-                {diningBannersUploading ? (
-                  <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                    <p className="text-blue-600 font-medium">
-                      Uploading image {diningBannersUploadProgress.current} of {diningBannersUploadProgress.total}...
-                    </p>
-                    {diningBannersUploadProgress.total > 0 && (
-                      <div className="w-full max-w-xs">
-                        <div className="w-full bg-blue-200 rounded-full h-2">
-                          <div
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(diningBannersUploadProgress.current / diningBannersUploadProgress.total) * 100}%` }}
-                          />
+            {(canCreate || canEdit) && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                <h2 className="text-lg font-bold text-slate-900 mb-4">Upload New Dining Banner(s)</h2>
+                <div
+                  className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center bg-blue-50/30 cursor-pointer transition-colors hover:border-blue-400 hover:bg-blue-50/50"
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const files = Array.from(e.dataTransfer.files)
+                    if (files.length > 0) handleDiningBannerFileSelect({ files })
+                  }}
+                  onClick={() => diningBannersFileInputRef.current?.click()}
+                >
+                  <input
+                    ref={diningBannersFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleDiningBannerFileSelect}
+                    className="hidden"
+                    disabled={diningBannersUploading}
+                  />
+                  {diningBannersUploading ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                      <p className="text-blue-600 font-medium">
+                        Uploading image {diningBannersUploadProgress.current} of {diningBannersUploadProgress.total}...
+                      </p>
+                      {diningBannersUploadProgress.total > 0 && (
+                        <div className="w-full max-w-xs">
+                          <div className="w-full bg-blue-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${(diningBannersUploadProgress.current / diningBannersUploadProgress.total) * 100}%` }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <Upload className="w-8 h-8 text-blue-600" />
-                    <div>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); diningBannersFileInputRef.current?.click(); }}
-                        className="text-blue-600 font-medium hover:text-blue-700 underline"
-                      >
-                        Click to upload
-                      </button>
-                      <span className="text-slate-600"> or drag and drop</span>
+                      )}
                     </div>
-                    <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB each (Max 5 images at once)</p>
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex flex-col items-center gap-3">
+                      <Upload className="w-8 h-8 text-blue-600" />
+                      <div>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); diningBannersFileInputRef.current?.click(); }}
+                          className="text-blue-600 font-medium hover:text-blue-700 underline"
+                        >
+                          Click to upload
+                        </button>
+                        <span className="text-slate-600"> or drag and drop</span>
+                      </div>
+                      <p className="text-xs text-slate-500">PNG, JPG, WEBP up to 5MB each (Max 5 images at once)</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Banners List */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -1834,20 +1864,30 @@ export default function LandingPageManagement() {
                       </div>
                       <div className="p-4 bg-white">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => handleDiningBannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowUp className="w-4 h-4 text-slate-600" />
+                          {canEdit && (
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleDiningBannerOrderChange(banner._id, 'up')} disabled={index === 0} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowUp className="w-4 h-4 text-slate-600" />
+                              </button>
+                              <button onClick={() => handleDiningBannerOrderChange(banner._id, 'down')} disabled={index === diningBanners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
+                                <ArrowDown className="w-4 h-4 text-slate-600" />
+                              </button>
+                            </div>
+                          )}
+                          {canEdit ? (
+                            <button onClick={() => handleToggleDiningBannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                              {banner.isActive ? 'Deactivate' : 'Activate'}
                             </button>
-                            <button onClick={() => handleDiningBannerOrderChange(banner._id, 'down')} disabled={index === diningBanners.length - 1} className="p-1.5 rounded hover:bg-slate-100 disabled:opacity-50">
-                              <ArrowDown className="w-4 h-4 text-slate-600" />
+                          ) : (
+                            <span className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                              {banner.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          )}
+                          {canDelete && (
+                            <button onClick={() => handleDeleteDiningBanner(banner._id)} disabled={diningBannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
+                              {diningBannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                             </button>
-                          </div>
-                          <button onClick={() => handleToggleDiningBannerStatus(banner._id, banner.isActive)} className={`px-3 py-1.5 rounded text-sm font-medium ${banner.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                            {banner.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button onClick={() => handleDeleteDiningBanner(banner._id)} disabled={diningBannersDeleting === banner._id} className="p-1.5 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
-                            {diningBannersDeleting === banner._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                          </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1864,19 +1904,21 @@ export default function LandingPageManagement() {
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <h2 className="text-lg font-bold text-slate-900">Landing Settings</h2>
-                <Button
-                  onClick={handleSaveSettings}
-                  disabled={
-                    settingsSaving || 
-                    settingsLoading || 
-                    (JSON.stringify({...settings, recommendedRestaurantIds: [...(settings.recommendedRestaurantIds || [])].sort()}) === 
-                     JSON.stringify({...originalSettings, recommendedRestaurantIds: [...(originalSettings.recommendedRestaurantIds || [])].sort()}))
-                  }
-                  className="bg-blue-500 hover:bg-blue-600 text-white"
-                >
-                  {settingsSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Save Settings
-                </Button>
+                {canEdit && (
+                  <Button
+                    onClick={handleSaveSettings}
+                    disabled={
+                      settingsSaving || 
+                      settingsLoading || 
+                      (JSON.stringify({...settings, recommendedRestaurantIds: [...(settings.recommendedRestaurantIds || [])].sort()}) === 
+                       JSON.stringify({...originalSettings, recommendedRestaurantIds: [...(originalSettings.recommendedRestaurantIds || [])].sort()}))
+                    }
+                    className="bg-blue-500 hover:bg-blue-600 text-white"
+                  >
+                    {settingsSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Save Settings
+                  </Button>
+                )}
               </div>
 
               {settingsLoading ? (
@@ -2115,44 +2157,46 @@ export default function LandingPageManagement() {
             {/* Gourmet Tab Content */}
             {exploreMoreSubTab === 'gourmet' && (
               <>
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-                  <h2 className="text-lg font-bold text-slate-900 mb-4">Add Restaurant to Gourmet</h2>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="restaurant-gourmet">Select Restaurant</Label>
-                      <select
-                        id="restaurant-gourmet"
-                        value={selectedRestaurantGourmet}
-                        onChange={(e) => setSelectedRestaurantGourmet(e.target.value)}
-                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        disabled={restaurantsLoading}
+                {(canCreate || canEdit) && (
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+                    <h2 className="text-lg font-bold text-slate-900 mb-4">Add Restaurant to Gourmet</h2>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="restaurant-gourmet">Select Restaurant</Label>
+                        <select
+                          id="restaurant-gourmet"
+                          value={selectedRestaurantGourmet}
+                          onChange={(e) => setSelectedRestaurantGourmet(e.target.value)}
+                          className="mt-1 w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={restaurantsLoading}
+                        >
+                          {allRestaurants.length === 0 ? (
+                            <option value="" disabled>No restaurant found</option>
+                          ) : (
+                            <>
+                              <option value="">Select a restaurant...</option>
+                              {allRestaurants.map((restaurant) => {
+                                const isAdded = gourmetRestaurants.some(gr => gr.restaurant?._id === restaurant._id)
+                                return (
+                                  <option key={restaurant._id} value={restaurant._id} disabled={isAdded}>
+                                    {restaurant.name} {isAdded ? '✅ (Already Selected)' : ''}
+                                  </option>
+                                )
+                              })}
+                            </>
+                          )}
+                        </select>
+                      </div>
+                      <Button
+                        onClick={handleAddGourmetRestaurant}
+                        disabled={!selectedRestaurantGourmet}
+                        className="bg-blue-500 hover:bg-blue-600 text-white"
                       >
-                        {allRestaurants.length === 0 ? (
-                          <option value="" disabled>No restaurant found</option>
-                        ) : (
-                          <>
-                            <option value="">Select a restaurant...</option>
-                            {allRestaurants.map((restaurant) => {
-                              const isAdded = gourmetRestaurants.some(gr => gr.restaurant?._id === restaurant._id)
-                              return (
-                                <option key={restaurant._id} value={restaurant._id} disabled={isAdded}>
-                                  {restaurant.name} {isAdded ? '✅ (Already Selected)' : ''}
-                                </option>
-                              )
-                            })}
-                          </>
-                        )}
-                      </select>
+                        Add to Gourmet
+                      </Button>
                     </div>
-                    <Button
-                      onClick={handleAddGourmetRestaurant}
-                      disabled={!selectedRestaurantGourmet}
-                      className="bg-blue-500 hover:bg-blue-600 text-white"
-                    >
-                      Add to Gourmet
-                    </Button>
                   </div>
-                </div>
+                )}
 
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                   <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
@@ -2209,20 +2253,30 @@ export default function LandingPageManagement() {
                                   <span className="font-semibold text-slate-700">{item.restaurant?.rating || 0}</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-1">
-                                  <div className="flex items-center gap-0.5">
-                                    <button onClick={() => handleGourmetOrderChange(item._id, 'up')} disabled={index === 0} className="p-1 rounded hover:bg-slate-100 disabled:opacity-50">
-                                      <ArrowUp className="w-3 h-3 text-slate-600" />
+                                  {canEdit && (
+                                    <div className="flex items-center gap-0.5">
+                                      <button onClick={() => handleGourmetOrderChange(item._id, 'up')} disabled={index === 0} className="p-1 rounded hover:bg-slate-100 disabled:opacity-50">
+                                        <ArrowUp className="w-3 h-3 text-slate-600" />
+                                      </button>
+                                      <button onClick={() => handleGourmetOrderChange(item._id, 'down')} disabled={index === gourmetRestaurants.length - 1} className="p-1 rounded hover:bg-slate-100 disabled:opacity-50">
+                                        <ArrowDown className="w-3 h-3 text-slate-600" />
+                                      </button>
+                                    </div>
+                                  )}
+                                  {canEdit ? (
+                                    <button onClick={() => handleToggleGourmetStatus(item._id, item.isActive)} className={`px-2 py-1 rounded text-[10px] font-medium ${item.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
+                                      {item.isActive ? 'Deactivate' : 'Activate'}
                                     </button>
-                                    <button onClick={() => handleGourmetOrderChange(item._id, 'down')} disabled={index === gourmetRestaurants.length - 1} className="p-1 rounded hover:bg-slate-100 disabled:opacity-50">
-                                      <ArrowDown className="w-3 h-3 text-slate-600" />
+                                  ) : (
+                                    <span className={`px-2 py-1 rounded text-[10px] font-medium ${item.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                      {item.isActive ? 'Active' : 'Inactive'}
+                                    </span>
+                                  )}
+                                  {canDelete && (
+                                    <button onClick={() => handleDeleteGourmetRestaurant(item._id)} disabled={gourmetDeleting === item._id} className="p-1 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
+                                      {gourmetDeleting === item._id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                                     </button>
-                                  </div>
-                                  <button onClick={() => handleToggleGourmetStatus(item._id, item.isActive)} className={`px-2 py-1 rounded text-[10px] font-medium ${item.isActive ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                                    {item.isActive ? 'Deactivate' : 'Activate'}
-                                  </button>
-                                  <button onClick={() => handleDeleteGourmetRestaurant(item._id)} disabled={gourmetDeleting === item._id} className="p-1 rounded hover:bg-red-100 text-red-600 disabled:opacity-50">
-                                    {gourmetDeleting === item._id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                                  </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -2389,27 +2443,29 @@ export default function LandingPageManagement() {
                   >
                     Cancel
                   </Button>
-                  <Button
-                    onClick={handleLinkRestaurants}
-                    disabled={linkingRestaurants}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 min-w-[140px]"
-                  >
-                    {linkingRestaurants ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : selectedRestaurantIds.length === 0 ? (
-                      <>
-                        Save Selection
-                      </>
-                    ) : (
-                      <>
-                        <Megaphone className="w-4 h-4 mr-2" />
-                        Link Restaurant
-                      </>
-                    )}
-                  </Button>
+                  {canEdit && (
+                    <Button
+                      onClick={handleLinkRestaurants}
+                      disabled={linkingRestaurants}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 min-w-[140px]"
+                    >
+                      {linkingRestaurants ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : selectedRestaurantIds.length === 0 ? (
+                        <>
+                          Save Selection
+                        </>
+                      ) : (
+                        <>
+                          <Megaphone className="w-4 h-4 mr-2" />
+                          Link Restaurant
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>

@@ -107,6 +107,8 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             0,
             Number(order?.pricing?.packagingFee ?? tx?.pricing?.packagingFee ?? 0) || 0
         );
+        const discount = Math.max(0, Number(order?.pricing?.discount ?? tx?.pricing?.discount ?? 0) || 0);
+        const restaurantOfferDiscount = Math.max(0, Number(order?.pricing?.restaurantOfferDiscount ?? 0) || 0);
         const payout = Number(tx.amounts?.restaurantShare) || 0;
         const commission = Number(tx.amounts?.restaurantCommission) || 0;
         const restaurantGross = (baseSubtotal + packagingFee > 0)
@@ -120,6 +122,8 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
             foodNames,
             orderTotal: baseSubtotal,
             packagingFee,
+            discount,
+            restaurantOfferDiscount,
             restaurantGross,
             grossAmount: restaurantGross,
             totalAmount: tx.amounts?.totalCustomerPaid || 0,
@@ -209,6 +213,11 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
         count: currentCycleOrders.length,
         subtotal: currentCycleOrders.reduce((sum, o) => sum + (Number(o.orderTotal) || 0), 0),
         taxes: currentCycleOrders.reduce((sum, o) => sum + (Number(o.taxAmount) || 0), 0),
+        packagingFee: currentCycleOrders.reduce((sum, o) => sum + (Number(o.packagingFee) || 0), 0),
+        discount: currentCycleOrders.reduce((sum, o) => sum + (Number(o.discount) || 0), 0),
+        restaurantOfferDiscount: currentCycleOrders.reduce((sum, o) => sum + (Number(o.restaurantOfferDiscount) || 0), 0),
+        payout: currentCycleOrders.reduce((sum, o) => sum + (Number(o.payout) || 0), 0),
+        commission: currentCycleOrders.reduce((sum, o) => sum + (Number(o.commission) || 0), 0),
         gross: currentCycleOrders.reduce((sum, o) => sum + (Number(o.restaurantGross) || 0), 0)
     };
 
@@ -245,6 +254,8 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
                 0,
                 Number(order?.pricing?.packagingFee ?? tx?.pricing?.packagingFee ?? 0) || 0
             );
+            const discount = Math.max(0, Number(order?.pricing?.discount ?? tx?.pricing?.discount ?? 0) || 0);
+            const restaurantOfferDiscount = Math.max(0, Number(order?.pricing?.restaurantOfferDiscount ?? 0) || 0);
             const payout = Number(tx.amounts?.restaurantShare) || 0;
             const commission = Number(tx.amounts?.restaurantCommission) || 0;
             const restaurantGross = (baseSubtotal + packagingFee > 0)
@@ -258,6 +269,8 @@ export async function getRestaurantFinance(restaurantId, query = {}) {
                 foodNames,
                 orderTotal: baseSubtotal,
                 packagingFee,
+                discount,
+                restaurantOfferDiscount,
                 restaurantGross,
                 grossAmount: restaurantGross,
                 totalAmount: tx.amounts?.totalCustomerPaid || 0,

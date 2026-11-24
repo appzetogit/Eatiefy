@@ -8,7 +8,6 @@ import { exportReportsToCSV, exportReportsToExcel, exportReportsToPDF, exportRep
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import searchIcon from "@food/assets/Dashboard-icons/image8.png"
 import exportIcon from "@food/assets/Dashboard-icons/image9.png"
-import scheduledIcon from "@food/assets/Dashboard-icons/scheduled.svg"
 import pendingIcon from "@food/assets/Dashboard-icons/pending.svg"
 import acceptedIcon from "@food/assets/Dashboard-icons/accepted.svg"
 import processingIcon from "@food/assets/Dashboard-icons/processing.svg"
@@ -23,13 +22,13 @@ const debugError = (...args) => {}
 
 
 const statusMeta = {
-  Scheduled: { label: "Scheduled Orders", color: "text-amber-600", bg: "bg-amber-50", icon: scheduledIcon },
   Pending: { label: "Pending Orders", color: "text-blue-600", bg: "bg-blue-50", icon: pendingIcon },
   Accepted: { label: "Accepted Orders", color: "text-sky-600", bg: "bg-sky-50", icon: acceptedIcon },
   Processing: { label: "Processing Orders", color: "text-indigo-600", bg: "bg-indigo-50", icon: processingIcon },
   "Food On The Way": { label: "Food On The Way", color: "text-cyan-600", bg: "bg-cyan-50", icon: onTheWayIcon },
   Delivered: { label: "Delivered", color: "text-emerald-600", bg: "bg-emerald-50", icon: deliveredIcon },
-  Canceled: { label: "Canceled", color: "text-red-600", bg: "bg-red-50", icon: canceledIcon },
+  Cancelled: { label: "Cancelled", color: "text-red-600", bg: "bg-red-50", icon: canceledIcon },
+  Canceled: { label: "Cancelled", color: "text-red-600", bg: "bg-red-50", icon: canceledIcon },
   "Payment Failed": { label: "Payment Failed", color: "text-orange-600", bg: "bg-orange-50", icon: paymentFailedIcon },
   Refunded: { label: "Refunded", color: "text-teal-600", bg: "bg-teal-50", icon: refundedIcon },
 }
@@ -45,13 +44,12 @@ export default function RegularOrderReport() {
   const [totalOrders, setTotalOrders] = useState(0)
   const [statusCounts, setStatusCounts] = useState({
     total: 0,
-    Scheduled: 0,
     Pending: 0,
     Accepted: 0,
     Processing: 0,
     "Food On The Way": 0,
     Delivered: 0,
-    Canceled: 0,
+    Cancelled: 0,
     "Payment Failed": 0,
     Refunded: 0,
   })
@@ -170,17 +168,17 @@ export default function RegularOrderReport() {
           const total = Number(meta.total ?? response.data.data.total ?? rawOrders.length) || 0
           setTotalOrders(total)
           if (response.data.data.statusCounts) {
+            const sc = response.data.data.statusCounts || {}
             setStatusCounts({
-              Scheduled: 0,
               Pending: 0,
               Accepted: 0,
               Processing: 0,
               "Food On The Way": 0,
               Delivered: 0,
-              Canceled: 0,
               "Payment Failed": 0,
               Refunded: 0,
-              ...response.data.data.statusCounts,
+              ...sc,
+              Cancelled: sc.Cancelled ?? sc.Canceled ?? 0,
               total,
             })
           } else {
@@ -201,12 +199,19 @@ export default function RegularOrderReport() {
                 ? itemsSubtotal
                 : Number(pricing.subtotal || 0)
 
+            const packagingCharge = Number(
+              pricing.packagingFee ??
+              pricing.packagingCharge ??
+              order.packagingCharge ??
+              order.packagingFee ??
+              0
+            )
             const deliveryCharge = Number(pricing.deliveryFee || 0)
             const platformFee = Number(pricing.platformFee || 0)
             const vatTax = Number(pricing.tax || 0)
             const couponDiscount = Number(pricing.discount || 0)
             const computedTotal =
-              subtotal + deliveryCharge + platformFee + vatTax - couponDiscount
+              subtotal + packagingCharge + deliveryCharge + platformFee + vatTax - couponDiscount
 
             const totalAmount =
               pricing.total != null
@@ -256,10 +261,14 @@ export default function RegularOrderReport() {
               displayStatus = "Food On The Way"
             } else if (backendStatus === "delivered") {
               displayStatus = "Delivered"
-            } else if (backendStatus === "cancelled_by_restaurant") {
-              displayStatus = "Canceled"
-            } else if (backendStatus === "cancelled_by_user" || backendStatus === "cancelled_by_admin") {
-              displayStatus = "Canceled"
+            } else if (
+              backendStatus === "cancelled_by_restaurant" ||
+              backendStatus === "cancelled_by_user" ||
+              backendStatus === "cancelled_by_admin" ||
+              backendStatus === "cancelled" ||
+              backendStatus === "canceled"
+            ) {
+              displayStatus = "Cancelled"
             }
 
             return {
@@ -270,6 +279,7 @@ export default function RegularOrderReport() {
               customerName,
               zoneId: String(zoneId || ""),
               totalItemAmount: subtotal,
+              packagingCharge,
               couponDiscount,
               vatTax,
               deliveryCharge,
@@ -307,6 +317,7 @@ export default function RegularOrderReport() {
       { key: "restaurant", label: "Restaurant" },
       { key: "customerName", label: "Customer Name" },
       { key: "totalItemAmount", label: "Total Item Amount" },
+      { key: "packagingCharge", label: "Packaging Charge" },
       { key: "couponDiscount", label: "Coupon Discount" },
       { key: "vatTax", label: "VAT/Tax" },
       { key: "deliveryCharge", label: "Delivery Charge" },
@@ -352,6 +363,10 @@ export default function RegularOrderReport() {
   const renderStatusRow = (statusKey) => {
     const meta = statusMeta[statusKey]
     if (!meta) return null
+    const count =
+      statusKey === "Cancelled" || statusKey === "Canceled"
+        ? (statusCounts.Cancelled ?? statusCounts.Canceled ?? 0)
+        : (statusCounts[statusKey] || 0)
     return (
       <div
         key={statusKey}
@@ -363,7 +378,7 @@ export default function RegularOrderReport() {
           </div>
           <span className="text-[11px] font-medium text-slate-800">{meta.label}</span>
         </div>
-          <span className={`text-xs font-semibold ${meta.color}`}>{statusCounts[statusKey] || 0}</span>
+        <span className={`text-xs font-semibold ${meta.color}`}>{count}</span>
       </div>
     )
   }
@@ -495,13 +510,12 @@ export default function RegularOrderReport() {
 
         {/* Status Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 mb-3">
-          {renderStatusRow("Scheduled")}
           {renderStatusRow("Pending")}
           {renderStatusRow("Processing")}
           {renderStatusRow("Food On The Way")}
           {renderStatusRow("Accepted")}
           {renderStatusRow("Delivered")}
-          {renderStatusRow("Canceled")}
+          {renderStatusRow("Cancelled")}
           {renderStatusRow("Payment Failed")}
           {renderStatusRow("Refunded")}
         </div>
@@ -584,14 +598,17 @@ export default function RegularOrderReport() {
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
                     Order Id
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "12%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "11%" }}>
                     Restaurant
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "12%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "11%" }}>
                     Customer Name
                   </th>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
                     Total Item Amount
+                  </th>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
+                    Packaging Charge
                   </th>
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
                     Coupon Discount
@@ -608,7 +625,7 @@ export default function RegularOrderReport() {
                   <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "8%" }}>
                     Order Amount
                   </th>
-                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "5%" }}>
+                  <th className="px-1.5 py-1 text-left text-[8px] font-bold text-slate-700 uppercase tracking-wider" style={{ width: "7%" }}>
                     Status
                   </th>
                 </tr>
@@ -616,7 +633,7 @@ export default function RegularOrderReport() {
               <tbody className="bg-white divide-y divide-slate-100">
                 {orders.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-6 py-20 text-center">
+                    <td colSpan={12} className="px-6 py-20 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <p className="text-lg font-semibold text-slate-700 mb-1">No Data Found</p>
                         <p className="text-sm text-slate-500">No orders match your filters</p>
@@ -641,7 +658,10 @@ export default function RegularOrderReport() {
                         <span className="text-[10px] text-slate-700 truncate block">{order.customerName}</span>
                       </td>
                       <td className="px-1.5 py-1">
-                        <span className="text-[10px] text-slate-700">{formatAmount(order.totalAmount)}</span>
+                        <span className="text-[10px] text-slate-700">{formatAmount(order.totalItemAmount)}</span>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <span className="text-[10px] text-slate-700">{formatAmount(order.packagingCharge)}</span>
                       </td>
                       <td className="px-1.5 py-1">
                         <span className="text-[10px] text-slate-700">{formatAmount(order.couponDiscount)}</span>

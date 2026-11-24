@@ -5,8 +5,9 @@ import { adminAPI, uploadAPI } from "@food/api"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@food/components/ui/dialog"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
-const debugError = (...args) => {}
+const debugError = (...args) => { }
 
 const getItemCreatedMs = (item = {}) => {
   const direct = [item.requestedAt, item.createdAt, item.updatedAt]
@@ -33,6 +34,7 @@ const getAddonImage = (addon) =>
   "https://via.placeholder.com/40"
 
 export default function AddonsList() {
+  const { canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [zones, setZones] = useState([])
@@ -203,16 +205,16 @@ export default function AddonsList() {
         (prev || []).map((a) =>
           String(a.id || a._id) === String(id)
             ? {
-                ...a,
-                ...editForm,
-                price: priceNum,
-                name: editForm.name.trim(),
-                description: editForm.description.trim(),
-                image: imageUrl || a.image,
-                images: imageUrl ? [imageUrl] : a.images,
-                zoneId: editForm.zoneId,
-                zoneName: resolvedZoneName || a.zoneName,
-              }
+              ...a,
+              ...editForm,
+              price: priceNum,
+              name: editForm.name.trim(),
+              description: editForm.description.trim(),
+              image: imageUrl || a.image,
+              images: imageUrl ? [imageUrl] : a.images,
+              zoneId: editForm.zoneId,
+              zoneName: resolvedZoneName || a.zoneName,
+            }
             : a,
         ),
       )
@@ -394,20 +396,24 @@ export default function AddonsList() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleEdit(addon)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                        >
-                          <Pencil className="w-4 h-4" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(addon)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => handleEdit(addon)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Edit
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(addon)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -426,7 +432,7 @@ export default function AddonsList() {
             setPageSize(size)
             try {
               localStorage.setItem("admin_addons_pageSize", String(size))
-            } catch {}
+            } catch { }
             setCurrentPage(1)
           }}
           itemLabel="add-ons"

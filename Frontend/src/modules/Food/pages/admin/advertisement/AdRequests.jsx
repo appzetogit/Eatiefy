@@ -5,8 +5,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@food/components/ui/dialog"
 import SettingsDialog from "@food/components/admin/orders/SettingsDialog"
 import { exportAdvertisementsToCSV, exportAdvertisementsToExcel, exportAdvertisementsToPDF, exportAdvertisementsToJSON } from "@food/components/admin/advertisements/advertisementsExportUtils"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 export default function AdRequests() {
+  const { canEdit } = useAdminPermissions()
   const [activeTab, setActiveTab] = useState("new")
   const [searchQuery, setSearchQuery] = useState("")
   const [requests, setRequests] = useState(emptyAdRequests)
@@ -40,7 +42,7 @@ export default function AdRequests() {
 
   const filteredRequests = useMemo(() => {
     let result = [...requests]
-    
+
     // Filter by tab
     if (activeTab === "new") {
       result = result.filter(r => r.status === "new" || !r.status)
@@ -49,7 +51,7 @@ export default function AdRequests() {
     } else if (activeTab === "denied") {
       result = result.filter(r => r.status === "denied")
     }
-    
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
@@ -59,17 +61,17 @@ export default function AdRequests() {
         request.adsTitle?.toLowerCase().includes(query)
       )
     }
-    
+
     // Filter by ads type
     if (filters.adsType) {
       result = result.filter(r => r.adsType === filters.adsType)
     }
-    
+
     // Filter by restaurant
     if (filters.restaurant) {
       result = result.filter(r => r.restaurantName === filters.restaurant)
     }
-    
+
     return result
   }, [requests, searchQuery, activeTab, filters])
 
@@ -101,13 +103,13 @@ export default function AdRequests() {
   }
 
   const handleApprove = (sl) => {
-    setRequests(requests.map(r => 
+    setRequests(requests.map(r =>
       r.sl === sl ? { ...r, status: "approved" } : r
     ))
   }
 
   const handleDeny = (sl) => {
-    setRequests(requests.map(r => 
+    setRequests(requests.map(r =>
       r.sl === sl ? { ...r, status: "denied" } : r
     ))
   }
@@ -167,90 +169,88 @@ export default function AdRequests() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.key
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.key
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-slate-600 hover:text-slate-900"
-              }`}
+                }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">Advertisement</h2>
-              <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
-                {filteredRequests.length}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3 ml-auto">
-              <div className="relative flex-1 sm:flex-initial min-w-[250px]">
-                <input
-                  type="text"
-                  placeholder="Search by ads ID or restaurant"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
-                />
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              </div>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
-                    <Download className="w-4 h-4" />
-                    <span className="text-black font-bold">Export</span>
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-                  <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport("csv")} className="cursor-pointer">
-                    <FileDown className="w-4 h-4 mr-2" />
-                    Export as CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("excel")} className="cursor-pointer">
-                    <FileSpreadsheet className="w-4 h-4 mr-2" />
-                    Export as Excel
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("pdf")} className="cursor-pointer">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Export as PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("json")} className="cursor-pointer">
-                    <Code className="w-4 h-4 mr-2" />
-                    Export as JSON
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <button 
-                onClick={() => setIsFilterOpen(true)}
-                className={`px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all relative ${
-                  activeFiltersCount > 0 ? "border-emerald-500 bg-emerald-50" : ""
-                }`}
-              >
-                <Filter className="w-4 h-4" />
-                <span className="text-black font-bold">Filters</span>
-                {activeFiltersCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 text-white rounded-full text-[10px] flex items-center justify-center font-bold">
-                    {activeFiltersCount}
-                  </span>
-                )}
-              </button>
-
-              <button 
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-slate-900">Advertisement</h2>
+            <span className="px-3 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700">
+              {filteredRequests.length}
+            </span>
           </div>
+
+          <div className="flex items-center gap-3 ml-auto">
+            <div className="relative flex-1 sm:flex-initial min-w-[250px]">
+              <input
+                type="text"
+                placeholder="Search by ads ID or restaurant"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all">
+                  <Download className="w-4 h-4" />
+                  <span className="text-black font-bold">Export</span>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleExport("csv")} className="cursor-pointer">
+                  <FileDown className="w-4 h-4 mr-2" />
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("excel")} className="cursor-pointer">
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Export as Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("pdf")} className="cursor-pointer">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Export as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport("json")} className="cursor-pointer">
+                  <Code className="w-4 h-4 mr-2" />
+                  Export as JSON
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <button
+              onClick={() => setIsFilterOpen(true)}
+              className={`px-4 py-2.5 text-sm font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-2 transition-all relative ${activeFiltersCount > 0 ? "border-emerald-500 bg-emerald-50" : ""
+                }`}
+            >
+              <Filter className="w-4 h-4" />
+              <span className="text-black font-bold">Filters</span>
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 text-white rounded-full text-[10px] flex items-center justify-center font-bold">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Table */}
@@ -329,32 +329,32 @@ export default function AdRequests() {
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => handleViewRequest(request)}
                               className="cursor-pointer"
                             >
                               <Eye className="w-4 h-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
-                            {activeTab === "new" && (
-                              <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem 
-                                  onClick={() => handleApprove(request.sl)}
-                                  className="cursor-pointer text-emerald-600"
-                                >
-                                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                                  Approve
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  onClick={() => handleDeny(request.sl)}
-                                  className="cursor-pointer text-red-600"
-                                >
-                                  <XCircle className="w-4 h-4 mr-2" />
-                                  Deny
-                                </DropdownMenuItem>
-                              </>
-                            )}
+                              { activeTab === "new" && canEdit && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => handleApprove(request.sl)}
+                                    className="cursor-pointer text-emerald-600"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                                    Approve
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeny(request.sl)}
+                                    className="cursor-pointer text-red-600"
+                                  >
+                                    <XCircle className="w-4 h-4 mr-2" />
+                                    Deny
+                                  </DropdownMenuItem>
+                                </>
+                              )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

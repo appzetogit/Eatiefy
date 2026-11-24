@@ -2,7 +2,12 @@ import { useState, useEffect, useRef } from "react"
 import { Search, Download, ChevronDown, Star, ArrowUpDown, Settings, FileText, FileSpreadsheet, Code, Check, Columns, Loader2, Eye, Utensils } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
-import { exportReviewsToCSV, exportReviewsToExcel, exportReviewsToPDF, exportReviewsToJSON } from "@food/components/admin/deliveryman/deliverymanExportUtils"
+import {
+  exportRestaurantReviewsToCSV,
+  exportRestaurantReviewsToExcel,
+  exportRestaurantReviewsToPDF,
+  exportRestaurantReviewsToJSON,
+} from "@food/components/admin/restaurant/restaurantReviewsExportUtils"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
@@ -99,12 +104,11 @@ export default function RestaurantReviews() {
       alert("No data to export")
       return
     }
-    // Reuse deliveryman export utils or create new ones if needed
     switch (format) {
-      case "csv": exportReviewsToCSV(filteredReviews); break
-      case "excel": exportReviewsToExcel(filteredReviews); break
-      case "pdf": exportReviewsToPDF(filteredReviews); break
-      case "json": exportReviewsToJSON(filteredReviews); break
+      case "csv": exportRestaurantReviewsToCSV(filteredReviews); break
+      case "excel": exportRestaurantReviewsToExcel(filteredReviews); break
+      case "pdf": exportRestaurantReviewsToPDF(filteredReviews); break
+      case "json": exportRestaurantReviewsToJSON(filteredReviews); break
     }
   }
 

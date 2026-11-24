@@ -17,11 +17,12 @@ import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
 import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const alertSound = "/assets/media/alert.mp3"
 const originalSound = "/assets/media/original.mp3"
-const debugLog = (...args) => {}
-const debugWarn = (...args) => {}
-const debugError = (...args) => {}
+const debugLog = (...args) => { }
+const debugWarn = (...args) => { }
+const debugError = (...args) => { }
 
 
 // Status configuration with titles, colors, and icons
@@ -41,6 +42,7 @@ const statusConfig = {
 }
 
 export default function OrdersPage({ statusKey = "all" }) {
+  const { canEdit } = useAdminPermissions()
   const config = statusConfig[statusKey] || statusConfig["all"]
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -107,7 +109,7 @@ export default function OrdersPage({ statusKey = "all" }) {
       if (typeof window !== "undefined" && window.__userHasInteracted && typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
         try {
           navigator.vibrate([200, 100, 200, 100, 300])
-        } catch (_) {}
+        } catch (_) { }
       }
 
       notificationAudioRef.current.muted = false
@@ -134,8 +136,8 @@ export default function OrdersPage({ statusKey = "all" }) {
         fallbackAudioRef.current.muted = false
         fallbackAudioRef.current.volume = 1
         fallbackAudioRef.current.currentTime = 0
-        fallbackAudioRef.current.play().catch(() => {})
-      } catch (_) {}
+        fallbackAudioRef.current.play().catch(() => { })
+      } catch (_) { }
 
       const AudioCtx = window.AudioContext || window.webkitAudioContext
       if (AudioCtx) {
@@ -170,7 +172,7 @@ export default function OrdersPage({ statusKey = "all" }) {
 
           setTimeout(() => {
             if (ctx.state === "running") {
-              ctx.suspend().catch(() => {})
+              ctx.suspend().catch(() => { })
             }
           }, 1200)
         }
@@ -248,7 +250,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         window.focus()
         notification.close()
       }
-    } catch (_) {}
+    } catch (_) { }
   }, [])
 
   // Unlock audio on first user gesture so rings can play reliably later
@@ -280,7 +282,7 @@ export default function OrdersPage({ statusKey = "all" }) {
           )
           await silentAudio.play()
           silentAudio.pause()
-        } catch (_) {}
+        } catch (_) { }
 
         // Prime WebAudio permission
         const AudioCtx = window.AudioContext || window.webkitAudioContext
@@ -319,7 +321,7 @@ export default function OrdersPage({ statusKey = "all" }) {
     return () => {
       stopAlertLoop()
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-        audioContextRef.current.close().catch(() => {})
+        audioContextRef.current.close().catch(() => { })
       }
       if (notificationAudioRef.current) {
         notificationAudioRef.current.pause()
@@ -332,7 +334,7 @@ export default function OrdersPage({ statusKey = "all" }) {
     if (statusKey !== "all") return
     if (typeof window === "undefined" || typeof Notification === "undefined") return
     if (Notification.permission === "default") {
-      Notification.requestPermission().catch(() => {})
+      Notification.requestPermission().catch(() => { })
     }
   }, [statusKey])
 
@@ -348,19 +350,19 @@ export default function OrdersPage({ statusKey = "all" }) {
           : null
       const date = createdAt
         ? createdAt.toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            timeZone: "Asia/Kolkata",
-          }).toUpperCase()
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          timeZone: "Asia/Kolkata",
+        }).toUpperCase()
         : ""
       const time = createdAt
         ? createdAt.toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-            timeZone: "Asia/Kolkata",
-          }).toUpperCase()
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: "Asia/Kolkata",
+        }).toUpperCase()
         : ""
 
       const pricing = order.pricing || {}
@@ -391,7 +393,7 @@ export default function OrdersPage({ statusKey = "all" }) {
       const method = String(paymentMethod).toLowerCase();
       const hasRazorpayId = !!(order.payment?.razorpay_payment_id || order.payment?.razorpayPaymentId);
       const isQrPayment = method === "razorpay_qr" || method === "qr" || (method === "cod" && hasRazorpayId) || (method === "cash" && hasRazorpayId);
-      
+
       let paymentStatus = order.paymentStatus
       if (paymentStatus === "Collected") paymentStatus = "Paid"
       if (paymentStatus === "Not Collected") paymentStatus = "COD Pending"
@@ -449,55 +451,55 @@ export default function OrdersPage({ statusKey = "all" }) {
 
       const items = Array.isArray(order.items)
         ? order.items.map((item) => {
-            const selling = Number(item.price || item.variantPrice || 0) || 0
-            let base =
-              item.basePrice != null && Number.isFinite(Number(item.basePrice))
-                ? Number(item.basePrice)
-                : null
-            let markup =
-              item.markupAmount != null && Number.isFinite(Number(item.markupAmount))
-                ? Math.max(0, Number(item.markupAmount))
-                : 0
+          const selling = Number(item.price || item.variantPrice || 0) || 0
+          let base =
+            item.basePrice != null && Number.isFinite(Number(item.basePrice))
+              ? Number(item.basePrice)
+              : null
+          let markup =
+            item.markupAmount != null && Number.isFinite(Number(item.markupAmount))
+              ? Math.max(0, Number(item.markupAmount))
+              : 0
 
-            if (!(markup > 0) && base != null && selling > base + 0.01) {
+          if (!(markup > 0) && base != null && selling > base + 0.01) {
+            markup = Math.round((selling - base) * 100) / 100
+          }
+
+          // Recover base when older orders stored selling price in both fields
+          if (
+            (base == null || Math.abs(base - selling) < 0.01) &&
+            markup <= 0
+          ) {
+            const type = String(item.appliedPricingType || "").toUpperCase()
+            const value = Number(item.appliedPricingValue)
+            if (type === "FIXED" && value > 0 && selling > value) {
+              base = Math.round((selling - value) * 100) / 100
+              markup = value
+            } else if (type === "PERCENTAGE" && value > 0) {
+              base = Math.round((selling / (1 + value / 100)) * 100) / 100
               markup = Math.round((selling - base) * 100) / 100
             }
+          }
 
-            // Recover base when older orders stored selling price in both fields
-            if (
-              (base == null || Math.abs(base - selling) < 0.01) &&
-              markup <= 0
-            ) {
-              const type = String(item.appliedPricingType || "").toUpperCase()
-              const value = Number(item.appliedPricingValue)
-              if (type === "FIXED" && value > 0 && selling > value) {
-                base = Math.round((selling - value) * 100) / 100
-                markup = value
-              } else if (type === "PERCENTAGE" && value > 0) {
-                base = Math.round((selling / (1 + value / 100)) * 100) / 100
-                markup = Math.round((selling - base) * 100) / 100
-              }
-            }
+          if (base == null) base = selling
 
-            if (base == null) base = selling
-
-            return {
-              quantity: item.quantity || 1,
-              name: item.name || item.foodName || item.title || "Item",
-              price: selling,
-              basePrice: base,
-              markupAmount: markup,
-              otherPrice: item.otherPrice != null ? item.otherPrice : selling,
-              pricingScope: item.pricingScope || item.pricingRule?.scope || null,
-              appliedPricingType: item.appliedPricingType || null,
-              appliedPricingValue: item.appliedPricingValue ?? null,
-              variantName: item.variantName || item.variant || item.selectedVariant?.name || "",
-              variantId: item.variantId || item.selectedVariant?.id || "",
-              isVeg: item.isVeg,
-              description: item.description || "",
-              addons: item.addons || item.addOns || [],
-            }
-          })
+          return {
+            quantity: item.quantity || 1,
+            name: item.name || item.foodName || item.title || "Item",
+            price: selling,
+            basePrice: base,
+            markupAmount: markup,
+            otherPrice: item.otherPrice != null ? item.otherPrice : selling,
+            pricingScope: item.pricingScope || item.pricingRule?.scope || null,
+            appliedPricingType: item.appliedPricingType || null,
+            appliedPricingValue: item.appliedPricingValue ?? null,
+            variantName: item.variantName || item.variant || item.selectedVariant?.name || "",
+            variantId: item.variantId || item.selectedVariant?.id || "",
+            isVeg: item.isVeg,
+            description: item.description || "",
+            addons: item.addons || item.addOns || [],
+          }
+        })
         : []
 
       if (!Number.isFinite(baseSubtotal) || baseSubtotal < 0) {
@@ -975,7 +977,7 @@ export default function OrdersPage({ statusKey = "all" }) {
   // Handle refund button click - show modal for wallet payments, confirm dialog for others
   const handleRefund = (order) => {
     const isWalletPayment = order.paymentType === "Wallet" || order.payment?.method === "wallet";
-    
+
     if (isWalletPayment) {
       // Show modal for wallet refunds
       setSelectedOrderForRefund(order)
@@ -983,11 +985,11 @@ export default function OrdersPage({ statusKey = "all" }) {
     } else {
       // For non-wallet payments, use the old confirm dialog flow
       const confirmMessage = `Are you sure you want to process refund for order ${order.orderId}?\n\nThis will initiate a Razorpay refund to the customer's original payment method.`;
-      
+
       if (!confirm(confirmMessage)) {
         return
       }
-      
+
       processRefund(order, null) // null amount means use default
     }
   }
@@ -998,13 +1000,13 @@ export default function OrdersPage({ statusKey = "all" }) {
     // Backend accepts either MongoDB ObjectId (24 chars) or orderId string
     // Using MongoDB _id is more reliable for route matching (no dashes/special chars)
     const orderIdToUse = order.id || order._id || order.orderId
-    
+
     if (!orderIdToUse) {
       debugError('? No orderId found in order object:', order)
       toast.error('Order ID not found. Please refresh the page and try again.')
       return
     }
-    
+
     debugLog('?? Order details for refund:', {
       orderIdString: order.orderId,
       mongoId: order.id,
@@ -1015,7 +1017,7 @@ export default function OrdersPage({ statusKey = "all" }) {
 
     try {
       setProcessingRefund(orderIdToUse)
-      
+
       debugLog('?? Processing refund for order:', {
         orderId: order.orderId,
         id: order.id,
@@ -1024,20 +1026,20 @@ export default function OrdersPage({ statusKey = "all" }) {
         refundAmount,
         url: `/api/admin/orders/${orderIdToUse}/refund`
       })
-      
+
       // Include refundAmount in request body if provided (ensure it's a number)
       const requestData = refundAmount !== null ? { refundAmount: parseFloat(refundAmount) } : {}
       debugLog('?? Request data being sent:', requestData)
       const response = await adminAPI.processRefund(orderIdToUse, requestData)
-      
+
       if (response.data?.success) {
         const isWalletPayment = order.paymentType === "Wallet" || order.payment?.method === "wallet";
-        toast.success(response.data?.message || (isWalletPayment 
+        toast.success(response.data?.message || (isWalletPayment
           ? `Wallet refund of \u20B9${refundAmount || order.totalAmount} processed successfully for order ${order.orderId}`
           : `Refund initiated successfully for order ${order.orderId}`))
         // Update the order in the local state immediately to show "Refunded" status
-        setOrders(prevOrders => 
-          prevOrders.map(o => 
+        setOrders(prevOrders =>
+          prevOrders.map(o =>
             (o.id === order.id || o.orderId === order.orderId)
               ? { ...o, refundStatus: 'processed' } // Wallet refunds are instant, so mark as processed
               : o
@@ -1050,7 +1052,7 @@ export default function OrdersPage({ statusKey = "all" }) {
       }
     } catch (error) {
       debugError("? Error processing refund:", error)
-      
+
       // Log full error details for debugging
       const errorDetails = {
         message: error.message,
@@ -1070,10 +1072,10 @@ export default function OrdersPage({ statusKey = "all" }) {
         stack: error.stack
       }
       debugError("? Error details:", JSON.stringify(errorDetails, null, 2))
-      
+
       // Show more specific error message
       let errorMessage = "Failed to process refund"
-      
+
       if (error.response) {
         // Server responded with error
         if (error.response.status === 404) {
@@ -1094,7 +1096,7 @@ export default function OrdersPage({ statusKey = "all" }) {
         // Error in setting up the request
         errorMessage = error.message || "Failed to process refund"
       }
-      
+
       debugError("? Final error message:", errorMessage)
       toast.error(errorMessage)
     } finally {
@@ -1113,9 +1115,9 @@ export default function OrdersPage({ statusKey = "all" }) {
 
   return (
     <div className="p-4 lg:p-6 bg-slate-50 min-h-screen w-full max-w-full overflow-x-hidden">
-      <OrdersTopbar 
-        title={config.title} 
-        count={totalOrders !== null && totalOrders !== undefined ? totalOrders : count} 
+      <OrdersTopbar
+        title={config.title}
+        count={totalOrders !== null && totalOrders !== undefined ? totalOrders : count}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onFilterClick={() => setIsFilterOpen(true)}
@@ -1193,14 +1195,14 @@ export default function OrdersPage({ statusKey = "all" }) {
             onConfirm={handleRefundConfirm}
             isProcessing={processingRefund !== null}
           />
-          <OrdersTable 
-            orders={filteredOrders} 
+          <OrdersTable
+            orders={filteredOrders}
             visibleColumns={visibleColumns}
             onViewOrder={handleViewOrder}
             onPrintOrder={handlePrintOrder}
-            onRefund={handleRefund}
-            onAcceptOrder={(statusKey === "all" || statusKey === "pending") ? handleAcceptOrder : undefined}
-            onRejectOrder={(statusKey === "all" || statusKey === "pending") ? handleRejectOrder : undefined}
+            onRefund={canEdit ? handleRefund : undefined}
+            onAcceptOrder={(canEdit && (statusKey === "all" || statusKey === "pending")) ? handleAcceptOrder : undefined}
+            onRejectOrder={(canEdit && (statusKey === "all" || statusKey === "pending")) ? handleRejectOrder : undefined}
             actionLoadingOrderId={processingActionOrderId}
             actionLoadingType={actionLoadingType}
             deletingOrderId={deletingOrderId}
@@ -1212,7 +1214,7 @@ export default function OrdersPage({ statusKey = "all" }) {
               setPageSize(size)
               try {
                 localStorage.setItem("admin_orders_pageSize", String(size))
-              } catch {}
+              } catch { }
               setCurrentPage(1)
             }}
           />

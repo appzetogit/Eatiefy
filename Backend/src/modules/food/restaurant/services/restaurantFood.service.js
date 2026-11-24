@@ -142,10 +142,10 @@ const resolveCategoryForRestaurant = async (context, body = {}) => {
         ...getAccessibleCategoryFilter(context),
         isActive: { $ne: false }
     };
-    if (context.foodType === 'Veg') {
-        baseFilter.foodTypeScope = 'Veg';
+    if (context.foodType === 'Veg' || context.pureVegRestaurant) {
+        baseFilter.foodTypeScope = { $nin: ['Non-Veg', 'non-veg'] };
     } else if (context.foodType === 'Non-Veg') {
-        baseFilter.foodTypeScope = 'Non-Veg';
+        baseFilter.foodTypeScope = { $nin: ['Veg', 'veg'] };
     }
 
     let category = null;

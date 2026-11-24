@@ -14,6 +14,7 @@ import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -106,6 +107,7 @@ const ImageComparison = ({ oldImage, newImage, oldImages = [], newImages = [] })
 };
 
 export default function FoodApproval() {
+  const { canEdit } = useAdminPermissions()
   const [foodRequests, setFoodRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -584,38 +586,40 @@ export default function FoodApproval() {
                 {totalRequests}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {selectedItems.size > 0 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => openBulkModal("selected")}
-                    disabled={processing}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Approve Selected ({selectedItems.size})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedItems(new Map())}
-                    disabled={processing}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  >
-                    Clear
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => openBulkModal(selectedItems.size > 0 ? "selected" : "restaurants")}
-                disabled={processing}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[#006fbd] bg-white px-3 py-1.5 text-xs font-semibold text-[#006fbd] hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ListChecks className="w-4 h-4" />
-                Bulk Approve
-              </button>
-            </div>
+            {canEdit && (
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedItems.size > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openBulkModal("selected")}
+                      disabled={processing}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Approve Selected ({selectedItems.size})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedItems(new Map())}
+                      disabled={processing}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => openBulkModal(selectedItems.size > 0 ? "selected" : "restaurants")}
+                  disabled={processing}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[#006fbd] bg-white px-3 py-1.5 text-xs font-semibold text-[#006fbd] hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ListChecks className="w-4 h-4" />
+                  Bulk Approve
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Filter Bar */}
@@ -788,22 +792,26 @@ export default function FoodApproval() {
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => handleApprove(request)}
-                                disabled={processing || !request.isActionable}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Approve"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleRejectClick(request)}
-                                disabled={processing || !request.isActionable}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Reject"
-                              >
-                                <XCircle className="w-4 h-4" />
-                              </button>
+                              {canEdit && (
+                                <>
+                                  <button
+                                    onClick={() => handleApprove(request)}
+                                    disabled={processing || !request.isActionable}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Approve"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectClick(request)}
+                                    disabled={processing || !request.isActionable}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Reject"
+                                  >
+                                    <XCircle className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1232,7 +1240,7 @@ export default function FoodApproval() {
             >
               Close
             </button>
-            {selectedRequest?.isActionable && (
+            {canEdit && selectedRequest?.isActionable && (
               <>
                 <button
                   type="button"

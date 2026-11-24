@@ -21,6 +21,7 @@ import autoTable from "jspdf-autotable"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const defaultFormData = {
   name: "",
@@ -61,6 +62,7 @@ const zoneLabel = (zone, zoneNames) => {
 }
 
 export default function Category() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [selectedZone, setSelectedZone] = useState("all")
@@ -481,13 +483,15 @@ export default function Category() {
               Export
             </button>
 
-            <button
-              onClick={handleAddNew}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
-            >
-              <Plus className="h-4 w-4" />
-              Add Category
-            </button>
+            {(canCreate || canEdit) && (
+              <button
+                onClick={handleAddNew}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
+              >
+                <Plus className="h-4 w-4" />
+                Add Category
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -579,9 +583,10 @@ export default function Category() {
                       </td>
                       <td className="px-4 py-5 text-center">
                         <button
-                          onClick={() => handleToggleStatus(category.id)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full ${category?.status ? "bg-blue-600" : "bg-slate-300"}`}
-                          title={category?.status ? "Deactivate" : "Activate"}
+                          onClick={() => canEdit && handleToggleStatus(category.id)}
+                          disabled={!canEdit}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full ${category?.status ? "bg-blue-600" : "bg-slate-300"} ${!canEdit ? "opacity-60 cursor-not-allowed" : ""}`}
+                          title={!canEdit ? "Permission required to change status" : category?.status ? "Deactivate" : "Activate"}
                         >
                           <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${category?.status ? "translate-x-6" : "translate-x-1"}`} />
                         </button>
@@ -599,49 +604,55 @@ export default function Category() {
                       </td>
                       <td className="px-5 py-5">
                         <div className="flex flex-col items-end gap-2">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            {approvalStatus !== "approved" && (
-                              <button
-                                onClick={() => handleApprove(category.id)}
-                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                              >
-                                Approve
-                              </button>
-                            )}
-                            {isRestaurantCategory && approvalStatus !== "rejected" && (
-                              <button
-                                onClick={() => handleReject(category)}
-                                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                              >
-                                Reject
-                              </button>
-                            )}
-                            {isRestaurantCategory && !category?.isGlobal && approvalStatus === "approved" && (
-                              <button
-                                onClick={() => handleMakeGlobal(category)}
-                                className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                              >
-                                Make Global
-                              </button>
-                            )}
+                              { canEdit && (
+                                <div className="flex flex-wrap justify-end gap-2">
+                                  {approvalStatus !== "approved" && (
+                                    <button
+                                      onClick={() => handleApprove(category.id)}
+                                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+                                    >
+                                      Approve
+                                    </button>
+                                  )}
+                                  {isRestaurantCategory && approvalStatus !== "rejected" && (
+                                    <button
+                                      onClick={() => handleReject(category)}
+                                      className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+                                    >
+                                      Reject
+                                    </button>
+                                  )}
+                                  {isRestaurantCategory && !category?.isGlobal && approvalStatus === "approved" && (
+                                    <button
+                                      onClick={() => handleMakeGlobal(category)}
+                                      className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+                                    >
+                                      Make Global
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            <div className="flex items-center justify-end gap-1">
+                              {canEdit && (
+                                <button
+                                  onClick={() => handleEdit(category)}
+                                  className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                                  title="Edit"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                              )}
+                                { canDelete && (
+                                  <button
+                                    onClick={() => handleDelete(category.id)}
+                                    className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                            </div>
                           </div>
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleEdit(category)}
-                              className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
-                              title="Edit"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(category.id)}
-                              className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
                       </td>
                     </tr>
                   )
@@ -660,7 +671,7 @@ export default function Category() {
             setPageSize(size)
             try {
               localStorage.setItem("admin_categories_pageSize", String(size))
-            } catch {}
+            } catch { }
             setCurrentPage(1)
           }}
           itemLabel="categories"

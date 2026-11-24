@@ -45,6 +45,35 @@ const sanitizeGst = (value = "") => value.toUpperCase().replace(/[^A-Z0-9]/g, ""
 const normalizeName = (value = "") => value.replace(/\s+/g, " ").trimStart()
 const hasLetters = (value = "") => /[A-Za-z]/.test(value)
 const getTodayLocalYMD = () => new Date().toISOString().split("T")[0]
+
+/** Ray-casting point-in-polygon over a zone's coordinates. */
+const isPointInZone = (lat, lng, zone) => {
+  let polygon = []
+  if (Array.isArray(zone?.coordinates)) {
+    polygon = zone.coordinates
+  } else if (Array.isArray(zone?.coordinates?.coordinates?.[0])) {
+    polygon = zone.coordinates.coordinates[0].map((pt) => ({
+      latitude: pt[1],
+      longitude: pt[0],
+    }))
+  }
+  if (polygon.length < 3) return false
+
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const ptI = polygon[i]
+    const ptJ = polygon[j]
+    const xi = Number(ptI?.longitude ?? ptI?.lng ?? (Array.isArray(ptI) ? ptI[0] : NaN))
+    const yi = Number(ptI?.latitude ?? ptI?.lat ?? (Array.isArray(ptI) ? ptI[1] : NaN))
+    const xj = Number(ptJ?.longitude ?? ptJ?.lng ?? (Array.isArray(ptJ) ? ptJ[0] : NaN))
+    const yj = Number(ptJ?.latitude ?? ptJ?.lat ?? (Array.isArray(ptJ) ? ptJ[1] : NaN))
+    if (![xi, yi, xj, yj].every(Number.isFinite)) continue
+    if (yj === yi) continue
+    const intersect = yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    if (intersect) inside = !inside
+  }
+  return inside
+}
 const timeStringToMinutes = (value = "") => {
   const raw = String(value || "").trim()
   if (!/^\d{2}:\d{2}$/.test(raw)) return null
@@ -229,6 +258,7 @@ export default function AddRestaurant() {
   const [formErrors, setFormErrors] = useState({})
   const [zones, setZones] = useState([])
   const [zonesLoading, setZonesLoading] = useState(false)
+  const [isZoneAutoSelected, setIsZoneAutoSelected] = useState(false)
   // Restaurant types come from the backend (same list the restaurant onboarding uses).
   const [restaurantTypes, setRestaurantTypes] = useState([])
   const [restaurantTypesStatus, setRestaurantTypesStatus] = useState("loading")
@@ -243,10 +273,12 @@ export default function AddRestaurant() {
   const [locationSearchValue, setLocationSearchValue] = useState("")
   const [locationSuggestions, setLocationSuggestions] = useState([])
   const [isSearchingLocation, setIsSearchingLocation] = useState(false)
+  const isSelectingLocationRef = useRef(false)
 
   // Step 1: Basic Info
   const [step1, setStep1] = useState({
     restaurantName: "",
+    foodType: "",
     pureVegRestaurant: null,
     pureVeganRestaurant: false,
     restaurantType: "",
@@ -523,7 +555,9 @@ export default function AddRestaurant() {
   const validateStep1 = () => {
     const errors = []
     if (!step1.restaurantName?.trim()) errors.push("Restaurant name is required")
-    if (typeof step1.pureVegRestaurant !== "boolean") errors.push("Please select whether restaurant is pure veg")
+    if (!step1.foodType && typeof step1.pureVegRestaurant !== "boolean") {
+      errors.push("Please select your restaurant diet type (Veg, Non-Veg, or Mixed)")
+    }
     const restaurantTypeError = getRestaurantTypeError()
     if (restaurantTypeError) errors.push(restaurantTypeError)
     if (!step1.ownerName?.trim()) errors.push("Owner name is required")
@@ -718,11 +752,13 @@ export default function AddRestaurant() {
       }
 
       // Prepare payload
+      const resolvedFoodType = step1.foodType || (step1.pureVegRestaurant ? "Veg" : "Mixed")
       const payload = {
         // Step 1
         restaurantName: step1.restaurantName,
-        pureVegRestaurant: step1.pureVegRestaurant === true || step1.pureVeganRestaurant === true,
-        pureVeganRestaurant: step1.pureVeganRestaurant === true,
+        foodType: resolvedFoodType,
+        pureVegRestaurant: resolvedFoodType === "Veg" || step1.pureVegRestaurant === true,
+        pureVeganRestaurant: false,
         restaurantType: step1.restaurantType,
         ownerName: step1.ownerName,
         ownerEmail: step1.ownerEmail,
@@ -824,11 +860,38 @@ export default function AddRestaurant() {
     }
   }
 
+  const resolveZoneForLocation = (lat, lng, city, zoneList = zones) => {
+    if (!Array.isArray(zoneList) || zoneList.length === 0) return null
+    const numLat = Number(lat)
+    const numLng = Number(lng)
+    if (Number.isFinite(numLat) && Number.isFinite(numLng)) {
+      const polygonMatch = zoneList.find((z) => isPointInZone(numLat, numLng, z))
+      if (polygonMatch) return polygonMatch
+    }
+    const normCity = String(city || "").trim().toLowerCase()
+    if (normCity) {
+      const cityMatch = zoneList.find((z) => {
+        const zName = String(z?.name || z?.zoneName || z?.serviceLocation || "").trim().toLowerCase()
+        return zName && (zName.includes(normCity) || normCity.includes(zName))
+      })
+      if (cityMatch) return cityMatch
+    }
+    return null
+  }
+
   const applyLocation = (parsed) => {
     if (!parsed) return
 
+    isSelectingLocationRef.current = true
+    const matchedZone = resolveZoneForLocation(parsed.latitude, parsed.longitude, parsed.city, zones)
+    const matchedZoneId = matchedZone ? String(matchedZone._id || matchedZone.id || "") : ""
+    if (matchedZoneId) {
+      setIsZoneAutoSelected(true)
+    }
+
     setStep1((prev) => ({
       ...prev,
+      zoneId: matchedZoneId || prev.zoneId || "",
       location: {
         ...prev.location,
         formattedAddress: parsed.formattedAddress || prev.location.formattedAddress || "",
@@ -873,6 +936,24 @@ export default function AddRestaurant() {
       cancelled = true
     }
   }, [step])
+
+  // Auto-select zone when zones finish loading if location is already set but no zone selected
+  useEffect(() => {
+    if (!zones.length || step1.zoneId) return
+    const lat = step1.location?.latitude
+    const lng = step1.location?.longitude
+    const city = step1.location?.city
+    if ((Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) || city) {
+      const matched = resolveZoneForLocation(lat, lng, city, zones)
+      if (matched) {
+        const id = String(matched._id || matched.id || "")
+        if (id) {
+          setIsZoneAutoSelected(true)
+          setStep1((prev) => (prev.zoneId ? prev : { ...prev, zoneId: id }))
+        }
+      }
+    }
+  }, [zones, step1.location?.latitude, step1.location?.longitude, step1.location?.city, step1.zoneId])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1040,16 +1121,6 @@ export default function AddRestaurant() {
         }
 
         autocomplete.addListener("place_changed", onPlaceChanged)
-
-        // Fix: Prevent click / mousedown on Google Autocomplete .pac-item from stealing focus and aborting selection
-        pacMouseDownHandler = (e) => {
-          const target = e.target
-          if (target && (target.closest(".pac-container") || target.closest(".pac-item"))) {
-            e.preventDefault()
-          }
-        }
-        document.addEventListener("mousedown", pacMouseDownHandler, true)
-        document.addEventListener("touchstart", pacMouseDownHandler, true)
         
         const pacContainerFix = () => {
           const applyFix = () => {
@@ -1058,8 +1129,13 @@ export default function AddRestaurant() {
               containers.forEach(container => {
                 container.style.zIndex = "999999";
                 container.style.pointerEvents = "auto";
-                container.style.visibility = "visible";
-                container.style.display = "block";
+                if (!inputElement.value?.trim()) {
+                  container.style.display = "none";
+                  container.style.visibility = "hidden";
+                } else {
+                  container.style.visibility = "visible";
+                  container.style.display = "block";
+                }
               });
             }
           };
@@ -1079,10 +1155,6 @@ export default function AddRestaurant() {
 
     return () => {
       cancelled = true
-      if (pacMouseDownHandler) {
-        document.removeEventListener("mousedown", pacMouseDownHandler, true)
-        document.removeEventListener("touchstart", pacMouseDownHandler, true)
-      }
       if (autocomplete) {
         try { window.google?.maps?.event?.clearInstanceListeners(autocomplete) } catch {}
       }
@@ -1091,12 +1163,19 @@ export default function AddRestaurant() {
       }
       placesAutocompleteRef.current = null
     }
-  }, [step])
+  }, [step, zones])
 
   // Hybrid Search Fallback (Nominatim) - only active if Google Places SDK is not available
   useEffect(() => {
     if (step !== 1) return
     if (window.google?.maps?.places?.Autocomplete && mapsScriptLoadedRef.current) {
+      setLocationSuggestions([])
+      setIsSearchingLocation(false)
+      return
+    }
+
+    if (isSelectingLocationRef.current) {
+      isSelectingLocationRef.current = false
       setLocationSuggestions([])
       setIsSearchingLocation(false)
       return
@@ -1122,7 +1201,9 @@ export default function AddRestaurant() {
           lng: Number(r.lon),
           addr: r.address || {},
         }))
-        setLocationSuggestions(mapped)
+        if (!isSelectingLocationRef.current) {
+          setLocationSuggestions(mapped)
+        }
       } catch (e) {
         debugError("Nominatim search failed:", e)
       } finally {
@@ -1167,58 +1248,58 @@ export default function AddRestaurant() {
                 onClick={() =>
                   setStep1({
                     ...step1,
+                    foodType: "Veg",
                     pureVegRestaurant: true,
                     pureVeganRestaurant: false,
                   })
                 }
-                className={`px-3 py-1.5 text-xs rounded-full border ${
-                  step1.pureVegRestaurant === true && step1.pureVeganRestaurant !== true
-                    ? "bg-green-600 text-white border-green-600"
-                    : "bg-white text-gray-700 border-gray-200"
+                className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
+                  step1.foodType === "Veg" || (step1.foodType == null && step1.pureVegRestaurant === true)
+                    ? "bg-green-600 text-white border-green-600 shadow-sm"
+                    : "bg-white text-gray-700 border-gray-200 hover:border-green-400"
                 }`}
               >
-                Yes, Pure Veg
+                Veg
               </button>
-              {/* DISABLED: "Pure Vegan" is not a selectable restaurant menu type —
-                  only Pure Veg and Mixed Menu are active. Kept, not deleted.
               <button
                 type="button"
                 onClick={() =>
                   setStep1({
                     ...step1,
-                    pureVegRestaurant: true,
-                    pureVeganRestaurant: true,
-                  })
-                }
-                className={`px-3 py-1.5 text-xs rounded-full border ${
-                  step1.pureVeganRestaurant === true
-                    ? "bg-emerald-700 text-white border-emerald-700"
-                    : "bg-white text-gray-700 border-gray-200"
-                }`}
-              >
-                Yes, Pure Vegan
-              </button>
-              */}
-              <button
-                type="button"
-                onClick={() =>
-                  setStep1({
-                    ...step1,
+                    foodType: "Non-Veg",
                     pureVegRestaurant: false,
                     pureVeganRestaurant: false,
                   })
                 }
-                className={`px-3 py-1.5 text-xs rounded-full border ${
-                  step1.pureVegRestaurant === false
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 border-gray-200"
+                className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
+                  step1.foodType === "Non-Veg"
+                    ? "bg-red-600 text-white border-red-600 shadow-sm"
+                    : "bg-white text-gray-700 border-gray-200 hover:border-red-400"
                 }`}
               >
-                No, Mixed Menu
+                Non-Veg
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setStep1({
+                    ...step1,
+                    foodType: "Mixed",
+                    pureVegRestaurant: false,
+                    pureVeganRestaurant: false,
+                  })
+                }
+                className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
+                  step1.foodType === "Mixed" || (step1.foodType == null && step1.pureVegRestaurant === false)
+                    ? "bg-gray-900 text-white border-gray-900 shadow-sm"
+                    : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                }`}
+              >
+                Mixed (Both)
               </button>
             </div>
             <p className="text-[11px] text-gray-500 mt-1">
-              Pure Veg allows dairy/ghee. Pure Vegan allows only vegan items.
+              Veg: pure vegetarian menu. Non-Veg: non-vegetarian only. Mixed: both veg and non-veg dishes.
             </p>
           </div>
           <div>
@@ -1397,10 +1478,18 @@ export default function AddRestaurant() {
           </p>
         </div>
         <div>
-          <Label className="text-xs text-gray-700">Service zone*</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-gray-700">Service zone*</Label>
+            {isZoneAutoSelected && step1.zoneId && (
+              <span className="text-[11px] text-emerald-600 font-medium">✓ Auto-selected from location</span>
+            )}
+          </div>
           <select
             value={step1.zoneId || ""}
-            onChange={(e) => setStep1({ ...step1, zoneId: e.target.value })}
+            onChange={(e) => {
+              setIsZoneAutoSelected(false)
+              setStep1({ ...step1, zoneId: e.target.value })
+            }}
             className="mt-1 w-full h-9 rounded-md border border-input bg-white px-3 text-sm"
             disabled={zonesLoading}
           >

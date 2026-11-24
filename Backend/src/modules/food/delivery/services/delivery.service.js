@@ -951,14 +951,15 @@ const toTripDto = (order) => {
   const isCashCod =
     paymentMethod === 'cash' ||
     paymentMethod === 'cod' ||
-    paymentMethod === 'cash on delivery';
+    paymentMethod === 'cash on delivery' ||
+    paymentMethod === 'cash_on_delivery';
   const amountDue = Number(order?.payment?.amountDue);
   const codAmount = isCashCod
     ? (Number.isFinite(amountDue) && amountDue > 0 ? amountDue : pricingTotal)
     : 0;
   const paymentStatus = String(order?.payment?.status || '').toLowerCase();
   const codCollectedAmount =
-    isCashCod && (paymentStatus === 'paid' || isDelivered) ? codAmount : 0;
+    isCashCod && !isCancelled && (paymentStatus === 'paid' || isDelivered) ? codAmount : 0;
   return {
     id: order?._id,
     _id: order?._id,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Star, CheckCircle2, MessageSquare, Loader2 } from "lucide-react"
 import { toast } from "sonner"
@@ -105,10 +106,10 @@ export default function FeedbackBottomSheet({
       ? "Tell us about your delivery partner app experience. We value your feedback."
       : "Your thoughts help us improve the overall experience for everyone."
 
-  return (
+  const content = (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
+        <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -154,7 +155,7 @@ export default function FeedbackBottomSheet({
             </div>
 
             {/* Content Body */}
-            <div className="p-6 overflow-y-auto space-y-6">
+            <div className="p-6 pb-8 sm:pb-6 overflow-y-auto space-y-6">
               {isSuccess ? (
                 <div className="py-8 flex flex-col items-center justify-center text-center space-y-3">
                   <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center animate-bounce">
@@ -248,4 +249,10 @@ export default function FeedbackBottomSheet({
       )}
     </AnimatePresence>
   )
+
+  if (typeof document !== "undefined") {
+    return createPortal(content, document.body)
+  }
+
+  return content
 }

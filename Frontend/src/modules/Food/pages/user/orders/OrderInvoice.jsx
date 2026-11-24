@@ -126,7 +126,7 @@ export default function OrderInvoice() {
   }
 
   // Safe normalized fields
-  const displayOrderId = order?.orderId || order?.orderNumber || order?._id || order?.id || orderId || "N/A"
+  const displayOrderId = order?.orderId || order?.order_id || order?.orderNumber || (orderId && !/^[a-f0-9]{24}$/i.test(String(orderId)) ? orderId : null) || order?._id || order?.id || orderId || "N/A"
   const rawStatus = order?.orderStatus || order?.status || "delivered"
   const statusLabel = String(rawStatus).replace(/_/g, " ").toUpperCase()
 

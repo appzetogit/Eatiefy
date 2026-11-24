@@ -20,6 +20,7 @@ import FloatingHomeDock from "@food/components/user/FloatingHomeDock"
 import { isVegMenuItem } from "@food/utils/vegMode"
 import SafeImage from "@food/components/SafeImage"
 import dishFallbackImage from "@food/assets/dish_fallback.webp"
+import { toFoodUserPath } from "@food/utils/mainTabRoutes"
 
 export default function Reorder() {
   const navigate = useNavigate()
@@ -494,7 +495,7 @@ export default function Reorder() {
                       {hasLiveStatus && orderIdDisplay && (
                         <button
                           onClick={() =>
-                            navigate(`/food/user/order-tracking/${orderIdDisplay}`)
+                            navigate(toFoodUserPath(`/user/orders/${orderIdDisplay}`))
                           }
                           className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 font-bold text-xs sm:text-sm hover:bg-blue-100 transition-all active:scale-95 cursor-pointer"
                         >

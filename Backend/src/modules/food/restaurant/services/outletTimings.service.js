@@ -196,15 +196,6 @@ export async function upsertOutletTimingsForRestaurant(restaurantId, outletTimin
         await FoodRestaurant.updateOne({ _id: restaurantId }, { $set: summary });
     }
 
-    // Automatically close delivery and takeaway status if outlet is closed
-    const currentOpStatus = getOperatingStatus({ timings, restaurant }, new Date());
-    if (!currentOpStatus.isOpen) {
-        await FoodRestaurant.updateOne(
-            { _id: restaurantId },
-            { $set: { isAcceptingOrders: false, 'takeawaySettings.isEnabled': false } }
-        );
-    }
-
     return { outletTimings: toClientShape(doc), persisted: true };
 }
 

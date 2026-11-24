@@ -44,7 +44,8 @@ import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
 import { detectZoneIdForPoint } from '../../utils/zoneGeo.js';
-import { isTakeawayEnabled, isDiningEnabled, isTakeawayPayAtPickupEnabled } from '../../admin/services/moduleAccess.service.js';
+import { isTakeawayEnabled, isDiningEnabled } from '../../admin/services/moduleAccess.service.js';
+import { loadCustomizationSettings } from '../../admin/controllers/systemConfig.controller.js';
 import {
   enqueueOrderEvent,
   assertRestaurantDeliversToZone,
@@ -105,6 +106,22 @@ export async function createOrderFromPendingIntent(rzOrderId, rzPaymentId, rzSig
   }
 }
 
+/**
+ * The zone an order is filed under: the restaurant's GPS zone first (prevents cross-city
+ * dispatch), then the restaurant's saved zone, then the client's zone. Undefined when none.
+ */
+async function resolveOrderZoneId(restaurant, clientZoneId) {
+  const [lng, lat] =
+    restaurant?.location?.coordinates?.length === 2
+      ? restaurant.location.coordinates
+      : [null, null];
+  const gpsZoneId = lat != null && lng != null ? await detectZoneIdForPoint(lat, lng) : null;
+  if (gpsZoneId) return new mongoose.Types.ObjectId(gpsZoneId);
+  if (restaurant?.zoneId) return new mongoose.Types.ObjectId(restaurant.zoneId);
+  if (clientZoneId) return new mongoose.Types.ObjectId(clientZoneId);
+  return undefined;
+}
+
 // ----- Initiate online payment (Razorpay) -----
 export async function initiateOnlinePayment(userId, dto) {
   // SECURITY: Razorpay amount must come from server-calculated pricing, never client totals.
@@ -143,8 +160,10 @@ export async function initiateOnlinePayment(userId, dto) {
     );
   }
 
-  const onlineConfig = await FoodSystemConfig.findOne({ key: "online_payment_enabled" }).select("value").lean();
-  if (onlineConfig && onlineConfig.value === false) {
+  const onlineCustomization = await loadCustomizationSettings({
+    zoneId: await resolveOrderZoneId(restaurant, dto.zoneId),
+  });
+  if (onlineCustomization.online_payment_enabled === false) {
     throw new ValidationError("Online payment is currently disabled");
   }
 
@@ -218,8 +237,8 @@ export async function initiatePickupPayment(userId, orderId) {
     throw new ValidationError("This order cannot be paid now");
   }
 
-  const onlineConfig = await FoodSystemConfig.findOne({ key: "online_payment_enabled" }).select("value").lean();
-  if (onlineConfig && onlineConfig.value === false) {
+  const pickupCustomization = await loadCustomizationSettings({ zoneId: order.zoneId });
+  if (pickupCustomization.online_payment_enabled === false) {
     throw new ValidationError("Online payment is currently disabled");
   }
   if (!isRazorpayConfigured()) {
@@ -317,6 +336,14 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
     );
   }
 
+  // The zone this order belongs to, decided ONCE. It is the zone the order is filed under,
+  // the zone whose Delivery Boy Payout rules / Eatiefy incentive apply (these used to read
+  // restaurant.zoneId, then the customer's zone, so when those differed the incentive saved
+  // for the real zone never applied) and the zone whose payment switches apply.
+  const resolvedOrderZoneId = await resolveOrderZoneId(restaurant, dto.zoneId);
+  // Platform-wide payment switches with this zone's overrides applied.
+  const customization = await loadCustomizationSettings({ zoneId: resolvedOrderZoneId });
+
   const orderType = dto.orderType || "delivery";
   // "Pay at Pickup (online)": a takeaway order placed now and paid online at the
   // counter. It is online-only (never cash) and must be allowed by BOTH the admin
@@ -327,7 +354,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
       throw new ValidationError("Takeaway is not available for this restaurant");
     }
     if (isPayAtPickup) {
-      if (!(await isTakeawayPayAtPickupEnabled())) {
+      if (customization.takeaway_pay_at_pickup_enabled === false) {
         throw new ValidationError("Pay at Pickup is currently unavailable");
       }
       if (restaurant.takeawaySettings?.payAtPickupEnabled !== true) {
@@ -379,19 +406,17 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
 
   // Global Customization Toggles Enforcement
   if (isCash) {
-    // Takeaway is online-payment only: cash / Pay-at-Pickup is never accepted,
-    // regardless of what the client sends. Enforced here (not just in the UI)
-    // so a direct API call cannot create an unpaid takeaway order.
-    if (orderType === "takeaway") {
+    // Takeaway is online-payment only UNLESS an admin explicitly turned "Takeaway COD"
+    // on in Customization Settings. Enforced here (not just in the UI) so a direct API
+    // call cannot create an unpaid takeaway order while the setting is off.
+    // (All switches below are the platform value with this order's zone overrides applied.)
+    if (orderType === "takeaway" && customization.takeaway_cod_enabled !== true) {
       throw new ValidationError("Takeaway orders must be paid online");
     }
 
     // 1. General COD Toggle (Master switch for non-takeaway)
-    if (orderType !== "takeaway") {
-      const globalCodConfig = await FoodSystemConfig.findOne({ key: "cod_enabled" }).select("value").lean();
-      if (globalCodConfig && globalCodConfig.value === false) {
-        throw new ValidationError("Cash on Delivery is currently disabled globally");
-      }
+    if (orderType !== "takeaway" && customization.cod_enabled === false) {
+      throw new ValidationError("Cash on Delivery is currently disabled globally");
     }
 
     // 2. Mode-specific COD Toggles
@@ -400,11 +425,8 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
     else if (orderType === "delivery") codEnabledKey = "delivery_cod_enabled";
     else if (orderType === "dining") codEnabledKey = "dining_cod_enabled";
 
-    if (codEnabledKey) {
-      const codConfig = await FoodSystemConfig.findOne({ key: codEnabledKey }).select("value").lean();
-      if (codConfig && codConfig.value === false) {
-        throw new ValidationError(`Cash on Delivery is currently disabled for ${orderType} orders`);
-      }
+    if (codEnabledKey && customization[codEnabledKey] === false) {
+      throw new ValidationError(`Cash on Delivery is currently disabled for ${orderType} orders`);
     }
 
     // 3. User-specific COD Auto Blocking
@@ -417,11 +439,8 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
     }
   }
 
-  if (isWallet) {
-    const walletConfig = await FoodSystemConfig.findOne({ key: "wallet_payment_enabled" }).select("value").lean();
-    if (walletConfig && walletConfig.value === false) {
-      throw new ValidationError("Wallet payment is currently disabled");
-    }
+  if (isWallet && customization.wallet_payment_enabled === false) {
+    throw new ValidationError("Wallet payment is currently disabled");
   }
 
   // SECURITY: ignore client pricing; use server-calculated amounts only.
@@ -447,8 +466,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
 
 
   if (paymentMethod === "razorpay" && !isPayAtPickup) {
-    const onlineConfig = await FoodSystemConfig.findOne({ key: "online_payment_enabled" }).select("value").lean();
-    if (onlineConfig && onlineConfig.value === false) {
+    if (customization.online_payment_enabled === false) {
       throw new ValidationError("Online payment is currently disabled");
     }
 
@@ -533,14 +551,15 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
     qr: {},
   };
 
+  // `resolvedOrderZoneId` (decided once, near the top of this function) is used for the
+  // order itself, the Delivery Boy Payout rules and the Eatiefy incentive.
   let distanceKm = null;
   // Zone-wise commission payout (unchanged) + admin Eatiefy incentive on top.
   let riderBaseEarning = 0;
-  // Same zone the Delivery Boy Payout rules are resolved for below.
   const eatiefyIncentive = await resolveEatiefyIncentiveForOrder({
     pricing: normalizedPricing,
     orderType,
-    zoneId: restaurant?.zoneId || dto.zoneId || null,
+    zoneId: resolvedOrderZoneId || null,
   });
   const eatiefyIncentiveAmount = eatiefyIncentive?.amount || 0;
   let riderEarning = combineRiderEarning(riderBaseEarning, eatiefyIncentiveAmount);
@@ -558,7 +577,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
         restaurant,
         deliveryAddress: { ...deliveryAddress },
         orderType,
-        zoneId: restaurant?.zoneId || dto.zoneId || null,
+        zoneId: resolvedOrderZoneId || null,
       })
         .then(async (earningResolved) => {
           try {
@@ -626,7 +645,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
         restaurant,
         deliveryAddress,
         orderType,
-        zoneId: restaurant?.zoneId || dto.zoneId || null,
+        zoneId: resolvedOrderZoneId || null,
       });
       distanceKm = earningResolved.distanceKm;
       riderBaseEarning = earningResolved.riderEarning;
@@ -693,24 +712,6 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
       restaurantCommission -
       riderEarning,
   );
-
-  const [restaurantLng, restaurantLat] =
-    restaurant?.location?.coordinates?.length === 2
-      ? restaurant.location.coordinates
-      : [null, null];
-  const restaurantGpsZoneId =
-    restaurantLat != null && restaurantLng != null
-      ? await detectZoneIdForPoint(restaurantLat, restaurantLng)
-      : null;
-
-  // Always prefer restaurant GPS zone over client/restaurant.zoneId (prevents cross-city dispatch).
-  const resolvedOrderZoneId = restaurantGpsZoneId
-    ? new mongoose.Types.ObjectId(restaurantGpsZoneId)
-    : restaurant.zoneId
-      ? new mongoose.Types.ObjectId(restaurant.zoneId)
-      : dto.zoneId
-        ? new mongoose.Types.ObjectId(dto.zoneId)
-        : undefined;
 
   const order = new FoodOrder({
     userId: new mongoose.Types.ObjectId(userId),
