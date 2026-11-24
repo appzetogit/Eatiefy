@@ -13,7 +13,7 @@ export const exportReportsToCSV = (data, headers, filename = "report") => {
     ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
   ].join("\n")
   
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" })
   const link = document.createElement("a")
   const url = URL.createObjectURL(blob)
   link.setAttribute("href", url)
@@ -38,7 +38,7 @@ export const exportReportsToExcel = (data, headers, filename = "report") => {
     ...rows.map(row => row.join("\t"))
   ].join("\n")
   
-  const blob = new Blob([csvContent], { type: "application/vnd.ms-excel" })
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "application/vnd.ms-excel;charset=utf-8;" })
   const link = document.createElement("a")
   const url = URL.createObjectURL(blob)
   link.setAttribute("href", url)
@@ -161,7 +161,7 @@ export const exportTransactionReportToCSV = (transactions, filename = "transacti
     ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
   ].join("\n")
   
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" })
   const link = document.createElement("a")
   const url = URL.createObjectURL(blob)
   link.setAttribute("href", url)
@@ -213,7 +213,7 @@ export const exportTransactionReportToExcel = (transactions, filename = "transac
     ...rows.map(row => row.join("\t"))
   ].join("\n")
   
-  const blob = new Blob([csvContent], { type: "application/vnd.ms-excel" })
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "application/vnd.ms-excel;charset=utf-8;" })
   const link = document.createElement("a")
   const url = URL.createObjectURL(blob)
   link.setAttribute("href", url)

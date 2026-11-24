@@ -1862,6 +1862,8 @@ export async function getTaxReport(query = {}) {
         sl: skip + index + 1,
         id: item._id,
         incomeSource: item.incomeSource,
+        totalIncomeRaw: Number(item.totalIncome || 0),
+        totalTaxRaw: Number(item.totalTax || 0),
         totalIncome: `\u20B9${Number(item.totalIncome || 0).toFixed(2)}`,
         totalTax: `\u20B9${Number(item.totalTax || 0).toFixed(2)}`,
         orderCount: item.orderCount
