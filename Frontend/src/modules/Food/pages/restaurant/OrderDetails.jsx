@@ -530,11 +530,10 @@ export default function OrderDetails() {
     if (Number(orderData.billing.packagingFee) > 0) {
       billRows.push(["Packaging Fee:", formatMoney(orderData.billing.packagingFee)])
     }
-    if (Number(orderData.billing.discount) > 0) {
-      billRows.push(["Discount:", formatDiscount(orderData.billing.discount)])
-    }
-    if (Number(orderData.billing.couponDiscount) > 0) {
-      billRows.push(["Coupon Discount:", formatDiscount(orderData.billing.couponDiscount)])
+    const promoDiscount = Number(orderData.billing.couponDiscount || orderData.billing.discount || 0)
+    if (promoDiscount > 0) {
+      billRows.push(["Coupon Discount:", `-${formatMoney(promoDiscount)}`])
+      billRows.push(["Covered by Eatiefy:", `+${formatMoney(promoDiscount)}`])
     }
     billRows.forEach(([label, value]) => {
       doc.setFont(pdfFont, "normal")
@@ -972,18 +971,21 @@ export default function OrderDetails() {
                 <span className="text-sm text-gray-900">{formatMoney(orderData.billing.packagingFee)}</span>
               </div>
             )}
-            {Number(orderData.billing.discount) > 0 && (
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-green-700">Discount</span>
-                <span className="text-sm text-green-700">{formatDiscount(orderData.billing.discount)}</span>
-              </div>
-            )}
-            {Number(orderData.billing.couponDiscount) > 0 && (
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-green-700">Coupon discount</span>
-                <span className="text-sm text-green-700">{formatDiscount(orderData.billing.couponDiscount)}</span>
-              </div>
-            )}
+            {Number(orderData.billing.couponDiscount || orderData.billing.discount) > 0 && (() => {
+              const promoDisc = Number(orderData.billing.couponDiscount || orderData.billing.discount)
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm text-green-700">Coupon discount</span>
+                    <span className="text-sm text-green-700">-{formatMoney(promoDisc)}</span>
+                  </div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm text-blue-700 font-medium">Covered by Eatiefy</span>
+                    <span className="text-sm text-blue-700 font-medium">+{formatMoney(promoDisc)}</span>
+                  </div>
+                </>
+              )
+            })()}
             <div className="my-3"></div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

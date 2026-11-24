@@ -3,6 +3,7 @@ import { Search, Receipt, Loader2, Package, RefreshCw } from "lucide-react"
 import { adminAPI } from "@food/api"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { toast } from "sonner"
 
 const formatCurrency = (amount) => {
@@ -40,16 +41,17 @@ export default function CashLimitSettlement() {
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
   const [total, setTotal] = useState(0)
+  const [limit, setLimit] = useState(20)
   // Zone picked in the header: only deposits of riders in that zone.
   const { zones, zonesLoading, zoneId, setZoneId } = useAdminZoneFilter()
   const handleZoneChange = (nextZoneId) => {
     setPage(1)
     setZoneId(nextZoneId)
   }
-  const limit = 20
 
   const fetchSettlements = useCallback(async (overrides = {}) => {
     const p = overrides.page ?? page
+    const l = overrides.limit ?? limit
     const q = overrides.search !== undefined ? overrides.search : searchQuery
     const status = overrides.status ?? activeTab
 
@@ -60,7 +62,7 @@ export default function CashLimitSettlement() {
         status: status === "All" ? undefined : status,
         zoneId: zoneId || undefined,
         page: p,
-        limit,
+        limit: l,
       })
       if (res?.data?.success) {
         const data = res.data.data
@@ -77,7 +79,7 @@ export default function CashLimitSettlement() {
     } finally {
       setLoading(false)
     }
-  }, [activeTab, page, searchQuery, zoneId])
+  }, [activeTab, page, limit, searchQuery, zoneId])
 
   useEffect(() => {
     fetchSettlements()
@@ -218,29 +220,17 @@ export default function CashLimitSettlement() {
             </div>
           )}
 
-          {pages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
-              <p className="text-sm text-slate-600">
-                Page {page} of {pages} &middot; {total} total
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                  disabled={page >= pages}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
+          <AdminListPagination
+            currentPage={page}
+            pageSize={limit}
+            totalItems={total}
+            onPageChange={(p) => setPage(p)}
+            onPageSizeChange={(newLimit) => {
+              setLimit(newLimit)
+              setPage(1)
+            }}
+            itemLabel="settlements"
+          />
         </div>
       </div>
     </div>

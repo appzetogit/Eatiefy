@@ -2269,7 +2269,9 @@ function OrdersMainInner() {
                 restaurantId: orderToPopup.restaurantId,
                 restaurantName: orderToPopup.restaurantName,
                 items: orderToPopup.items || [],
-                total: orderToPopup.pricing?.total || 0,
+                pricing: orderToPopup.pricing || {},
+                packagingFee: orderToPopup.packagingFee || orderToPopup.pricing?.packagingFee || 0,
+                total: orderToPopup.pricing?.total || orderToPopup.total || 0,
                 customerAddress: orderToPopup.address,
                 status: orderToPopup.status,
                 // Raw backend status: `status` above is rewritten for the tabs
@@ -3988,31 +3990,61 @@ function OrdersMainInner() {
                     );
                   })()}
 
-                  {/* Total bill — what this order pays the restaurant. */}
-                  <div className="mb-4 py-3 border-y border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <svg
-                          className="w-5 h-5 text-gray-700"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"
-                          />
-                        </svg>
-                        <span className="text-sm font-semibold text-gray-900">
-                          Total bill
-                        </span>
+                  {/* Total bill & breakdown — what this order pays the restaurant */}
+                  {(() => {
+                    const activeOrder = popupOrder || newOrder;
+                    const items = Array.isArray(activeOrder?.items) ? activeOrder.items : [];
+                    const itemsSubtotal = items.reduce(
+                      (sum, it) => sum + getRestaurantItemAmount(it),
+                      0
+                    );
+                    const packagingFee = Number(
+                      activeOrder?.pricing?.packagingFee ??
+                      activeOrder?.packagingFee ??
+                      activeOrder?.packagingCharge ??
+                      0
+                    ) || 0;
+                    const restaurantTotal = getPopupOrderTotal(activeOrder);
+
+                    return (
+                      <div className="mb-4 py-3 border-y border-gray-200 space-y-1.5">
+                        {packagingFee > 0 && (
+                          <>
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>Items Subtotal</span>
+                              <span className="font-semibold text-gray-800">₹{itemsSubtotal.toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>Packaging Charge</span>
+                              <span className="text-emerald-700 font-semibold">+₹{packagingFee.toFixed(2)}</span>
+                            </div>
+                          </>
+                        )}
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-2">
+                            <svg
+                              className="w-5 h-5 text-gray-700"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"
+                              />
+                            </svg>
+                            <span className="text-sm font-semibold text-gray-900">
+                              Total bill
+                            </span>
+                          </div>
+                          <span className="text-base font-bold text-gray-900">
+                            ₹{restaurantTotal}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-base font-bold text-gray-900">
-                        ₹{getPopupOrderTotal(popupOrder || newOrder)}
-                      </span>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Payment method: treat cash/cod (any case) as COD */}
                   {(() => {
