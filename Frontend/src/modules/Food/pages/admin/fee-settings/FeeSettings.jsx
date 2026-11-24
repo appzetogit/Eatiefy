@@ -3,6 +3,7 @@ import { Save, Loader2, DollarSign, Plus, Trash2, Edit, Check, X } from "lucide-
 import { Button } from "@food/components/ui/button"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -38,6 +39,7 @@ const feeSettingsEqual = (a, b) =>
 
 // Fee Settings Component - Range-based delivery fee configuration
 export default function FeeSettings() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [feeSettings, setFeeSettings] = useState(emptyFeeSettings)
   const [savedFeeSettings, setSavedFeeSettings] = useState(emptyFeeSettings)
   const [zones, setZones] = useState([])
@@ -327,23 +329,25 @@ export default function FeeSettings() {
                 Set the fees and charges that will be applied to orders in this zone
               </p>
             </div>
-            <Button
-              onClick={handleSaveFeeSettings}
-              disabled={savingFeeSettings || loadingFeeSettings || !selectedZoneId || !isDirty}
-              className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {savingFeeSettings ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save Settings
-                </>
-              )}
-            </Button>
+            {canEdit && (
+              <Button
+                onClick={handleSaveFeeSettings}
+                disabled={savingFeeSettings || loadingFeeSettings || !selectedZoneId || !isDirty}
+                className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingFeeSettings ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Save Settings
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
           {loadingFeeSettings ? (
@@ -443,20 +447,24 @@ export default function FeeSettings() {
                                       </>
                                     ) : (
                                       <>
-                                        <button
-                                          onClick={() => handleEditRange(originalIndex)}
-                                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                          title="Edit"
-                                        >
-                                          <Edit className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteRange(originalIndex)}
-                                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                          title="Delete"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
+                                        {canEdit && (
+                                          <button
+                                            onClick={() => handleEditRange(originalIndex)}
+                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                            title="Edit"
+                                          >
+                                            <Edit className="w-4 h-4" />
+                                          </button>
+                                        )}
+                                        {canDelete && (
+                                          <button
+                                            onClick={() => handleDeleteRange(originalIndex)}
+                                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                            title="Delete"
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
+                                        )}
                                       </>
                                     )}
                                   </div>
@@ -470,7 +478,7 @@ export default function FeeSettings() {
                 )}
 
                 {/* Add New Range Form - Only show when NOT editing */}
-                {editingRangeIndex === null && (
+                {editingRangeIndex === null && (canCreate || canEdit) && (
                   <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                     <div className="flex items-center gap-2 mb-3">
                       <Plus className="w-4 h-4 text-green-600" />

@@ -20,6 +20,7 @@ import {
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const RUPEE = "\u20B9"
 
@@ -103,11 +104,12 @@ function PreviewCard({ type, value }) {
 }
 
 function RuleEditor({ title, form, setForm, onSave, saving, onClear, canClear }) {
+  const { canEdit, canDelete } = useAdminPermissions()
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-        {canClear ? (
+        {canClear && canDelete ? (
           <button
             type="button"
             onClick={onClear}
@@ -160,22 +162,24 @@ function RuleEditor({ title, form, setForm, onSave, saving, onClear, canClear })
 
       <PreviewCard type={form.type} value={form.value} />
 
-      <Button
-        type="button"
-        disabled={saving}
-        onClick={onSave}
-        className="h-11 w-full rounded-xl bg-[#DC2626] font-bold text-white hover:bg-[#B91C1C]"
-      >
-        {saving ? (
-          <span className="inline-flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" /> Saving...
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-2">
-            <Save className="h-4 w-4" /> Save rule
-          </span>
-        )}
-      </Button>
+      {canEdit && (
+        <Button
+          type="button"
+          disabled={saving}
+          onClick={onSave}
+          className="h-11 w-full rounded-xl bg-[#DC2626] font-bold text-white hover:bg-[#B91C1C]"
+        >
+          {saving ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-2">
+              <Save className="h-4 w-4" /> Save rule
+            </span>
+          )}
+        </Button>
+      )}
     </div>
   )
 }
@@ -279,6 +283,7 @@ function RestaurantPricingPanel({
   onRemoveOverride,
   onBulkApply,
 }) {
+  const { canEdit, canDelete } = useAdminPermissions()
   const [search, setSearch] = useState("")
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkType, setBulkType] = useState("PERCENTAGE")
@@ -561,7 +566,7 @@ function RestaurantPricingPanel({
                         {formatShortDate(rule?.updatedAt)}
                       </td>
                       <td className="px-3 py-3 align-middle text-right">
-                        {rule?.id ? (
+                        {rule?.id && canDelete ? (
                           <button
                             type="button"
                             disabled={saving}
@@ -609,7 +614,7 @@ function RestaurantPricingPanel({
         />
       </div>
 
-      {selectedCount > 0 ? (
+      {selectedCount > 0 && canEdit ? (
         <div className="sticky bottom-3 z-20 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -708,6 +713,7 @@ function MenuItemPricingPanel({
   onRemoveOverride,
   onBulkApply,
 }) {
+  const { canEdit, canDelete } = useAdminPermissions()
   const [restaurantId, setRestaurantId] = useState("")
   const [menuItems, setMenuItems] = useState([])
   const [loadingMenu, setLoadingMenu] = useState(false)
@@ -1143,7 +1149,7 @@ function MenuItemPricingPanel({
                               {formatShortDate(rule?.updatedAt)}
                             </td>
                             <td className="px-2 py-3 text-center align-middle">
-                              {rule?.id ? (
+                              {rule?.id && canDelete ? (
                                 <button
                                   type="button"
                                   disabled={saving}
@@ -1191,7 +1197,7 @@ function MenuItemPricingPanel({
             />
           </div>
 
-          {selectedCount > 0 ? (
+          {selectedCount > 0 && canEdit ? (
             <div className="sticky bottom-3 z-20 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur sm:p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div>

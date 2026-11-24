@@ -10,6 +10,7 @@ import { formatRestaurantDisplayAddress, getRestaurantDisplayAddress } from "@fo
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 // Import icons from Dashboard-icons
 const debugLog = (...args) => {}
@@ -179,6 +180,7 @@ const getPrimaryRestaurantImage = (restaurant, fallback = "") => {
 
 
 export default function RestaurantsList() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -1444,7 +1446,7 @@ export default function RestaurantsList() {
               </DropdownMenu>
 
               {/* Add Restaurant Button */}
-              {viewMode === "active" && (
+              {viewMode === "active" && (canCreate || canEdit) && (
                 <button
                   type="button"
                   onClick={() => navigate("/admin/food/restaurants/add")}
@@ -1653,7 +1655,7 @@ export default function RestaurantsList() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            {viewMode === "banned" && (
+                            {canEdit && viewMode === "banned" && (
                               <button
                                 onClick={() => handleBanRestaurant(restaurant)}
                                 className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
@@ -1662,7 +1664,7 @@ export default function RestaurantsList() {
                                 <ShieldCheck className="w-4 h-4" />
                               </button>
                             )}
-                            {viewMode === "active" && (
+                            {canEdit && viewMode === "active" && (
                               <button
                                 onClick={() => handleBanRestaurant(restaurant)}
                                 className={`p-1.5 rounded transition-colors ${!restaurant.isActive
@@ -1720,7 +1722,7 @@ export default function RestaurantsList() {
                 <p className="text-sm text-slate-500 mt-1">Detailed overview and information</p>
               </div>
               <div className="flex items-center gap-2">
-                {normalizeApprovalStatus(restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant) !== "rejected" && (
+                {canEdit && normalizeApprovalStatus(restaurantDetails || selectedRestaurant?.originalData || selectedRestaurant) !== "rejected" && (
                   !isEditingDetails ? (
                     <button
                       onClick={handleStartEditDetails}

@@ -3,6 +3,7 @@ import { Search, CheckCircle2, XCircle, Clock, AlertCircle, Trash2, Tag, Store, 
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -11,6 +12,7 @@ const RequiredMark = () => <span className="text-red-500">*</span>
 
 
 export default function Coupons() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [activeTab, setActiveTab] = useState("platform") // "platform" | "restaurant_approval"
 
   // Platform coupon states
@@ -576,20 +578,22 @@ export default function Coupons() {
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-slate-900">Platform Coupons</h2>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isAddOpen) {
-                      resetForm()
-                      setIsAddOpen(false)
-                    } else {
-                      setIsAddOpen(true)
-                    }
-                  }}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
-                >
-                  {isAddOpen ? "Close" : "Add Coupon"}
-                </button>
+                {(canCreate || canEdit) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isAddOpen) {
+                        resetForm()
+                        setIsAddOpen(false)
+                      } else {
+                        setIsAddOpen(true)
+                      }
+                    }}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+                  >
+                    {isAddOpen ? "Close" : "Add Coupon"}
+                  </button>
+                )}
               </div>
 
               {isAddOpen && (
@@ -1023,7 +1027,7 @@ export default function Coupons() {
                             <button
                               type="button"
                               onClick={() => handleToggleShowInCart(offer.offerId, offer.dishId, offer.showInCart !== false)}
-                              disabled={!!updatingCartVisibility[`${offer.offerId}-${offer.dishId}`]}
+                              disabled={!canEdit || !!updatingCartVisibility[`${offer.offerId}-${offer.dishId}`]}
                               className={`relative inline-flex h-6 w-12 items-center rounded-full transition-colors ${
                                 offer.showInCart !== false ? "bg-green-600" : "bg-slate-300"
                               } disabled:opacity-60`}
@@ -1050,21 +1054,25 @@ export default function Coupons() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleEditClick(offer)}
-                                className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteOffer(offer.offerId)}
-                                disabled={!!deletingOffer[offer.offerId]}
-                                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-60"
-                              >
-                                {deletingOffer[offer.offerId] ? "Deleting..." : "Delete"}
-                              </button>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditClick(offer)}
+                                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOffer(offer.offerId)}
+                                  disabled={!!deletingOffer[offer.offerId]}
+                                  className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-60"
+                                >
+                                  {deletingOffer[offer.offerId] ? "Deleting..." : "Delete"}
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1389,7 +1397,7 @@ export default function Coupons() {
                                   <Eye className="w-4 h-4" />
                                 </button>
 
-                                {approvalStatus === "pending" && (
+                                {canEdit && approvalStatus === "pending" && (
                                   <>
                                     <button
                                       type="button"
@@ -1412,7 +1420,7 @@ export default function Coupons() {
                                   </>
                                 )}
 
-                                {approvalStatus === "approved" && (
+                                {canEdit && approvalStatus === "approved" && (
                                   <button
                                     type="button"
                                     onClick={() => handleOpenRejectModal(item)}
@@ -1424,7 +1432,7 @@ export default function Coupons() {
                                   </button>
                                 )}
 
-                                {approvalStatus === "rejected" && (
+                                {canEdit && approvalStatus === "rejected" && (
                                   <button
                                     type="button"
                                     onClick={() => handleApproveRestOffer(offerId)}
@@ -1753,7 +1761,7 @@ export default function Coupons() {
                       </button>
 
                       <div className="flex items-center gap-2">
-                        {status === "pending" && (
+                        {canEdit && status === "pending" && (
                           <>
                             <button
                               type="button"
@@ -1782,7 +1790,7 @@ export default function Coupons() {
                           </>
                         )}
 
-                        {status === "approved" && (
+                        {canEdit && status === "approved" && (
                           <button
                             type="button"
                             onClick={() => {
@@ -1797,7 +1805,7 @@ export default function Coupons() {
                           </button>
                         )}
 
-                        {status === "rejected" && (
+                        {canEdit && status === "rejected" && (
                           <button
                             type="button"
                             onClick={() => {

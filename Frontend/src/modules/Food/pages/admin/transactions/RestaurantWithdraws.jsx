@@ -7,12 +7,14 @@ import { adminAPI } from "@food/api"
 import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function RestaurantWithdraws() {
+  const { canEdit } = useAdminPermissions()
   const [activeTab, setActiveTab] = useState("All")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -405,7 +407,7 @@ export default function RestaurantWithdraws() {
                             >
                               <Eye className="w-4 h-4 text-orange-600" />
                             </button>
-                            {withdraw.status === 'Pending' && (
+                            {withdraw.status === 'Pending' && canEdit && (
                               <>
                                 <button
                                   onClick={() => handleApprove(withdraw.id)}

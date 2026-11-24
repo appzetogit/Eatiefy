@@ -4,10 +4,12 @@ import { adminAPI } from "@food/api"
 import { Button } from "@food/components/ui/button"
 import { Badge } from "@food/components/ui/badge"
 import { toast } from "sonner"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const debugError = (...args) => {}
 
 export default function DiningRequests() {
+    const { canEdit } = useAdminPermissions()
     const [requests, setRequests] = useState([])
     const [loading, setLoading] = useState(true)
     const [processingId, setProcessingId] = useState(null)
@@ -174,23 +176,25 @@ export default function DiningRequests() {
                                         <div className="text-sm text-slate-500 italic">
                                             Requested on: {new Date(request.createdAt).toLocaleString()}
                                         </div>
-                                        <div className="flex items-center gap-3">
-                                            <Button 
-                                                variant="outline" 
-                                                onClick={() => handleReject(request._id)}
-                                                disabled={processingId === request._id}
-                                                className="border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all font-semibold"
-                                            >
-                                                {processingId === request._id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reject"}
-                                            </Button>
-                                            <Button 
-                                                onClick={() => handleApprove(request._id)}
-                                                disabled={processingId === request._id}
-                                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-sm shadow-emerald-200 transition-all"
-                                            >
-                                                {processingId === request._id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Approve Changes"}
-                                            </Button>
-                                        </div>
+                                        {canEdit && (
+                                            <div className="flex items-center gap-3">
+                                                <Button 
+                                                    variant="outline" 
+                                                    onClick={() => handleReject(request._id)}
+                                                    disabled={processingId === request._id}
+                                                    className="border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all font-semibold"
+                                                >
+                                                    {processingId === request._id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reject"}
+                                                </Button>
+                                                <Button 
+                                                    onClick={() => handleApprove(request._id)}
+                                                    disabled={processingId === request._id}
+                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-sm shadow-emerald-200 transition-all"
+                                                >
+                                                    {processingId === request._id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Approve Changes"}
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

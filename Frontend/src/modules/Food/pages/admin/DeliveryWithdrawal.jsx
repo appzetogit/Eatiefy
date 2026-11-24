@@ -6,6 +6,7 @@ import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ const TABS = [
 ]
 
 export default function DeliveryWithdrawal() {
+  const { canEdit } = useAdminPermissions()
   const [activeTab, setActiveTab] = useState("All")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -310,7 +312,7 @@ export default function DeliveryWithdrawal() {
                             >
                               <Eye className="w-4 h-4 text-amber-600" />
                             </button>
-                            {req.status === "Pending" && (
+                            {req.status === "Pending" && canEdit && (
                               <>
                                 <button
                                   onClick={() => openApproveDialog(req)}

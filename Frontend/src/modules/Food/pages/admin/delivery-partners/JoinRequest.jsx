@@ -7,12 +7,14 @@ import { exportJoinRequestsToExcel, exportJoinRequestsToPDF } from "@food/compon
 import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
 import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function JoinRequest() {
+  const { canEdit } = useAdminPermissions()
   const [activeTab, setActiveTab] = useState("pending")
   const [searchQuery, setSearchQuery] = useState("")
   const [requests, setRequests] = useState([])
@@ -507,7 +509,7 @@ export default function JoinRequest() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            {activeTab === "pending" && (
+                            {activeTab === "pending" && canEdit && (
                               <>
                                 <button
                                   onClick={() => handleApprove(request)}

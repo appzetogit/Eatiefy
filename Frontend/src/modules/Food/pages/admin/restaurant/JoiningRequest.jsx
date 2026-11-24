@@ -12,6 +12,7 @@ import { getRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 import { getRestaurantDietType } from "./RestaurantsList"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -28,6 +29,7 @@ const formatTime12Hour = (timeStr) => {
 
 
 export default function JoiningRequest() {
+  const { canEdit } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -547,7 +549,7 @@ export default function JoiningRequest() {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          {String(request.status || "").toLowerCase() === "pending" && (
+                          {canEdit && String(request.status || "").toLowerCase() === "pending" && (
                             <>
                               <button
                                 onClick={() => handleApprove(request)}
