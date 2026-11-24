@@ -67,6 +67,50 @@ export const ProfileDetailsV2 = () => {
   const drivingLicenseInputRef = useRef(null)
   const upiQrCameraInputRef = useRef(null)
 
+  const anyModalOpen = Boolean(showVehiclePopup || showBankDetailsPopup || showDocumentModal || showDeletePopup)
+  const modalHistoryPushedRef = useRef(false)
+  const isClosingViaHistoryBackRef = useRef(false)
+
+  // Sync back-button press with open modals / sheets
+  useEffect(() => {
+    if (anyModalOpen) {
+      if (!modalHistoryPushedRef.current) {
+        window.history.pushState({ deliveryProfileModal: true }, "")
+        modalHistoryPushedRef.current = true
+      }
+
+      const handlePopState = () => {
+        if (isClosingViaHistoryBackRef.current) {
+          isClosingViaHistoryBackRef.current = false
+          modalHistoryPushedRef.current = false
+          return
+        }
+        modalHistoryPushedRef.current = false
+        setShowDocumentModal(false)
+        setSelectedDocument(null)
+        setShowBankDetailsPopup(false)
+        setShowVehiclePopup(false)
+        setShowDeletePopup(false)
+      }
+
+      window.addEventListener("popstate", handlePopState)
+      return () => {
+        window.removeEventListener("popstate", handlePopState)
+      }
+    } else {
+      modalHistoryPushedRef.current = false
+    }
+  }, [anyModalOpen])
+
+  const closeModal = (closeAction) => {
+    if (closeAction) closeAction()
+    if (modalHistoryPushedRef.current) {
+      isClosingViaHistoryBackRef.current = true
+      modalHistoryPushedRef.current = false
+      window.history.back()
+    }
+  }
+
   // Fetch profile data
   useEffect(() => {
     const parseWalletBalance = (response) => {
@@ -331,7 +375,7 @@ export const ProfileDetailsV2 = () => {
       if (response?.status === 200) {
         toast.success("Profile photo removed")
         await refreshProfile()
-        setShowDeletePopup(false)
+        closeModal(() => setShowDeletePopup(false))
       } else {
         toast.error("Failed to remove photo")
       }
@@ -495,7 +539,7 @@ export const ProfileDetailsV2 = () => {
 
       await deliveryAPI.updateBankDetailsMultipart(formData)
       toast.success("Bank details updated")
-      setShowBankDetailsPopup(false)
+      closeModal(() => setShowBankDetailsPopup(false))
       setBankDetailsErrors({})
       setUpiQrFile(null)
       setUpiQrPreview(null)
@@ -807,9 +851,11 @@ export const ProfileDetailsV2 = () => {
       {/* Delete Confirmation Popup */}
       <BottomPopup 
         isOpen={showDeletePopup} 
-        onClose={() => setShowDeletePopup(false)} 
+        onClose={() => closeModal(() => setShowDeletePopup(false))} 
         title="Remove Photo?"
         showCloseButton={false}
+        showBackButton={true}
+        onBack={() => closeModal(() => setShowDeletePopup(false))}
       >
          <div className="pb-10 pt-4 text-center">
             <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -820,7 +866,7 @@ export const ProfileDetailsV2 = () => {
             
             <div className="grid grid-cols-2 gap-3 px-2">
                 <button 
-                  onClick={() => setShowDeletePopup(false)}
+                  onClick={() => closeModal(() => setShowDeletePopup(false))}
                   className="bg-gray-100 text-gray-500 py-4 rounded-2xl font-black uppercase tracking-widest text-[11px] active:scale-95"
                 >
                   Cancel
@@ -837,7 +883,15 @@ export const ProfileDetailsV2 = () => {
       </BottomPopup>
 
       {/* Vehicle Popup */}
-      <BottomPopup isOpen={showVehiclePopup} onClose={() => setShowVehiclePopup(false)} title="Vehicle Info" closeOnHandleClick={true} showCloseButton={false}>
+      <BottomPopup 
+        isOpen={showVehiclePopup} 
+        onClose={() => closeModal(() => setShowVehiclePopup(false))} 
+        title="Vehicle Info" 
+        closeOnHandleClick={true} 
+        showCloseButton={false}
+        showBackButton={true}
+        onBack={() => closeModal(() => setShowVehiclePopup(false))}
+      >
          <div className="space-y-4 pb-10">
             <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col gap-4">
                 {/* Type Selection */}
@@ -927,7 +981,7 @@ export const ProfileDetailsV2 = () => {
                      setVehicleNumber(num)
                      setVehicleBrand(brand)
                      setVehicleType(type)
-                     setShowVehiclePopup(false)
+                     closeModal(() => setShowVehiclePopup(false))
                      toast.success("Flight details updated!")
                      await refreshProfile()
                    } catch (e) { toast.error("Cloud storage sync failed") }
@@ -942,11 +996,13 @@ export const ProfileDetailsV2 = () => {
       {/* Bank Details Modal (Expanded with UPI) */}
       <BottomPopup 
         isOpen={showBankDetailsPopup} 
-        onClose={() => setShowBankDetailsPopup(false)} 
+        onClose={() => closeModal(() => setShowBankDetailsPopup(false))} 
         title="Bank & Payments"
         maxHeight="85vh"
         closeOnHandleClick={true}
         showCloseButton={false}
+        showBackButton={true}
+        onBack={() => closeModal(() => setShowBankDetailsPopup(false))}
       >
         <div className="space-y-5 pb-10">
           <div className="grid gap-4">
@@ -1073,8 +1129,21 @@ export const ProfileDetailsV2 = () => {
              className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl flex flex-col items-center p-6"
           >
              <div className="w-full flex justify-between items-center mb-10 pt-safe">
-                <h3 className="text-white text-lg font-black uppercase tracking-widest">{selectedDocument.name}</h3>
-                <button onClick={() => setShowDocumentModal(false)} className="bg-white/10 text-white p-3 rounded-2xl hover:bg-white/20 transition-all active:scale-90">
+                <div className="flex items-center gap-3">
+                   <button 
+                     onClick={() => closeModal(() => { setShowDocumentModal(false); setSelectedDocument(null); })} 
+                     className="bg-white/10 text-white p-2.5 rounded-2xl hover:bg-white/20 transition-all active:scale-90"
+                     aria-label="Back"
+                   >
+                      <ArrowLeft className="w-6 h-6" />
+                   </button>
+                   <h3 className="text-white text-lg font-black uppercase tracking-widest">{selectedDocument.name}</h3>
+                </div>
+                <button 
+                  onClick={() => closeModal(() => { setShowDocumentModal(false); setSelectedDocument(null); })} 
+                  className="bg-white/10 text-white p-2.5 rounded-2xl hover:bg-white/20 transition-all active:scale-90"
+                  aria-label="Close"
+                >
                    <X className="w-6 h-6" />
                 </button>
              </div>
