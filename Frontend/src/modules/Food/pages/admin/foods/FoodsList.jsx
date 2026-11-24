@@ -266,6 +266,10 @@ export default function FoodsList() {
       const params = {
         page: currentPage,
         limit: pageSize,
+        // Ask the server for approved foods only. It used to return every status and the
+        // page dropped the non-approved ones afterwards, so the total and the pages
+        // counted rows that were never shown.
+        approvalStatus: "approved",
         ...(searchQuery.trim() && { search: searchQuery.trim() }),
         ...(selectedRestaurant !== "all" && { restaurantId: selectedRestaurant }),
         ...(selectedZone !== "all" && { zoneId: selectedZone }),
@@ -314,7 +318,14 @@ export default function FoodsList() {
       setImageVersion(Date.now())
     } catch (error) {
       debugError("Error fetching foods:", error)
-      toast.error("Failed to load foods")
+      // Say why (network down, 401, server error...) instead of a bare "Failed".
+      const reason =
+        error?.response?.data?.message ||
+        (error?.response?.status ? `Server error ${error.response.status}` : "") ||
+        (error?.code === "ERR_NETWORK" ? "Cannot reach the server" : "") ||
+        error?.message ||
+        ""
+      toast.error(reason ? `Failed to load foods: ${reason}` : "Failed to load foods")
       setFoods([])
     } finally {
       setLoading(false)

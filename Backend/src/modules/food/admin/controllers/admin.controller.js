@@ -836,6 +836,15 @@ export async function getRestaurantEarnings(req, res, next) {
     }
 }
 
+export async function getAdminEarnings(req, res, next) {
+    try {
+        const data = await adminService.getAdminEarnings(req.query || {});
+        res.status(200).json({ success: true, message: 'Admin earnings fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
 // ----- Earning Addon (admin) -----
 export async function getEarningAddons(req, res, next) {
     try {

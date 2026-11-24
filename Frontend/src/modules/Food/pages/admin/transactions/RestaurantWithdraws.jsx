@@ -201,6 +201,7 @@ export default function RestaurantWithdraws() {
       { key: "amount", label: "Amount" },
       { key: "restaurantName", label: "Restaurant Name" },
       { key: "restaurantIdString", label: "Restaurant ID" },
+      { key: "restaurantAddress", label: "Restaurant Address" },
       { key: "requestTime", label: "Request Time" },
       { key: "processedTime", label: "Approved/Rejected Time" },
       { key: "processedBy", label: "Processed By" },
@@ -212,6 +213,7 @@ export default function RestaurantWithdraws() {
       amount: formatCurrency(w.amount),
       restaurantName: w.restaurantName || 'N/A',
       restaurantIdString: w.restaurantIdString || 'N/A',
+      restaurantAddress: w.restaurantAddress || 'N/A',
       requestTime: formatDate(w.requestedAt || w.createdAt),
       processedTime: w.processedAt ? formatDate(w.processedAt) : '',
       processedBy: w.processedBy?.name ? `${w.processedBy.name}${w.processedBy.email ? ` (${w.processedBy.email})` : ''}` : '',
@@ -349,6 +351,7 @@ export default function RestaurantWithdraws() {
                     {visibleColumns.amount && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Amount</th>}
                     {visibleColumns.restaurant && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Restaurant Name</th>}
                     {visibleColumns.restaurantId && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Restaurant ID</th>}
+                    {visibleColumns.restaurantAddress && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Restaurant Address</th>}
                     {visibleColumns.requestTime && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Request Time</th>}
                     {visibleColumns.status && <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Status</th>}
                     {visibleColumns.actions && <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wider">Action</th>}
@@ -381,6 +384,9 @@ export default function RestaurantWithdraws() {
                         </td>}
                         {visibleColumns.restaurantId && <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-medium text-slate-700">{withdraw.restaurantIdString || 'N/A'}</span>
+                        </td>}
+                        {visibleColumns.restaurantAddress && <td className="px-6 py-4 max-w-xs">
+                          <span className="text-sm text-slate-700 line-clamp-2" title={withdraw.restaurantAddress || ''}>{withdraw.restaurantAddress || 'N/A'}</span>
                         </td>}
                         {visibleColumns.requestTime && <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-medium text-slate-700">{formatDate(withdraw.requestedAt || withdraw.createdAt)}</span>
@@ -454,12 +460,13 @@ export default function RestaurantWithdraws() {
 
         {/* View Withdraw Dialog */}
         <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-          <DialogContent className="max-w-md bg-white p-0">
-            <DialogHeader className="px-6 pt-6 pb-4">
+          {/* Capped to the screen height: header and Close stay put, the details scroll. */}
+          <DialogContent className="max-w-md bg-white p-0 max-h-[90vh] flex flex-col overflow-hidden">
+            <DialogHeader className="px-6 pt-6 pb-4 pr-14 shrink-0 border-b border-slate-100">
               <DialogTitle>Withdraw Request Details</DialogTitle>
             </DialogHeader>
             {selectedWithdraw && (
-              <div className="px-6 pb-6 space-y-4">
+              <div className="px-6 py-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
                 <div>
                   <label className="text-xs font-semibold text-slate-500 uppercase">Amount</label>
                   <p className="text-sm font-medium text-slate-900 mt-1">
@@ -541,7 +548,7 @@ export default function RestaurantWithdraws() {
                 )}
               </div>
             )}
-            <DialogFooter className="px-6 pb-6">
+            <DialogFooter className="px-6 py-4 shrink-0 border-t border-slate-100">
               <button
                 onClick={() => setIsViewOpen(false)}
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-md"

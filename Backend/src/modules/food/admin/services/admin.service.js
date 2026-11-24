@@ -6467,6 +6467,217 @@ export async function getRestaurantEarnings(query = {}) {
     };
 }
 
+// ----- Admin (platform) earnings -----
+
+/** {start, end} for ?fromDate&toDate, else ?period=today|week|month, else null (all time). */
+const resolveEarningsDateRange = (query = {}) => {
+    const from = query.fromDate ? new Date(query.fromDate) : null;
+    const to = query.toDate ? new Date(query.toDate) : null;
+    const validFrom = from && !Number.isNaN(from.getTime()) ? from : null;
+    const validTo = to && !Number.isNaN(to.getTime()) ? to : null;
+    if (validFrom || validTo) {
+        const start = validFrom ? new Date(validFrom) : new Date(0);
+        start.setHours(0, 0, 0, 0);
+        const end = validTo ? new Date(validTo) : new Date();
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+    }
+
+    const now = new Date();
+    const period = String(query.period || 'all').trim().toLowerCase();
+    if (period === 'today') {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(now);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+    }
+    if (period === 'week') {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        start.setDate(start.getDate() - start.getDay());
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+    }
+    if (period === 'month') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { start, end };
+    }
+    return null;
+};
+
+/**
+ * What the platform itself earns, and what it pays out of that.
+ *
+ * Income (delivered orders): restaurant commission + platform fee + admin markup on items
+ * + delivery fee collected + taxes collected, plus restaurant onboarding ("subscription")
+ * fees. These are the same components the dashboard's "Platform Total" adds up.
+ *
+ * Deductions: what the platform pays out of it - rider payouts (base earning + Eatiefy
+ * incentive), coupon discounts, delivery partner bonuses, credited earning-addon rewards
+ * and referral rewards. Net = income - deductions.
+ *
+ * Restaurant payouts (food value) are not the admin's money and appear in neither side.
+ */
+export async function getAdminEarnings(query = {}) {
+    const r2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+    const limit = Math.max(1, Math.min(100, parseInt(query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const range = resolveEarningsDateRange(query);
+    const zoneOid = parseZoneFilter(query.zoneId);
+    const [zoneRestaurantIds, zonePartnerIds] = zoneOid
+        ? await Promise.all([getRestaurantIdsInZone(zoneOid), getDeliveryPartnerIdsInZone(zoneOid)])
+        : [null, null];
+
+    const orderFilter = { orderStatus: 'delivered' };
+    if (range) orderFilter.createdAt = { $gte: range.start, $lte: range.end };
+    if (zoneRestaurantIds) orderFilter.restaurantId = { $in: zoneRestaurantIds };
+
+    const dateMatch = (field) => (range ? { [field]: { $gte: range.start, $lte: range.end } } : {});
+    const partnerMatch = zonePartnerIds ? { deliveryPartnerId: { $in: zonePartnerIds } } : {};
+    const sum = (path) => ({ $sum: { $ifNull: [path, 0] } });
+
+    const [orderAgg, orders, totalOrders, bonusAgg, addonAgg, referralAgg, onboardingAgg] = await Promise.all([
+        FoodOrder.aggregate([
+            { $match: orderFilter },
+            {
+                $group: {
+                    _id: null,
+                    orders: { $sum: 1 },
+                    orderValue: sum('$pricing.total'),
+                    foodSales: { $sum: { $ifNull: ['$pricing.baseSubtotal', { $ifNull: ['$pricing.subtotal', 0] }] } },
+                    commission: sum('$pricing.restaurantCommission'),
+                    platformFee: sum('$pricing.platformFee'),
+                    markup: sum('$pricing.markupTotal'),
+                    deliveryFee: sum('$pricing.deliveryFee'),
+                    tax: sum('$pricing.tax'),
+                    discount: sum('$pricing.discount'),
+                    riderPayout: sum('$riderEarning'),
+                    riderIncentive: sum('$eatiefyIncentive.amount')
+                }
+            }
+        ]),
+        FoodOrder.find(orderFilter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .select('orderId createdAt pricing riderEarning eatiefyIncentive restaurantId')
+            .populate('restaurantId', 'restaurantName name')
+            .lean(),
+        FoodOrder.countDocuments(orderFilter),
+        DeliveryBonusTransaction.aggregate([
+            { $match: { ...dateMatch('createdAt'), ...partnerMatch } },
+            { $group: { _id: null, total: sum('$amount'), count: { $sum: 1 } } }
+        ]),
+        FoodEarningAddonHistory.aggregate([
+            { $match: { status: 'credited', ...dateMatch('creditedAt'), ...partnerMatch } },
+            { $group: { _id: null, total: sum('$earningAmount'), count: { $sum: 1 } } }
+        ]),
+        // Referral rewards belong to users, who have no zone, so they can't be zone-filtered.
+        zoneOid
+            ? Promise.resolve([])
+            : FoodReferralLog.aggregate([
+                { $match: { status: 'credited', ...dateMatch('updatedAt') } },
+                { $group: { _id: null, total: sum('$rewardAmount'), count: { $sum: 1 } } }
+            ]),
+        // Restaurant onboarding ("subscription") fees actually collected.
+        FoodOnboardingPayment.aggregate([
+            {
+                $match: {
+                    status: 'paid',
+                    ...dateMatch('paidAt'),
+                    ...(zoneOid ? { $or: [{ zoneId: zoneOid }, { restaurantId: { $in: zoneRestaurantIds || [] } }] } : {})
+                }
+            },
+            { $group: { _id: null, totalPaise: sum('$amountPaise'), count: { $sum: 1 } } }
+        ])
+    ]);
+
+    const o = orderAgg?.[0] || {};
+    const subscription = r2(Number(onboardingAgg?.[0]?.totalPaise || 0) / 100);
+
+    const income = {
+        commission: r2(o.commission),
+        platformFee: r2(o.platformFee),
+        adminMarkup: r2(o.markup),
+        deliveryFee: r2(o.deliveryFee),
+        taxes: r2(o.tax),
+        subscription
+    };
+    income.total = r2(Object.values(income).reduce((a, b) => a + b, 0));
+
+    const deductions = {
+        riderPayouts: r2(o.riderPayout),
+        couponDiscounts: r2(o.discount),
+        deliveryBonuses: r2(bonusAgg?.[0]?.total),
+        earningAddonRewards: r2(addonAgg?.[0]?.total),
+        referralRewards: r2(referralAgg?.[0]?.total)
+    };
+    deductions.total = r2(Object.values(deductions).reduce((a, b) => a + b, 0));
+
+    const rows = orders.map((order) => {
+        const p = order.pricing || {};
+        const n = (v) => Number(v) || 0;
+        const commission = n(p.restaurantCommission);
+        const platformFee = n(p.platformFee);
+        const markup = n(p.markupTotal);
+        const deliveryFee = n(p.deliveryFee);
+        const tax = n(p.tax);
+        const rider = n(order.riderEarning);
+        const discount = n(p.discount);
+        return {
+            id: String(order._id),
+            orderId: order.orderId || 'N/A',
+            restaurant: order.restaurantId?.restaurantName || order.restaurantId?.name || 'N/A',
+            createdAt: order.createdAt || null,
+            orderValue: r2(p.total),
+            commission: r2(commission),
+            platformFee: r2(platformFee),
+            adminMarkup: r2(markup),
+            deliveryFee: r2(deliveryFee),
+            taxes: r2(tax),
+            riderPayout: r2(rider),
+            couponDiscount: r2(discount),
+            net: r2(commission + platformFee + markup + deliveryFee + tax - rider - discount)
+        };
+    });
+
+    return {
+        summary: {
+            income,
+            deductions,
+            netEarning: r2(income.total - deductions.total),
+            orders: {
+                delivered: Number(o.orders || 0),
+                orderValue: r2(o.orderValue),
+                foodSales: r2(o.foodSales)
+            },
+            // Of the rider payouts above, how much was the Eatiefy incentive.
+            riderIncentive: r2(o.riderIncentive),
+            subscriptionPayments: Number(onboardingAgg?.[0]?.count || 0),
+            counts: {
+                deliveryBonuses: Number(bonusAgg?.[0]?.count || 0),
+                earningAddonRewards: Number(addonAgg?.[0]?.count || 0),
+                referralRewards: Number(referralAgg?.[0]?.count || 0)
+            }
+        },
+        orders: rows,
+        pagination: { page, limit, total: totalOrders, pages: Math.ceil(totalOrders / limit) || 1 },
+        filters: {
+            zoneId: zoneOid ? String(zoneOid) : null,
+            from: range?.start || null,
+            to: range?.end || null,
+            // Not narrowed by zone when a zone is selected.
+            notZoneFiltered: zoneOid ? ['referralRewards'] : []
+        }
+    };
+}
+
 // ----- Earning Addon Offers (admin) -----
 export async function getEarningAddons(query = {}) {
     const { page = 1, limit = 20, search } = query;
@@ -6746,7 +6957,25 @@ export async function cancelEarningAddonHistory(historyId, reason) {
     return doc.toObject();
 }
 
-export async function checkEarningAddonCompletions(deliveryPartnerId, _force = false) {
+// Checks for one rider run one after another. Two deliveries landing together would
+// otherwise both see "no history yet" and each create a row for the same offer.
+const earningAddonCheckChains = new Map();
+
+export function checkEarningAddonCompletions(deliveryPartnerId, force = false) {
+    const key = String(deliveryPartnerId || '');
+    if (!key || key === 'all') return runEarningAddonCompletionCheck(deliveryPartnerId, force);
+
+    const previous = earningAddonCheckChains.get(key) || Promise.resolve();
+    const next = previous.catch(() => {}).then(() => runEarningAddonCompletionCheck(deliveryPartnerId, force));
+    earningAddonCheckChains.set(key, next);
+    const cleanup = () => {
+        if (earningAddonCheckChains.get(key) === next) earningAddonCheckChains.delete(key);
+    };
+    next.then(cleanup, cleanup);
+    return next;
+}
+
+async function runEarningAddonCompletionCheck(deliveryPartnerId, _force = false) {
     const now = new Date();
     
     // Only search for active offers that are currently running.
@@ -6944,7 +7173,10 @@ export async function getDeliverymanReviews(query = {}) {
         sl: skip + index + 1,
         orderId: doc.orderId,
         deliveryman: doc.dispatch?.deliveryPartnerId?.name || 'Unknown',
+        // Raw Mongo id (used for links) plus the "DP-XXXXXXXX" display id every other
+        // admin screen and the partner's own app shows.
         deliverymanId: doc.dispatch?.deliveryPartnerId?._id || 'N/A',
+        deliveryId: toDeliveryPartnerDisplayId(doc.dispatch?.deliveryPartnerId) || 'N/A',
         deliverymanPhone: doc.dispatch?.deliveryPartnerId?.phone || 'N/A',
         customer: doc.userId?.name || 'Unknown',
         customerId: doc.userId?._id || 'N/A',
@@ -7305,7 +7537,7 @@ export async function getWithdrawals(query = {}) {
 
     const [withdrawals, total] = await Promise.all([
         FoodRestaurantWithdrawal.find(filter)
-            .populate('restaurantId', 'restaurantName profileImage ownerName phone ownerPhone accountHolderName accountNumber ifscCode accountType upiId upiQrImage')
+            .populate('restaurantId', 'restaurantName profileImage ownerName phone ownerPhone accountHolderName accountNumber ifscCode accountType upiId upiQrImage addressLine1 addressLine2 area city state pincode landmark location')
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
@@ -7313,11 +7545,27 @@ export async function getWithdrawals(query = {}) {
         FoodRestaurantWithdrawal.countDocuments(filter)
     ]);
 
+    // One readable line from whichever address fields the restaurant has filled in.
+    const formatRestaurantAddress = (r) => {
+        if (!r) return '';
+        const loc = r.location || {};
+        const parts = [
+            r.addressLine1 || loc.addressLine1,
+            r.addressLine2 || loc.addressLine2,
+            r.area || loc.area,
+            r.city || loc.city,
+            r.state || loc.state,
+            r.pincode || loc.pincode
+        ].map((p) => String(p || '').trim()).filter(Boolean);
+        return parts.length ? [...new Set(parts)].join(', ') : String(loc.formattedAddress || loc.address || '').trim();
+    };
+
     // UI expects status with first letter capitalized, and data in 'requests' key
     const requests = withdrawals.map((w) => ({
         ...w,
         id: w._id,
         restaurantName: w.restaurantId?.restaurantName || 'N/A',
+        restaurantAddress: formatRestaurantAddress(w.restaurantId),
         restaurantIdString: w.restaurantId ? `REST${w.restaurantId._id.toString().slice(-6).padStart(6, '0')}` : 'N/A',
         restaurantBankDetails: {
             accountHolderName: w.restaurantId?.accountHolderName || '',
@@ -7451,25 +7699,55 @@ export async function getDeliveryWithdrawals(query = {}) {
 
 export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, rejectionReason, transactionId }) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) throw new ValidationError('Invalid withdrawal ID');
-    
+
+    // "processed" is the legacy name for approved.
+    const rawStatus = String(status || '').trim().toLowerCase();
+    const nextStatus = rawStatus === 'processed' ? 'approved' : rawStatus;
+    if (!['approved', 'rejected'].includes(nextStatus)) {
+        throw new ValidationError('Invalid withdrawal status');
+    }
+
     const update = {
-        status: String(status).toLowerCase(),
+        status: nextStatus,
         adminNote,
-        rejectionReason,
-        transactionId,
         processedAt: new Date()
     };
 
-    const updated = await FoodDeliveryWithdrawal.findByIdAndUpdate(
-        id,
+    if (nextStatus === 'approved') {
+        // The bank / UPI reference of the payout the admin just made. It is the only
+        // proof of payment if the partner later disputes a withdrawal, so approval
+        // without it is refused, and one reference can't be reused for another payout.
+        const txnId = String(transactionId || '').trim();
+        if (!txnId) throw new ValidationError('Transaction ID is required to approve a withdrawal');
+        if (txnId.length < 4 || txnId.length > 64) {
+            throw new ValidationError('Transaction ID must be between 4 and 64 characters');
+        }
+        const duplicate = await FoodDeliveryWithdrawal.findOne({
+            transactionId: new RegExp(`^${txnId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+            _id: { $ne: id }
+        }).select('_id').lean();
+        if (duplicate) throw new ValidationError('This transaction ID is already used for another withdrawal');
+        update.transactionId = txnId;
+    } else {
+        update.rejectionReason = String(rejectionReason || '').trim();
+    }
+
+    // Only a pending request can be decided, and only once. Previously any status could
+    // be written over any other, so approving twice deducted the wallet twice.
+    const updated = await FoodDeliveryWithdrawal.findOneAndUpdate(
+        { _id: id, status: 'pending' },
         { $set: update },
         { new: true }
     ).populate('deliveryPartnerId', 'name phone profilePartnerId').lean();
 
-    if (!updated) throw new ValidationError('Withdrawal request not found');
+    if (!updated) {
+        const existing = await FoodDeliveryWithdrawal.findById(id).select('status').lean();
+        if (!existing) throw new ValidationError('Withdrawal request not found');
+        throw new ValidationError(`This withdrawal was already ${existing.status}`);
+    }
 
     // If approved, deduct from wallet balance
-    if (status.toLowerCase() === 'approved' || status.toLowerCase() === 'processed') {
+    if (nextStatus === 'approved') {
         const amount = Number(updated.amount || 0);
         if (amount > 0) {
             await FoodDeliveryWallet.findOneAndUpdate(

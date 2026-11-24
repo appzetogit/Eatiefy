@@ -323,7 +323,7 @@ export default function Cart() {
 
   const [customizationSettings, setCustomizationSettings] = useState({
     cod_enabled: true,
-    takeaway_cod_enabled: true,
+    takeaway_cod_enabled: false,
     takeaway_pay_at_pickup_enabled: true,
     delivery_cod_enabled: true,
     dining_cod_enabled: true,
@@ -331,30 +331,19 @@ export default function Cart() {
     online_payment_enabled: true,
   })
 
-  useEffect(() => {
-    userAPI.getCustomizationSettings()
-      .then(res => {
-        if (res?.data?.data) {
-          setCustomizationSettings(prev => ({
-            ...prev,
-            ...res.data.data
-          }))
-        }
-      })
-      .catch(() => {
-        debugError("Failed to fetch customization settings")
-      })
-  }, [])
+  // (Customization settings are fetched below, once the zone is known: payment switches can
+  // differ per zone.)
 
   // Payment availability logic
   const isPaymentMethodEnabled = (methodId) => {
     if (methodId === "razorpay") return customizationSettings.online_payment_enabled !== false
     if (methodId === "wallet") return customizationSettings.wallet_payment_enabled !== false
     if (methodId === "cash") {
-      // Takeaway is online-payment only — cash / Pay-at-Pickup is never offered.
-      if (orderType === "takeaway") return false
-
       if (customizationSettings.cod_blocking_feature_enabled !== false && userProfile?.isCodBlocked) return false
+
+      // Takeaway cash is offered only when an admin turned "Takeaway COD" on
+      // (the global COD switch is for delivery/dining and does not apply here).
+      if (orderType === "takeaway") return customizationSettings.takeaway_cod_enabled === true
 
       // General COD toggle
       if (customizationSettings.cod_enabled === false) return false
@@ -941,6 +930,28 @@ export default function Cart() {
     if (!restaurantZoneId) return false
     return String(restaurantZoneId).trim() !== String(zoneId).trim()
   }, [orderType, cart, zoneId, zoneStatus, restaurantData?.zoneId])
+
+  // Payment switches (COD / wallet / online) can be set per zone by an admin. Use the
+  // restaurant's zone, which is the zone checkout enforces, else the customer's zone.
+  const customizationZoneId = cart[0]?.restaurantZoneId || restaurantData?.zoneId || zoneId || ""
+  useEffect(() => {
+    let cancelled = false
+    userAPI.getCustomizationSettings(customizationZoneId || undefined)
+      .then(res => {
+        if (!cancelled && res?.data?.data) {
+          setCustomizationSettings(prev => ({
+            ...prev,
+            ...res.data.data
+          }))
+        }
+      })
+      .catch(() => {
+        debugError("Failed to fetch customization settings")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [customizationZoneId])
 
   useEffect(() => {
     // Sync delivery mode from overlay/localStorage changes.
@@ -1690,7 +1701,7 @@ export default function Cart() {
       : selectedPaymentMethod === "razorpay"
         ? (payAtPickup ? "Pay at Pickup" : orderType === "takeaway" ? "Pay Now" : "Online Payment")
         : orderType === "takeaway"
-          ? "Pay at Pickup"
+          ? "Cash at Pickup"
           : "Cash on Delivery"
 
   // Restaurant name from data or cart
@@ -4124,8 +4135,9 @@ export default function Cart() {
                         },
                         {
                           id: 'cash',
-                          name: orderType === 'takeaway' ? 'Pay at Pickup' : 'Cash on Delivery',
-                          description: orderType === 'takeaway' ? 'Pay at the restaurant when you collect' : 'Pay when order arrives',
+                          // Named differently from the online "Pay at Pickup" row above.
+                          name: orderType === 'takeaway' ? 'Cash at Pickup' : 'Cash on Delivery',
+                          description: orderType === 'takeaway' ? 'Pay cash at the restaurant when you collect' : 'Pay when order arrives',
                           icon: <Banknote className="w-5 h-5" />,
                           color: 'bg-orange-50 text-#14512F dark:bg-orange-900/40 dark:text-orange-400',
                           selectedColor: 'bg-[#1F6B45] text-white',

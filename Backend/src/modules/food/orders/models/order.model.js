@@ -533,6 +533,25 @@ orderSchema.post('save', function (doc) {
         .catch(() => {});
 });
 
+/*
+ * Earning Addon offers ("deliver N orders, earn Rs X"): once a rider delivers an
+ * order, check whether that rider has now met any running offer and, if so, add the
+ * pending row to Earning Addon History. Until now rows only appeared when an admin
+ * pressed "Check completions", so the history never updated by itself.
+ */
+orderSchema.post('save', function (doc) {
+    if (!doc?.$locals?.orderStatusChanged) return;
+    if (String(doc.orderStatus || '') !== 'delivered') return;
+    const partnerId = doc.dispatch?.deliveryPartnerId;
+    if (!partnerId) return;
+    import('../../admin/services/admin.service.js')
+        .then(({ checkEarningAddonCompletions }) => checkEarningAddonCompletions(String(partnerId)))
+        .catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error('Earning addon check after delivery failed:', err?.message || err);
+        });
+});
+
 export const FoodOrder = mongoose.model('FoodOrder', orderSchema);
 
 const settingsSchema = new mongoose.Schema(

@@ -50,6 +50,7 @@ export const SUB_ADMIN_PERMISSION_MODULES = [
   { key: 'transaction_report', label: 'Transaction Report', pathPrefixes: ['/admin/food/transaction-report'] },
   { key: 'order_report', label: 'Order Report', pathPrefixes: ['/admin/food/order-report'] },
   { key: 'tax_report', label: 'Tax Report', pathPrefixes: ['/admin/food/tax-report'] },
+  { key: 'admin_earning', label: 'Admin Earning', pathPrefixes: ['/admin/food/admin-earning'] },
   { key: 'restaurant_report', label: 'Restaurant Report', pathPrefixes: ['/admin/food/restaurant-report'] },
   { key: 'feedback_experience', label: 'Feedback Experience', pathPrefixes: ['/admin/food/customer-report/feedback-experience'] },
   { key: 'restaurant_withdraws', label: 'Restaurant Withdraws', pathPrefixes: ['/admin/food/restaurant-withdraws'] },

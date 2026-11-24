@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { FoodSystemConfig } from '../models/systemConfig.model.js';
 import { FoodZone } from '../models/zone.model.js';
 import { FoodZoneRestaurantSettings } from '../models/zoneRestaurantSettings.model.js';
+import { FoodZoneCustomizationSettings } from '../models/zoneCustomizationSettings.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
 import { invalidateMaintenanceModeCache } from '../services/maintenanceMode.service.js';
@@ -16,8 +17,10 @@ const CUSTOMIZATION_TOGGLES = [
     },
     {
         key: 'takeaway_cod_enabled',
-        defaultValue: true,
-        description: 'Global toggle for takeaway COD visibility'
+        // Takeaway is online-payment only unless an admin explicitly switches this on,
+        // so an install that never touched the setting keeps its online-only behaviour.
+        defaultValue: false,
+        description: 'Global toggle for takeaway COD (cash paid at the restaurant on pickup)'
     },
     {
         key: 'takeaway_pay_at_pickup_enabled',
@@ -97,8 +100,40 @@ function getCustomizationAllowlist() {
     return CUSTOMIZATION_TOGGLES.map(t => t.key);
 }
 
-/** Shared by the standalone route and the aggregated /public/app-config payload. */
-export async function loadCustomizationSettings() {
+/**
+ * The checkout switches an admin can vary per zone. Module-level switches (takeaway /
+ * dining / sweets modules, maintenance, default location, onboarding payment) change how
+ * the whole app is wired, so they stay platform-wide.
+ */
+export const ZONE_CUSTOMIZATION_KEYS = [
+    'cod_enabled',
+    'takeaway_cod_enabled',
+    'takeaway_pay_at_pickup_enabled',
+    'delivery_cod_enabled',
+    'dining_cod_enabled',
+    'wallet_payment_enabled',
+    'online_payment_enabled'
+];
+
+/** A zone id as an ObjectId, or null when absent / malformed (never throws). */
+function toZoneObjectId(value) {
+    const raw = value == null ? '' : String(value).trim();
+    if (!raw || raw === 'all' || raw === 'global') return null;
+    return mongoose.Types.ObjectId.isValid(raw) ? new mongoose.Types.ObjectId(raw) : null;
+}
+
+/** The booleans a zone document overrides, limited to keys that may vary by zone. */
+function readZoneToggleOverrides(zoneDoc) {
+    const out = {};
+    for (const key of ZONE_CUSTOMIZATION_KEYS) {
+        const value = zoneDoc?.overrides?.[key];
+        if (typeof value === 'boolean') out[key] = value;
+    }
+    return out;
+}
+
+/** Platform-wide values (stored value, else the built-in default) for every toggle. */
+async function loadGlobalCustomizationSettings() {
     const keys = getCustomizationAllowlist();
     const docs = await FoodSystemConfig.find({ key: { $in: keys } }).lean();
     const map = new Map(docs.map(d => [d.key, d]));
@@ -110,8 +145,97 @@ export async function loadCustomizationSettings() {
     return data;
 }
 
+/**
+ * Shared by the standalone route, the aggregated /public/app-config payload and order
+ * checkout. Without `zoneId` this is the platform-wide setting, exactly as before; with
+ * a zone, every payment switch that zone overrides wins and the rest follow the default.
+ */
+export async function loadCustomizationSettings({ zoneId } = {}) {
+    const data = await loadGlobalCustomizationSettings();
+    const zoneOid = toZoneObjectId(zoneId);
+    if (!zoneOid) return data;
+    const zoneDoc = await FoodZoneCustomizationSettings.findOne({ zoneId: zoneOid }).lean();
+    return { ...data, ...readZoneToggleOverrides(zoneDoc) };
+}
+
 export async function getCustomizationSettings(req, res) {
-    res.json({ success: true, data: await loadCustomizationSettings() });
+    res.json({ success: true, data: await loadCustomizationSettings({ zoneId: req.query?.zoneId }) });
+}
+
+/**
+ * Admin: everything the zone scope of the page needs - the zone's effective values, the
+ * platform defaults, which switches this zone overrides, and every zone that overrides
+ * something (so the zone picker can mark them).
+ */
+export async function getZoneCustomizationSettings(req, res, next) {
+    try {
+        const zoneOid = toZoneObjectId(req.query?.zoneId);
+        const [defaults, zoneDocs] = await Promise.all([
+            loadGlobalCustomizationSettings(),
+            FoodZoneCustomizationSettings.find({}).lean()
+        ]);
+        const zoneDoc = zoneOid ? zoneDocs.find((doc) => String(doc.zoneId) === String(zoneOid)) || null : null;
+        const overrides = readZoneToggleOverrides(zoneDoc);
+
+        res.json({
+            success: true,
+            data: {
+                zoneId: zoneOid ? String(zoneOid) : null,
+                zoneKeys: ZONE_CUSTOMIZATION_KEYS,
+                defaults,
+                settings: { ...defaults, ...overrides },
+                overridden: Object.fromEntries(ZONE_CUSTOMIZATION_KEYS.map((key) => [key, key in overrides])),
+                zonesWithOverrides: zoneDocs
+                    .filter((doc) => Object.keys(readZoneToggleOverrides(doc)).length > 0)
+                    .map((doc) => String(doc.zoneId))
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+/**
+ * Admin: set (true / false) or clear (null) one or more payment switches for a zone.
+ * A cleared switch follows the platform default again.
+ */
+export async function updateZoneCustomizationSettings(req, res, next) {
+    try {
+        const body = req.body ?? {};
+        const zoneOid = toZoneObjectId(body.zoneId);
+        if (!zoneOid) throw new ValidationError('A valid zoneId is required');
+        if (!(await FoodZone.exists({ _id: zoneOid }))) throw new ValidationError('Zone not found');
+
+        const provided = ZONE_CUSTOMIZATION_KEYS.filter((key) => body[key] !== undefined);
+        if (provided.length === 0) {
+            throw new ValidationError(`Provide at least one of: ${ZONE_CUSTOMIZATION_KEYS.join(', ')}`);
+        }
+        for (const key of provided) {
+            if (body[key] !== null && typeof body[key] !== 'boolean') {
+                throw new ValidationError(`${key} must be true, false or null (follow default)`);
+            }
+        }
+
+        const $set = {
+            zoneId: zoneOid,
+            updatedBy: { role: req.user?.role || 'ADMIN', adminId: req.user?.userId, at: new Date() }
+        };
+        const $unset = {};
+        for (const key of provided) {
+            if (body[key] === null) $unset[`overrides.${key}`] = '';
+            else $set[`overrides.${key}`] = body[key];
+        }
+
+        await FoodZoneCustomizationSettings.findOneAndUpdate(
+            { zoneId: zoneOid },
+            { $set, ...(Object.keys($unset).length ? { $unset } : {}) },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+
+        return getZoneCustomizationSettings({ query: { zoneId: String(zoneOid) } }, res, next);
+    } catch (error) {
+        next(error);
+    }
 }
 
 export async function updateCustomizationSettings(req, res) {

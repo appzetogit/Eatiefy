@@ -134,7 +134,7 @@ export default function DeliverymanBonus() {
               <div className="relative flex-1 sm:flex-initial min-w-[250px]">
                 <input
                   type="text"
-                  placeholder="Search by name, phone, transaction ID"
+                  placeholder="Search by name, phone"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
@@ -162,7 +162,6 @@ export default function DeliverymanBonus() {
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">SI</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Transaction ID</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Deliveryman</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Amount</th>
                     <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wider">Reference</th>
@@ -172,7 +171,7 @@ export default function DeliverymanBonus() {
                 <tbody className="bg-white divide-y divide-slate-100">
                   {transactions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                      <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
                         No bonus transactions found
                       </td>
                     </tr>
@@ -181,9 +180,6 @@ export default function DeliverymanBonus() {
                       <tr key={tx.transactionId || tx._id || index} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
                           {(currentPage - 1) * pageSize + index + 1}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-slate-700">
-                          {tx.transactionId || "N/A"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex flex-col">
@@ -197,7 +193,7 @@ export default function DeliverymanBonus() {
                           {formatCurrency(tx.amount ?? tx.bonus)}
                         </td>
                         <td className="px-6 py-4 text-sm text-slate-700 max-w-xs truncate" title={tx.reference}>
-                          {tx.reference || "�"}
+                          {tx.reference || "—"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
                           {formatDate(tx.createdAt)}

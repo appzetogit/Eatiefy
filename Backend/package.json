@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "email:check": "node scripts/email-check.js",
     "seed:admin": "node scripts/seed-admin.js",
+    "seed:restaurant": "node scripts/seed-restaurant.js",
     "worker:otp": "node src/queues/workers/otp.worker.js",
     "worker:notification": "node src/queues/workers/notification.worker.js",
     "worker:order": "node src/queues/workers/order.worker.js",

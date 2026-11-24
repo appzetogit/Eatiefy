@@ -187,15 +187,9 @@ export const adminSidebarMenu = [
       { type: "link", label: "Transaction Report", path: "/admin/food/transaction-report", icon: "FileText" },
       { type: "link", label: "Order Report", path: "/admin/food/order-report/regular", icon: "FileText" },
       { type: "link", label: "Tax Report", path: "/admin/food/tax-report", icon: "Receipt" },
-      {
-        type: "expandable",
-        label: "Restaurant Report",
-        icon: "FileText",
-        subItems: [
-          { label: "Restaurant Report", path: "/admin/food/restaurant-report" },
-          { label: "Restaurant Earning", path: "/admin/food/restaurants/earnings" }
-        ],
-      },
+      { type: "link", label: "Admin Earning", path: "/admin/food/admin-earning", icon: "Wallet" },
+      // "Restaurant Earning" lives under Restaurants; it was listed here too (same page).
+      { type: "link", label: "Restaurant Report", path: "/admin/food/restaurant-report", icon: "FileText" },
       {
         type: "expandable",
         label: "Customer Report",
