@@ -453,7 +453,17 @@ export default function ExploreMore() {
         const response = await restaurantAPI.refreshCurrentRestaurant()
         const data = response?.data?.data?.restaurant || response?.data?.restaurant
         if (data) {
-          setRestaurantData(data)
+          const takeawayEnabled = Boolean(
+            data.takeawaySettings?.isEnabled ?? data.isTakeawayEnabled ?? false
+          )
+          setRestaurantData({
+            ...data,
+            isTakeawayEnabled: takeawayEnabled,
+            takeawaySettings: {
+              ...(data.takeawaySettings || {}),
+              isEnabled: takeawayEnabled
+            }
+          })
         }
       } catch (error) {
         // Only log error if it's not a network/timeout error (backend might be down/slow)
@@ -880,7 +890,12 @@ export default function ExploreMore() {
                     handleScheduleOffClick()
                   } else if (item.id === 6) {
                     // Takeaway toggle
-                    setTempTakeawayEnabled(restaurantData?.isTakeawayEnabled || false)
+                    const isEnabled = Boolean(
+                      restaurantData?.takeawaySettings?.isEnabled ??
+                      restaurantData?.isTakeawayEnabled ??
+                      false
+                    )
+                    setTempTakeawayEnabled(isEnabled)
                     setTakeawayModalOpen(true)
                   } else if (item.route) {
                     navigate(item.route, { state: { from: location.pathname } })
@@ -1864,9 +1879,19 @@ export default function ExploreMore() {
                   if (isTakeawayUpdating) return;
                   setIsTakeawayUpdating(true);
                   try {
-                    await restaurantAPI.updateTakeawaySettings({ isEnabled: tempTakeawayEnabled });
+                    const res = await restaurantAPI.updateTakeawaySettings({ isEnabled: tempTakeawayEnabled });
+                    const updatedRestaurant = res?.data?.data?.restaurant || res?.data?.restaurant;
                     // Update local restaurant data state
-                    setRestaurantData(prev => ({ ...prev, isTakeawayEnabled: tempTakeawayEnabled }));
+                    setRestaurantData(prev => ({
+                      ...(prev || {}),
+                      ...(updatedRestaurant || {}),
+                      isTakeawayEnabled: tempTakeawayEnabled,
+                      takeawaySettings: {
+                        ...(prev?.takeawaySettings || {}),
+                        ...(updatedRestaurant?.takeawaySettings || {}),
+                        isEnabled: tempTakeawayEnabled
+                      }
+                    }));
                     setTakeawayModalOpen(false);
                     toast.success(`Takeaway ${tempTakeawayEnabled ? 'enabled' : 'disabled'} successfully`, {
                       duration: 2000

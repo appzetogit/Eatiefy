@@ -3134,6 +3134,10 @@ export default function Cart() {
                             )
                             return
                           }
+                          if (Number(pricing?.restaurantOfferDiscount) > 0) {
+                            toast.info("A restaurant offer is already applied to this order. Two coupons cannot be combined.")
+                            return
+                          }
                           setShowCouponSheet(true)
                         }}
                         className={`w-full py-2.5 px-4 bg-gray-50/50 hover:bg-gray-50 dark:bg-[#2e2e2e]/30 dark:hover:bg-[#2e2e2e]/50 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl text-xs font-bold text-[#1F6B45] flex items-center justify-between transition-all active:scale-[0.98] ${
@@ -4493,7 +4497,7 @@ export default function Cart() {
         {/* Auto Apply Coupon Popup Sheet */}
         {createPortal(
           <AnimatePresence>
-            {showAutoCouponPopup && bestCoupon && !isCartUnavailable && (
+            {showAutoCouponPopup && bestCoupon && !isCartUnavailable && !(Number(pricing?.restaurantOfferDiscount) > 0) && (
               <>
                 {/* Backdrop Overlay */}
                 <motion.div
