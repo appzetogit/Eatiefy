@@ -103,14 +103,61 @@ const filterOptions = {
     { id: "takeaway", label: "Takeaway", key: "orderType" },
     // Dining filter hidden while the admin Dining toggle is off
     { id: "home-delivery", label: "Home delivery", key: "orderType" },
-    { id: "self-delivery", label: "Self delivery", key: "orderType" },
-    { id: "food-rescue", label: "Food rescue", key: "orderType" },
-    { id: "large-order", label: "Large order", key: "orderType" },
-    { id: "veg-only", label: "Veg only", key: "orderType" },
-    { id: "irctc", label: "IRCTC", key: "orderType" },
-    { id: "replacement", label: "Replacement", key: "orderType" },
-    { id: "hospital", label: "Hospital", key: "orderType" }
+    { id: "veg-only", label: "Veg only", key: "orderType" }
   ]
+}
+
+const normalizeComplaintType = (typeStr) => {
+  if (!typeStr) return null
+  const s = String(typeStr).toLowerCase().replace(/[-_]/g, " ")
+  if (s.includes("delay") || s.includes("late")) return "order-delayed"
+  if (s.includes("wrong")) return "wrong-items"
+  if (s.includes("missing")) return "missing-items"
+  if (s.includes("taste") || s.includes("quality") || s.includes("food")) return "poor-taste"
+  if (s.includes("packaging") || s.includes("spill")) return "poor-packaging"
+  if (s.includes("stock")) return "out-of-stock"
+  if (s.includes("not delivered") || s.includes("undelivered")) return "not-delivered"
+  return null
+}
+
+const computeKptDelayMinutes = (order) => {
+  if (Number.isFinite(Number(order.kptDelayMinutes))) {
+    return Number(order.kptDelayMinutes)
+  }
+  if (Number.isFinite(Number(order.kptDelay))) {
+    return Number(order.kptDelay)
+  }
+  const expectedPrep = Number(order.preparationTime) || 0
+  const history = Array.isArray(order.statusHistory) ? order.statusHistory : []
+
+  // Find when preparation started
+  const prepEntry = history.find((h) => String(h?.to || "").toLowerCase() === "preparing")
+  const prepStartTime = prepEntry?.at
+    ? new Date(prepEntry.at).getTime()
+    : order.acceptedAt
+    ? new Date(order.acceptedAt).getTime()
+    : null
+
+  // Find when preparation ended
+  const readyEntry = history.find((h) =>
+    ["ready", "ready_for_pickup", "picked_up", "out_for_delivery", "delivered"].includes(
+      String(h?.to || "").toLowerCase()
+    )
+  )
+  const readyTime = readyEntry?.at ? new Date(readyEntry.at).getTime() : null
+
+  if (prepStartTime) {
+    const isCurrentlyPreparing = ["preparing", "accepted"].includes(
+      String(order.orderStatus || order.status || "").toLowerCase()
+    )
+    const endTime = readyTime || (isCurrentlyPreparing ? Date.now() : null)
+    if (endTime && endTime >= prepStartTime) {
+      const actualPrepMinutes = Math.round((endTime - prepStartTime) / 60000)
+      const delay = actualPrepMinutes - expectedPrep
+      return Math.max(0, delay)
+    }
+  }
+  return 0
 }
 
 export default function AllOrdersPage() {
@@ -168,6 +215,9 @@ export default function AllOrdersPage() {
     fetchRestaurantData()
   }, [])
 
+  // Store complaints map in ref so transformOrder can enrich orders
+  const complaintsMapRef = useRef(new Map())
+
   // Transform API order to component format
   const transformOrder = useCallback((order) => {
     const createdAt = new Date(order.createdAt)
@@ -217,6 +267,39 @@ export default function AllOrdersPage() {
     } else if (status === 'CANCELLED') {
       reason = 'Cancelled by customer'
     }
+
+    // Resolve rating
+    const rawRating = order.ratings?.restaurant?.rating ?? order.rating ?? order.restaurantRating ?? null
+    const rating = Number.isFinite(Number(rawRating)) && Number(rawRating) > 0 ? Number(rawRating) : null
+
+    // Resolve KPT delay
+    const kptDelayMinutes = computeKptDelayMinutes(order)
+
+    // Resolve complaints
+    const complaintsMap = complaintsMapRef.current
+    const orderMongoId = String(order._id || '')
+    const orderReadableId = String(order.orderId || '')
+    const complaintsSet = new Set()
+    if (complaintsMap) {
+      if (complaintsMap.has(orderMongoId)) {
+        complaintsMap.get(orderMongoId).forEach(c => complaintsSet.add(c))
+      }
+      if (complaintsMap.has(orderReadableId)) {
+        complaintsMap.get(orderReadableId).forEach(c => complaintsSet.add(c))
+      }
+    }
+    if (Array.isArray(order.complaints)) {
+      order.complaints.forEach(c => {
+        const norm = normalizeComplaintType(typeof c === 'string' ? c : (c.issueType || c.type || c.reason))
+        if (norm) complaintsSet.add(norm)
+      })
+    }
+    const reasonText = String(order.cancellationReason || order.rejectionReason || '')
+    const reasonComplaint = normalizeComplaintType(reasonText)
+    if (reasonComplaint) {
+      complaintsSet.add(reasonComplaint)
+    }
+    const complaints = Array.from(complaintsSet)
     
     // Determine tags based on order properties
     const tags = []
@@ -231,6 +314,16 @@ export default function AllOrdersPage() {
     // Check if all items are veg
     const allVeg = items.every(item => item.isVeg !== false)
     if (allVeg && items.length > 0) tags.push('VEG ONLY')
+
+    if (rating != null) {
+      tags.push(`★ ${rating}`)
+    }
+    if (kptDelayMinutes > 0) {
+      tags.push(`DELAY ${kptDelayMinutes}m`)
+    }
+    if (complaints.length > 0) {
+      tags.push('COMPLAINT')
+    }
     
     return {
       id: order.orderId || order._id?.toString() || '',
@@ -243,6 +336,9 @@ export default function AllOrdersPage() {
       items,
       totalPrice: order.pricing?.total || 0,
       reason,
+      rating,
+      kptDelayMinutes,
+      complaints,
       tags: tags.length > 0 ? tags : undefined,
       createdAt: order.createdAt,
       mongoId: order._id?.toString(),
@@ -263,12 +359,29 @@ export default function AllOrdersPage() {
           limit: 1000 // Get all orders, we'll filter by date on frontend
         }
         
-        // Fetch all orders (we'll filter by date range on frontend)
-        const response = await restaurantAPI.getOrders(params)
-        
-        if (response.data?.success && response.data.data?.orders) {
+        // Fetch all orders & complaints in parallel
+        const [ordersRes, complaintsRes] = await Promise.allSettled([
+          restaurantAPI.getOrders(params),
+          typeof restaurantAPI.getComplaints === 'function' ? restaurantAPI.getComplaints({ limit: 1000 }) : Promise.resolve(null)
+        ])
+
+        const map = new Map()
+        if (complaintsRes.status === 'fulfilled' && complaintsRes.value?.data?.success) {
+          const rawComplaints = complaintsRes.value.data.data?.complaints || complaintsRes.value.data.complaints || []
+          rawComplaints.forEach(c => {
+            const cOrderId = String(c.orderId?._id || c.orderId?.orderId || c.orderId || c.orderRef || '').trim()
+            const norm = normalizeComplaintType(c.issueType || c.type || c.subject || c.description)
+            if (norm && cOrderId) {
+              if (!map.has(cOrderId)) map.set(cOrderId, new Set())
+              map.get(cOrderId).add(norm)
+            }
+          })
+        }
+        complaintsMapRef.current = map
+
+        if (ordersRes.status === 'fulfilled' && ordersRes.value?.data?.success && ordersRes.value.data.data?.orders) {
           // Transform orders
-          const transformedOrders = response.data.data.orders.map(transformOrder)
+          const transformedOrders = ordersRes.value.data.data.orders.map(transformOrder)
           
           // Filter by date range
           const filteredByDate = transformedOrders.filter(order => {
@@ -414,8 +527,7 @@ export default function AllOrdersPage() {
 
   const handleApplyFilters = async () => {
     setIsApplyingFilters(true)
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 800))
+    await new Promise(resolve => setTimeout(resolve, 150))
     setIsApplyingFilters(false)
     setShowFilterPopup(false)
   }
@@ -481,6 +593,48 @@ export default function AllOrdersPage() {
         return filters.orderType.includes(tagLower)
       })
       if (!hasMatchingTag) return false
+    }
+
+    // Ratings filter (e.g., "5-star", "4-star", "3-star", "2-star", "1-star")
+    if (filters.ratings.length > 0) {
+      const selectedRatingId = filters.ratings[0]
+      const ratingOption = filterOptions["Ratings"]?.find(o => o.id === selectedRatingId)
+      if (ratingOption) {
+        if (order.rating == null) return false
+        const maxRating = ratingOption.value
+        if (selectedRatingId === "1-star") {
+          if (Math.round(order.rating) !== 1) return false
+        } else {
+          if (order.rating > maxRating) return false
+        }
+      }
+    }
+
+    // KPT delay filter ("0-10", "10-20", "20-30", "30-plus")
+    if (filters.kptDelay.length > 0) {
+      const delay = Number(order.kptDelayMinutes) || 0
+      const matchesKpt = filters.kptDelay.some(delayId => {
+        switch (delayId) {
+          case "0-10":
+            return delay >= 0 && delay <= 10
+          case "10-20":
+            return delay > 10 && delay <= 20
+          case "20-30":
+            return delay > 20 && delay <= 30
+          case "30-plus":
+            return delay > 30
+          default:
+            return false
+        }
+      })
+      if (!matchesKpt) return false
+    }
+
+    // Complaints filter
+    if (filters.complaints.length > 0) {
+      const orderComplaints = Array.isArray(order.complaints) ? order.complaints : []
+      const matchesComplaint = filters.complaints.some(cId => orderComplaints.includes(cId))
+      if (!matchesComplaint) return false
     }
 
     return true
@@ -647,6 +801,9 @@ export default function AllOrdersPage() {
                   else if (tag === "HOME DELIVERY") badgeColor = "bg-slate-100 text-slate-700 border border-slate-200";
                   else if (tag === "VEG ONLY") badgeColor = "bg-green-50 text-green-700 border border-green-200";
                   else if (tag === "SCHEDULED") badgeColor = "bg-indigo-50 text-indigo-700 border border-indigo-200";
+                  else if (tag.startsWith("★")) badgeColor = "bg-amber-50 text-amber-700 border border-amber-200";
+                  else if (tag.startsWith("DELAY")) badgeColor = "bg-rose-50 text-rose-700 border border-rose-200";
+                  else if (tag === "COMPLAINT") badgeColor = "bg-red-50 text-red-700 border border-red-200";
 
                   return (
                     <span key={idx} className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold leading-snug whitespace-nowrap ${badgeColor}`}>
