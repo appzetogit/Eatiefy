@@ -265,9 +265,9 @@ export default function Orders() {
             const deliveryPartnerRating = order.ratings?.deliveryPartner?.rating || null
 
             return {
-              id: order._id?.toString() || order.orderId || `ORD-${order._id}`,
+              id: order.orderId || order.order_id || order._id?.toString() || `ORD-${order._id}`,
               mongoId: order._id,
-              orderId: order.orderId || order._id?.toString(), // Keep orderId for display
+              orderId: order.orderId || order.order_id || order._id?.toString(), // Keep orderId for display
               status: isRestaurantCancelled ? 'restaurant_cancelled' : getOrderStatus({ ...order, status: backendStatus }),
               originalStatus: originalStatus, // Keep original status for reference
               createdAt: createdAt.toISOString(),
@@ -576,11 +576,12 @@ Order again from this restaurant in the ${companyName} app.`
     setActiveMenuOrderId(null)
     const status = String(order.status || '').toLowerCase()
     const isTerminal = ['delivered', 'cancelled', 'completed', 'failed'].includes(status) || status.includes('cancelled')
+    const targetOrderId = order.orderId || order.id
     
     if (isTerminal) {
-      navigate(toFoodUserPath(`/user/orders/${order.id}/details`), { state: { from: '/food/user/orders', order } })
+      navigate(toFoodUserPath(`/user/orders/${targetOrderId}/details`), { state: { from: '/food/user/orders', order } })
     } else {
-      navigate(toFoodUserPath(`/user/orders/${order.id}`), { state: { from: '/food/user/orders', order } })
+      navigate(toFoodUserPath(`/user/orders/${targetOrderId}`), { state: { from: '/food/user/orders', order } })
     }
   }
 
@@ -984,7 +985,7 @@ Order again from this restaurant in the ${companyName} app.`
                       ) : isAwaitingPickupPayment ? (
                         <button
                           type="button"
-                          onClick={() => navigate(toFoodUserPath(`/user/orders/${order.id}`), { state: { from: '/food/user/orders', order } })}
+                          onClick={() => navigate(toFoodUserPath(`/user/orders/${order.orderId || order.id}`), { state: { from: '/food/user/orders', order } })}
                           className="px-3 py-1 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-sm border border-amber-500 uppercase tracking-widest active:scale-95 transition-transform"
                         >
                           Pay Now
@@ -1056,7 +1057,7 @@ Order again from this restaurant in the ${companyName} app.`
                     <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 w-full sm:w-auto pt-1 sm:pt-0">
                       {(!isDelivered && !isCancelled && !paymentFailed) ? (
                         <Link
-                          to={toFoodUserPath(`/user/orders/${order.id}`)}
+                          to={toFoodUserPath(`/user/orders/${order.orderId || order.id}`)}
                           state={{ from: '/food/user/orders', order }}
                           className="bg-[#1F6B45] hover:bg-[#14512F] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm hover:shadow-[#1F6B45]/20 transition-all duration-150 active:scale-95 cursor-pointer ml-auto sm:ml-0"
                         >
@@ -1066,7 +1067,7 @@ Order again from this restaurant in the ${companyName} app.`
                         </Link>
                       ) : (
                         <Link
-                          to={toFoodUserPath((isDelivered || isCancelled) ? `/user/orders/${order.id}/details` : `/user/orders/${order.id}`)}
+                          to={toFoodUserPath((isDelivered || isCancelled) ? `/user/orders/${order.orderId || order.id}/details` : `/user/orders/${order.orderId || order.id}`)}
                           state={{ from: '/food/user/orders', order }}
                           className="py-1"
                         >

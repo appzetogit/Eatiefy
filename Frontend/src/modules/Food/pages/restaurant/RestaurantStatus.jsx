@@ -121,34 +121,18 @@ export default function RestaurantStatus() {
       }
 
       // Handles overnight shifts carried over from yesterday (e.g. Mon 3 PM -> Tue 3 AM), in IST.
-      const status = getOperatingStatus({ timings: outletTimings }, new Date())
+      const status = getOperatingStatus({ timings: outletTimings, restaurant: restaurantData }, new Date())
       const isClosed = !status.isOpen
       const dayIsClosed = status.reason === "day-closed"
 
       setIsDayClosed(dayIsClosed)
       setIsWithinTimings(status.isOpen)
 
-      // Issue 32 & 33: If outlet is closed, delivery and takeaway status close automatically
       if (isClosed) {
         if (!hasPromptedClosedDialogRef.current && dayIsClosed) {
           hasPromptedClosedDialogRef.current = true
           setShowOutletClosedDialog(true)
         }
-
-        setDeliveryStatus((prev) => {
-          if (prev) {
-            restaurantAPI.updateAcceptingOrders(false).catch(() => {})
-            persistRestaurantOnlineStatus(false)
-          }
-          return false
-        })
-
-        setTakeawayStatus((prev) => {
-          if (prev) {
-            restaurantAPI.updateTakeawaySettings({ isEnabled: false }).catch(() => {})
-          }
-          return false
-        })
       }
     }
 
@@ -175,22 +159,13 @@ export default function RestaurantStatus() {
         const response = await restaurantAPI.getCurrentRestaurant()
         const restaurant = response?.data?.data?.restaurant || response?.data?.restaurant
         if (restaurant) {
-          const isClosed = outletTimings
-            ? !getOperatingStatus({ timings: outletTimings }, new Date()).isOpen
-            : false
-
-          if (isClosed) {
-            setDeliveryStatus(false)
-            setTakeawayStatus(false)
+          if (restaurant.isAcceptingOrders !== undefined) {
+            setDeliveryStatus(restaurant.isAcceptingOrders)
           } else {
-            if (restaurant.isAcceptingOrders !== undefined) {
-              setDeliveryStatus(restaurant.isAcceptingOrders)
-            } else {
-              setDeliveryStatus(false)
-            }
-            if (restaurant.takeawaySettings) {
-              setTakeawayStatus(restaurant.takeawaySettings.isEnabled)
-            }
+            setDeliveryStatus(false)
+          }
+          if (restaurant.takeawaySettings) {
+            setTakeawayStatus(restaurant.takeawaySettings.isEnabled)
           }
         }
       } catch (error) {
@@ -286,17 +261,16 @@ export default function RestaurantStatus() {
     }
 
     // Checked === true: Turning delivery ON
-    // If outlet is closed (e.g. today is off or outside timings), turn restaurant online!
-    if (isDayClosed || isWithinTimings === false) {
-      await turnRestaurantOnline({ enableDelivery: true })
-      return
-    }
-
     setDeliveryStatus(true)
     try {
       await restaurantAPI.updateAcceptingOrders(true)
       persistRestaurantOnlineStatus(true)
-      toast.success("Receiving orders enabled")
+      if (isDayClosed || isWithinTimings === false) {
+        toast.info("Receiving orders enabled (outside scheduled hours)")
+        setShowOutsideTimingsDialog(true)
+      } else {
+        toast.success("Receiving orders enabled")
+      }
     } catch (apiError) {
       debugError('Error updating delivery status in backend:', apiError)
       setDeliveryStatus(false)
@@ -321,16 +295,14 @@ export default function RestaurantStatus() {
     }
 
     // Checked === true: Turning takeaway ON
-    // If outlet is closed, bring it online and enable takeaway
-    if (isDayClosed || isWithinTimings === false) {
-      await turnRestaurantOnline({ enableDelivery: deliveryStatus, enableTakeaway: true })
-      return
-    }
-
     setTakeawayStatus(true)
     try {
       await restaurantAPI.updateTakeawaySettings({ isEnabled: true })
-      toast.success("Pickup orders enabled")
+      if (isDayClosed || isWithinTimings === false) {
+        toast.info("Pickup orders enabled (outside scheduled hours)")
+      } else {
+        toast.success("Pickup orders enabled")
+      }
     } catch (error) {
       debugError("Error saving takeaway status:", error)
       setTakeawayStatus(false)

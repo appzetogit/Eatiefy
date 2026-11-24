@@ -245,7 +245,7 @@ export default function OrderHelp() {
     return parts.length > 0 ? parts.join(", ") : (addr.name || null)
   }
 
-  const displayOrderId = order?.orderId || order?.orderNumber || order?._id || order?.id || orderId || "Order"
+  const displayOrderId = order?.orderId || order?.order_id || order?.orderNumber || (orderId && !/^[a-f0-9]{24}$/i.test(String(orderId)) ? orderId : null) || order?._id || order?.id || orderId || "Order"
   const orderTotal = Number(order?.pricing?.total ?? order?.pricing?.grandTotal ?? order?.total ?? order?.amount ?? 0)
   const orderItems = Array.isArray(order?.items) ? order.items : (Array.isArray(order?.orderItems) ? order.orderItems : [])
   const addressText = getAddressString(order?.deliveryAddress || order?.address)

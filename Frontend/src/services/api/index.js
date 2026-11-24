@@ -2668,8 +2668,8 @@ export const deliveryAPI = {
     const isProbablyOrderIdentity = (value) => {
       const raw = String(value || "").trim();
       if (!raw) return false;
-      // Mongo ObjectId
-      return /^[a-f0-9]{24}$/i.test(raw);
+      // Mongo ObjectId or readable Order ID (e.g. FOD-123456, ORD-123456)
+      return /^[a-f0-9]{24}$/i.test(raw) || /^FOD-[a-zA-Z0-9_-]+$/i.test(raw) || /^ORD-[a-zA-Z0-9_-]+$/i.test(raw) || raw.length >= 3;
     };
 
     return (orderId) => {

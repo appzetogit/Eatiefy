@@ -347,9 +347,9 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
   const customerCoordsResolved = getCustomerCoordsFromApiOrder(apiOrder, previousOrder)
 
   return {
-    id: apiOrder?.orderId || apiOrder?._id,
+    id: apiOrder?.orderId || apiOrder?.order_id || apiOrder?._id,
     mongoId: apiOrder?._id || null,
-    orderId: apiOrder?.orderId || apiOrder?._id,
+    orderId: apiOrder?.orderId || apiOrder?.order_id || apiOrder?._id,
     // Takeaway vs delivery decides the timeline steps and copy; without it every
     // takeaway order was shown the delivery flow (rider, "On Way").
     orderType: apiOrder?.orderType || previousOrder?.orderType || 'delivery',
@@ -2443,18 +2443,21 @@ export default function OrderTracking() {
     "Restaurant"
 
   const complaintOrderId = encodeURIComponent(
-    String(order?.orderId || order?.id || orderId || "")
+    String(order?.orderId || order?.order_id || order?.id || orderId || "")
   )
   const themeColor = "var(--module-theme-color, #EB590E)"
   const themeRgb = "var(--module-theme-rgb, 235,89,14)"
 
+  const displayOrderNumber = (
+    order?.orderId ||
+    order?.order_id ||
+    order?.displayOrderId ||
+    (order?.id && !/^[a-f0-9]{24}$/i.test(String(order.id)) ? String(order.id) : null) ||
+    (orderId && !/^[a-f0-9]{24}$/i.test(String(orderId)) ? String(orderId) : null) ||
+    (orderId ? String(orderId).slice(-6) : "ORDER")
+  ).toUpperCase().replace(/^#/, "");
+
   if (isDeliveredOrder) {
-    const displayOrderNumber = (
-      order?.orderId ||
-      order?.id ||
-      orderId?.slice(-6) ||
-      "ORDER"
-    ).toUpperCase().replace(/^#/, "");
 
     const deliveredTimestamp = order?.deliveredAt || order?.updatedAt || Date.now();
     const deliveredTimeOnly = (() => {
@@ -2998,7 +3001,7 @@ export default function OrderTracking() {
                   Live
                 </span>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Order #{orderId?.slice(-6).toUpperCase()}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Order #{displayOrderNumber}</p>
             </div>
           </div>
 

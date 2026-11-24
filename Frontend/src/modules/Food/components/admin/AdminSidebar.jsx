@@ -271,7 +271,6 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
     if (p.includes("earning-addon-history")) return badges.earningAddons ?? 0
     if (p.includes("safety-emergency-reports")) return badges.safetyReports ?? 0
     if (p.includes("delivery-partners/join-request")) return badges.deliveryPartners ?? 0
-    if (p.includes("contact-messages")) return badges.contactMessages ?? 0
     // Restaurant offers waiting for approval are reviewed on the coupons page.
     if (p.includes("/admin/food/coupons")) return badges.restaurantOffers ?? 0
 
@@ -287,7 +286,6 @@ export default function AdminSidebar({ isOpen = false, onClose, onCollapseChange
     if (l.includes("earning addon history")) return badges.earningAddons ?? 0
     if (l.includes("safety emergency reports")) return badges.safetyReports ?? 0
     if (l === "deliveryman" || l.includes("join request") || l.includes("join-request")) return badges.deliveryPartners ?? 0
-    if (l === "user feedback") return badges.contactMessages ?? 0
     if (l === "orders") return badges.orders ?? 0
 
     return 0

@@ -43,7 +43,6 @@ const Coupons = lazy(() => import("@food/pages/admin/Coupons"));
 const PromotionalBanner = lazy(() => import("@food/pages/admin/PromotionalBanner"));
 
 // Help & Support
-const ContactMessages = lazy(() => import("@food/pages/admin/ContactMessages"));
 const SafetyEmergencyReports = lazy(() => import("@food/pages/admin/SafetyEmergencyReports"));
 // Customer Management
 const Customers = lazy(() => import("@food/pages/admin/Customers"));
@@ -240,7 +239,7 @@ export default function AdminRouter() {
             <Route path="coupons" element={<Coupons />} />
             <Route path="promotional-banner" element={<PromotionalBanner />} />
             
-            <Route path="contact-messages" element={<ContactMessages />} />
+            <Route path="contact-messages" element={<Navigate to="/admin/food/customer-report/feedback-experience" replace />} />
             <Route path="safety-emergency-reports" element={<SafetyEmergencyReports />} />
             
             <Route path="customers" element={<Customers />} />

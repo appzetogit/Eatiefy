@@ -286,6 +286,7 @@ export default function UserRouter() {
             {/* Orders */}
             <Route path="orders" element={<OrderFlowBoundary scope="orders-list" message="We couldn't show your orders right now. Please try again."><Orders /></OrderFlowBoundary>} />
             <Route path="orders/:orderId" element={<OrderFlowBoundary scope="order-tracking" message={ORDER_SAVED_MESSAGE}><OrderTracking /></OrderFlowBoundary>} />
+            <Route path="order-tracking/:orderId" element={<OrderFlowBoundary scope="order-tracking" message={ORDER_SAVED_MESSAGE}><OrderTracking /></OrderFlowBoundary>} />
             <Route path="orders/:orderId/invoice" element={<OrderFlowBoundary scope="order-invoice" message={ORDER_SAVED_MESSAGE}><OrderInvoice /></OrderFlowBoundary>} />
             <Route path="orders/:orderId/details" element={<OrderFlowBoundary scope="order-details" message={ORDER_SAVED_MESSAGE}><UserOrderDetails /></OrderFlowBoundary>} />
 
