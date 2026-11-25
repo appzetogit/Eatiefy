@@ -21,6 +21,7 @@ import {
   resolveRestaurantItemUnitPrice,
   resolveItemMarkupUnit,
 } from "@food/utils/restaurantOrderPricing"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
@@ -125,6 +126,7 @@ const resolveDisplayPaymentStatus = (order) => {
 }
 
 export default function ViewOrderDialog({ isOpen, onOpenChange, order, onOrderUpdated }) {
+  const { canEdit } = useAdminPermissions()
   const [customerTotalOrders, setCustomerTotalOrders] = useState(undefined)
   const [customerDeliveredOrders, setCustomerDeliveredOrders] = useState(undefined)
   const [customerCancelledOrders, setCustomerCancelledOrders] = useState(undefined)
@@ -532,7 +534,7 @@ export default function ViewOrderDialog({ isOpen, onOpenChange, order, onOrderUp
               )}
 
               {/* Admin Controls — optional independent status updates */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
+              <div hidden={!canEdit} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm">
                 <h4 className="text-sm font-bold text-slate-900 mb-4">Admin Controls</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">

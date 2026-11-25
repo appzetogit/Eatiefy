@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { exportRestaurantsToPDF } from "@food/components/admin/restaurants/restaurantsExportUtils"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -35,6 +36,7 @@ const getPrimaryRestaurantImage = (restaurant, fallback = "") => {
 
 
 export default function DiningList() {
+  const { canEdit } = useAdminPermissions()
     const navigate = useNavigate()
     const [searchQuery, setSearchQuery] = useState("")
     const [restaurants, setRestaurants] = useState([])
@@ -379,7 +381,8 @@ export default function DiningList() {
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <button
-                                                            onClick={() => handleDiningToggle(restaurant)}
+                                                            onClick={() => canEdit && handleDiningToggle(restaurant)}
+                                                            disabled={!canEdit}
                                                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${restaurant.diningSettings?.isEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}
                                                         >
                                                             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${restaurant.diningSettings?.isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -411,6 +414,7 @@ export default function DiningList() {
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
+                                                        {canEdit && (
                                                         <button
                                                             onClick={() => {
                                                                 setEditingRestaurant({ ...restaurant })
@@ -420,6 +424,7 @@ export default function DiningList() {
                                                         >
                                                             <Settings className="w-4 h-4" />
                                                         </button>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))

@@ -10,6 +10,7 @@ import { FoodDeliveryWithdrawal } from '../models/foodDeliveryWithdrawal.model.j
 import { FoodDeliveryCashDeposit } from '../models/foodDeliveryCashDeposit.model.js';
 import { validateDeliveryRegisterDto, validateDeliveryProfileUpdateDto, validateDeliveryBankDetailsDto } from '../validators/delivery.validator.js';
 import { sendResponse } from '../../../../utils/response.js';
+import { findDeliveryPartnerByPhone } from '../services/delivery.service.js';
 import { getDeliveryReferralStats } from '../services/deliveryReferral.service.js';
 import {
     DELIVERY_DRAFT_FIELDS,
@@ -17,6 +18,32 @@ import {
     addDeliveryDraftUpload,
     removeDeliveryDraftUpload
 } from '../services/deliveryOnboardingDraft.service.js';
+
+/**
+ * Public, phone-keyed approval status for the "verification pending" screen.
+ *
+ * A pending partner has no session, and no push token either when the device
+ * could not produce one, so without this the partner never learned they had
+ * been approved. Returns the status only - no tokens, no profile data - so a
+ * phone number reveals nothing beyond approved / pending / rejected. Signing
+ * in still needs the OTP.
+ */
+export const getDeliveryVerificationStatusController = async (req, res, next) => {
+    try {
+        const partner = await findDeliveryPartnerByPhone(req.query.phone);
+        if (!partner) {
+            return sendResponse(res, 200, 'Delivery partner registration not found', { status: 'not_found' });
+        }
+        const status = String(partner.status || 'pending').toLowerCase();
+        return sendResponse(res, 200, 'Status fetched successfully', {
+            status,
+            ...(status === 'rejected' ? { rejectionReason: partner.rejectionReason || null } : {}),
+            ...(status === 'approved' ? { needsLogin: true } : {}),
+        });
+    } catch (error) {
+        next(error);
+    }
+};
 
 export const getDeliveryDraftUploadsController = async (req, res, next) => {
     try {

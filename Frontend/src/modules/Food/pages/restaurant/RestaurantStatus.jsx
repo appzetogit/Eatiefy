@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@food/components/ui/dialog"
 import { Button } from "@food/components/ui/button"
-import { publishOnlineStatus } from "@food/utils/restaurantOnlineStatus"
+import { publishOnlineStatus, fetchAuthoritativeOnlineStatus } from "@food/utils/restaurantOnlineStatus"
 import {
   DAY_NAMES,
   getBusinessClock,
@@ -31,7 +31,12 @@ const debugError = (...args) => {}
 const RESTAURANT_ONLINE_STATUS_KEY = "restaurant_online_status"
 
 // Writes the mirror and notifies every mounted listener (Home navbar included).
-const persistRestaurantOnlineStatus = (isOnline) => publishOnlineStatus(isOnline)
+// The toggle alone is not the outlet's effective state (outlet timings also gate it),
+// so publish immediately for instant feedback, then reconcile with the backend.
+const persistRestaurantOnlineStatus = (isOnline) => {
+  publishOnlineStatus(isOnline)
+  void fetchAuthoritativeOnlineStatus().catch(() => {})
+}
 
 
 export default function RestaurantStatus() {

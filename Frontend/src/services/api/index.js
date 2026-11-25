@@ -2534,6 +2534,17 @@ export const deliveryAPI = {
    * registration token from OTP verification. `_retry` keeps a rejected token
    * away from the access-token refresh/logout flow.
    */
+  /**
+   * Approval status for the pending-verification screen. Public and keyed by
+   * phone: returns { status } only, no tokens. `_retry` keeps a 401 away from the
+   * access-token refresh/logout flow (a pending partner has no session).
+   */
+  getVerificationStatus: (phone) =>
+    apiClient.get("/food/delivery/verification-status", {
+      params: { phone },
+      contextModule: "delivery",
+      _retry: true,
+    }),
   getOnboardingUploads: (registrationToken) =>
     apiClient.get("/food/delivery/onboarding/uploads", {
       headers: { "X-Registration-Token": registrationToken },

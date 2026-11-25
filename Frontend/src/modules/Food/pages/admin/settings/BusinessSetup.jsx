@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { adminAPI } from "@food/api";
 import { setCachedSettings, updateFavicon, updateTitle } from "@food/utils/businessSettings";
 import { EMAIL_REGEX } from "@/shared/utils/emailValidation";
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -31,6 +32,7 @@ const settingsToForm = (settings) => ({
 });
 
 export default function BusinessSetup() {
+  const { canEdit } = useAdminPermissions()
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -528,6 +530,7 @@ export default function BusinessSetup() {
                 Changes will only be applied after clicking the <span className="font-semibold">Save Information</span> button.
               </p>
               <div className="flex items-center gap-2">
+                {canEdit && (
                 <button
                   type="button"
                   onClick={handleReset}
@@ -536,6 +539,8 @@ export default function BusinessSetup() {
                 >
                   Reset
                 </button>
+                )}
+                {canEdit && (
                 <button
                   type="button"
                   onClick={handleSave}
@@ -551,6 +556,7 @@ export default function BusinessSetup() {
                     "Save Information"
                   )}
                 </button>
+                )}
               </div>
             </div>
           </div>

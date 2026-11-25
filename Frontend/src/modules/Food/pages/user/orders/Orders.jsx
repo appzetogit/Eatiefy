@@ -1003,9 +1003,12 @@ Order again from this restaurant in the ${companyName} app.`
                   </div>
 
                   {/* Row 2: Secondary Metadata / Ratings and Actions */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-gray-100/70 dark:border-gray-800/50">
-                    {/* Left: Ratings or Countdowns or Cancellation Details */}
-                    <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 pt-2 border-t border-gray-100/70 dark:border-gray-800/50">
+                    {/* Left: Ratings or Countdowns or Cancellation Details.
+                        basis keeps it from being squeezed to nothing (its badges are
+                        shrink-0 and used to spill over the View Details link); when
+                        the card is too narrow the actions wrap onto the next line. */}
+                    <div className="flex-1 basis-[15rem] min-w-0">
                       {isRestaurantCancelled ? (
                         <div className="flex flex-col gap-0.5">
                           {order.cancellationReason && (
@@ -1018,7 +1021,7 @@ Order again from this restaurant in the ${companyName} app.`
                       ) : paymentFailed ? (
                         <span className="text-xs text-red-500 font-medium">Please try ordering again</span>
                       ) : isDelivered && order.restaurantRating && (!order.deliveryPartnerId || order.deliveryPartnerRating) ? (
-                        <div className="flex items-center flex-wrap gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="flex items-center flex-wrap gap-x-1.5 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                           <span className="font-medium">Your rating:</span>
                           <div className="flex bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold items-center gap-0.5 h-4.5 shrink-0">
                             <span className="opacity-90">Food</span>
@@ -1054,7 +1057,7 @@ Order again from this restaurant in the ${companyName} app.`
                     </div>
 
                     {/* Right: View Details / Track Order & Reorder buttons */}
-                    <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 w-full sm:w-auto pt-1 sm:pt-0">
+                    <div className="flex grow sm:grow-0 sm:ml-auto items-center justify-between sm:justify-end gap-3 flex-shrink-0">
                       {(!isDelivered && !isCancelled && !paymentFailed) ? (
                         <Link
                           to={toFoodUserPath(`/user/orders/${order.orderId || order.id}`)}

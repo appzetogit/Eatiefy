@@ -14,7 +14,6 @@ import {
   ChevronUp,
   MapPin,
   Home as HomeIcon,
-  MessageSquare,
   Check,
   CheckCircle2,
   Sparkles,
@@ -446,7 +445,7 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
       }
       return merged
     })(),
-    note: apiOrder?.note || previousOrder?.note || '',
+    note: apiOrder?.note ?? previousOrder?.note ?? '',
     /*
      * Why the order was cancelled, and by whom.
      *
@@ -460,7 +459,7 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
       apiOrder?.cancellationReason || previousOrder?.cancellationReason || '',
     cancelledBy: apiOrder?.cancelledBy || previousOrder?.cancelledBy || '',
     cancelledAt: apiOrder?.cancelledAt || previousOrder?.cancelledAt || null,
-    deliveryInstructions: apiOrder?.deliveryInstructions || apiOrder?.note || previousOrder?.deliveryInstructions || previousOrder?.note || ''
+    deliveryInstructions: apiOrder?.deliveryInstructions ?? apiOrder?.note ?? previousOrder?.deliveryInstructions ?? previousOrder?.note ?? ''
   }
 }
 
@@ -2045,7 +2044,11 @@ export default function OrderTracking() {
               },
             }
           }
-          if (payload.note) next.note = payload.note
+          if (payload.deliveryInstructions !== undefined || payload.restaurantNote !== undefined || payload.note) {
+            const updatedNote = payload.deliveryInstructions ?? payload.restaurantNote ?? payload.note
+            next.note = updatedNote
+            next.deliveryInstructions = updatedNote
+          }
           // The cancel event carries the reason; without this the screen showed
           // a bare "Order Cancelled" until the follow-up fetch landed.
           if (payload.cancellationReason) next.cancellationReason = payload.cancellationReason
@@ -3248,12 +3251,6 @@ export default function OrderTracking() {
                 )}
               </div>
 
-              {order?.deliveryInstructions && (
-                <div className="bg-blue-50/60 dark:bg-blue-950/30 p-3 mt-3.5 rounded-2xl flex items-start gap-2.5 border border-blue-100/80 dark:border-blue-900/40 text-xs text-blue-950 dark:text-blue-200">
-                  <MessageSquare className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed italic">"{order.deliveryInstructions}"</p>
-                </div>
-              )}
             </div>
           )}
 
@@ -3677,12 +3674,6 @@ export default function OrderTracking() {
                 )}
               </div>
 
-              {order?.deliveryInstructions && (
-                <div className="bg-blue-50/60 dark:bg-blue-950/30 p-3 mt-3.5 rounded-2xl flex items-start gap-2.5 border border-blue-100/80 dark:border-blue-900/40 text-xs text-blue-950 dark:text-blue-200">
-                  <MessageSquare className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed italic">"{order.deliveryInstructions}"</p>
-                </div>
-              )}
             </div>
           )}
 

@@ -12,6 +12,7 @@ import {
   ThumbsDown,
 } from "lucide-react"
 import BottomPopup from "@delivery/components/BottomPopup"
+import { restaurantAPI } from "@food/api"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -59,6 +60,30 @@ export default function RatingsReviews() {
   const [showThankYouPopup, setShowThankYouPopup] = useState(false)
   const [showNotHelpfulPopup, setShowNotHelpfulPopup] = useState(false)
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+  // Real aggregate rating (this used to be a hardcoded "4.0" for every restaurant).
+  const [ratingInfo, setRatingInfo] = useState({ loading: true, rating: 0, total: 0 })
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await restaurantAPI.getCurrentRestaurant()
+        const restaurant = res?.data?.data?.restaurant || res?.data?.restaurant || {}
+        if (cancelled) return
+        setRatingInfo({
+          loading: false,
+          rating: Number(restaurant.rating) || 0,
+          total: Number(restaurant.totalRatings) || 0,
+        })
+      } catch (error) {
+        debugError("Error loading restaurant rating:", error)
+        if (!cancelled) setRatingInfo((prev) => ({ ...prev, loading: false }))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Lenis smooth scrolling
   useEffect(() => {
@@ -139,16 +164,22 @@ export default function RatingsReviews() {
       <div className="px-4 py-4 bg-white">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-base font-semibold text-gray-900">Your restaurant's rating</h2>
-          <div className="bg-green-600 px-3 py-1.5 rounded-lg flex items-center gap-1">
-            <span className="text-white text-sm font-bold">4.0</span>
-            <Star className="w-4 h-4 text-white fill-white" />
-          </div>
+          {ratingInfo.loading ? (
+            <div className="h-8 w-16 rounded-lg bg-gray-100 animate-pulse" />
+          ) : ratingInfo.rating > 0 ? (
+            <div className={`${ratingInfo.rating >= 4 ? "bg-green-600" : ratingInfo.rating >= 3 ? "bg-amber-500" : "bg-red-500"} px-3 py-1.5 rounded-lg flex items-center gap-1`}>
+              <span className="text-white text-sm font-bold">{ratingInfo.rating.toFixed(1)}</span>
+              <Star className="w-4 h-4 text-white fill-white" />
+            </div>
+          ) : (
+            <span className="text-xs font-medium text-gray-400">No ratings yet</span>
+          )}
         </div>
         <button
           onClick={() => navigate("/food/restaurant/feedback?tab=reviews")}
           className="flex items-center gap-1 text-[#2E7D52] text-sm font-normal hover:text-blue-700 transition-colors"
         >
-          <span>View order ratings</span>
+          <span>View order ratings{ratingInfo.total > 0 ? ` (${ratingInfo.total})` : ""}</span>
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>

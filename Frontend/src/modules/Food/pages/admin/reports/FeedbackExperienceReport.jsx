@@ -6,12 +6,14 @@ import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import { exportReportsToCSV, exportReportsToExcel, exportReportsToPDF, exportReportsToJSON } from "@food/components/admin/reports/reportsExportUtils"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function FeedbackExperienceReport() {
+  const { canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -493,6 +495,7 @@ export default function FeedbackExperienceReport() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
+                            {canDelete && (
                             <button
                               onClick={() => handleDelete(feedback._id)}
                               className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors"
@@ -500,6 +503,7 @@ export default function FeedbackExperienceReport() {
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -3,10 +3,12 @@ import { Save, Loader2, Gift } from "lucide-react"
 import { Button } from "@food/components/ui/button"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const debugError = (...args) => {}
 
 export default function ReferralSettings() {
+  const { canEdit } = useAdminPermissions()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [settings, setSettings] = useState({
@@ -116,6 +118,7 @@ export default function ReferralSettings() {
                 These values apply instantly to new referrals.
               </p>
             </div>
+            {canEdit && (
             <Button
               onClick={handleSave}
               disabled={saving || loading}
@@ -133,6 +136,7 @@ export default function ReferralSettings() {
                 </>
               )}
             </Button>
+            )}
           </div>
 
           {loading ? (

@@ -16,6 +16,7 @@ import {
 import { isDiningEnabled } from "@food/config/featureFlags";
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect";
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter";
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 // The checkout switches that can differ per zone (must match ZONE_CUSTOMIZATION_KEYS on the
 // server). Module-level switches stay platform-wide.
@@ -161,6 +162,7 @@ const getAdminToastOffsetPx = () => {
 };
 
 export default function CustomizationSettings() {
+  const { canEdit } = useAdminPermissions()
   const [loading, setLoading] = useState(true);
   const [savingByKey, setSavingByKey] = useState({});
   const loadToastShownRef = useRef(false);
@@ -436,6 +438,7 @@ export default function CustomizationSettings() {
                         {overridden ? (
                           <>
                             <span className="font-semibold text-emerald-700 dark:text-emerald-400">Set for this zone</span>
+                            {canEdit && (
                             <button
                               type="button"
                               onClick={() => handleZoneToggle(t.key, null)}
@@ -444,6 +447,7 @@ export default function CustomizationSettings() {
                             >
                               Reset to default
                             </button>
+                            )}
                           </>
                         ) : (
                           <span className="text-neutral-400">
@@ -460,7 +464,7 @@ export default function CustomizationSettings() {
                       <Switch
                         checked={checked}
                         onCheckedChange={(next) => (isZoneScope ? handleZoneToggle(t.key, next) : requestToggle(t, next))}
-                        disabled={savingByKey[t.key] === true}
+                        disabled={!canEdit || savingByKey[t.key] === true}
                         className="scale-90 data-[state=checked]:bg-[#16a34a] data-[state=unchecked]:bg-zinc-400 shadow-sm"
                       />
                     )}

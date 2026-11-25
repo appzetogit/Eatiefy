@@ -20,12 +20,14 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@food/components/ui/dropdown-menu"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function SafetyEmergencyReports() {
+  const { canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
@@ -353,6 +355,7 @@ export default function SafetyEmergencyReports() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
 
+                          {canEdit && (
                           <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
                               Update status
@@ -373,7 +376,9 @@ export default function SafetyEmergencyReports() {
                               ))}
                             </DropdownMenuSubContent>
                           </DropdownMenuSub>
+                          )}
 
+                          {canEdit && (
                           <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
                               Update priority
@@ -394,8 +399,10 @@ export default function SafetyEmergencyReports() {
                               ))}
                             </DropdownMenuSubContent>
                           </DropdownMenuSub>
+                          )}
 
                           <DropdownMenuSeparator />
+                          {canDelete && (
                           <DropdownMenuItem 
                             onClick={() => handleDelete(report._id)}
                             className="text-red-600"
@@ -403,6 +410,7 @@ export default function SafetyEmergencyReports() {
                             <Trash2 className="w-4 h-4 mr-2" />
                             Delete
                           </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>

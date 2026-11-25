@@ -1011,15 +1011,15 @@ export default function Customers() {
     {/* Wallet Add / Deduct Modal */ }
     < Dialog open = {!!walletTarget
 } onOpenChange = {(open) => { if (!open) handleCloseWalletModal() }}>
-  <DialogContent className="max-w-md mx-auto">
-    <DialogHeader>
+  <DialogContent className="max-w-md mx-auto p-6 grid gap-4 max-h-[90vh] overflow-y-auto">
+    <DialogHeader className="pr-10">
       <DialogTitle className="flex items-center gap-2">
         <Wallet className="w-5 h-5 text-amber-600" />
         {walletType === "credit" ? "Add Money to Wallet" : "Deduct Money from Wallet"}
       </DialogTitle>
     </DialogHeader>
 
-    <div className="space-y-4 px-1 py-2">
+    <div className="space-y-4">
       <div className="bg-slate-50 rounded-lg p-3 flex items-center justify-between">
         <span className="text-sm font-medium text-slate-700">{walletTarget?.name}</span>
         <span className="text-sm text-slate-600">

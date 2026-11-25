@@ -217,8 +217,10 @@ export default function Feedback() {
         let allOrders = []
         let page = 1
         let hasMore = true
-        const limit = 1000
-        const maxPages = 50
+        // The backend caps a page at 100 rows. Asking for 1000 meant the first
+        // (short) page looked like the last one and every older rating was skipped.
+        const limit = 100
+        const maxPages = 100
 
         while (hasMore && page <= maxPages) {
           try {
@@ -231,8 +233,9 @@ export default function Feedback() {
             if (response.data?.success && response.data.data?.orders) {
               const orders = response.data.data.orders
               allOrders = [...allOrders, ...orders]
-              const totalPages = response.data.data.pagination?.totalPages || response.data.data.totalPages || 1
-              if (orders.length < limit || (totalPages > 0 && page >= totalPages)) {
+              const meta = response.data.data.meta || response.data.data.pagination || {}
+              const totalPages = Number(meta.totalPages || response.data.data.totalPages || 1)
+              if (orders.length === 0 || (totalPages > 0 && page >= totalPages)) {
                 hasMore = false
               } else {
                 page++
@@ -519,6 +522,37 @@ export default function Feedback() {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Overall rating — computed from the loaded reviews (falls back to the stored aggregate). */}
+            {(() => {
+              const average = ratingSummary.totalRatings > 0
+                ? ratingSummary.averageRating
+                : Number(restaurantData?.rating) || 0
+              const count = ratingSummary.totalRatings > 0
+                ? ratingSummary.totalRatings
+                : Number(restaurantData?.totalRatings) || 0
+              if (isLoadingReviews && !count) return null
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gradient-to-br dark:from-[#2E7D52] dark:to-[#1B5E3F]">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Overall rating</p>
+                    <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-300">
+                      {count > 0
+                        ? `${count} rating${count === 1 ? "" : "s"} · ${ratingSummary.totalReviews || 0} review${ratingSummary.totalReviews === 1 ? "" : "s"}`
+                        : "No ratings yet"}
+                    </p>
+                  </div>
+                  {count > 0 ? (
+                    <div className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-bold text-white ${
+                      average >= 4 ? "bg-green-600" : average >= 3 ? "bg-amber-500" : "bg-red-500"
+                    }`}>
+                      {Number(average).toFixed(1)} <Star className="h-4 w-4 fill-current" />
+                    </div>
+                  ) : (
+                    <span className="text-xs font-medium italic text-gray-400">—</span>
+                  )}
+                </div>
+              )
+            })()}
             <div className="flex gap-2">
               <div className="flex-1 bg-white dark:bg-gradient-to-br from-[#2E7D52] to-[#1B5E3F] p-3 rounded-xl border border-gray-200 dark:border-gray-800 flex items-center gap-2">
                 <Search className="w-4 h-4 text-gray-400 shrink-0" />

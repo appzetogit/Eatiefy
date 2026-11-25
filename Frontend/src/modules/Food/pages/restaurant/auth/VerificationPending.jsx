@@ -20,6 +20,7 @@ import {
   isNativeAppWebView,
   persistModuleFcmToken,
   setupPendingVerificationPushListeners,
+  startPendingPushAutoSync,
   syncNativeAppPushToken,
   syncPendingPartnerFcmQuick,
 } from "@food/utils/firebaseMessaging"
@@ -155,8 +156,15 @@ export default function VerificationPending() {
 
     void syncPushToken()
 
+    // Keep retrying until the token is saved, so the approval push can reach this device.
+    const stopAutoSync = startPendingPushAutoSync(
+      "restaurant",
+      pendingPhone || getRestaurantPendingPhone() || ""
+    )
+
     return () => {
       cancelled = true
+      stopAutoSync()
     }
   }, [pendingPhone])
 

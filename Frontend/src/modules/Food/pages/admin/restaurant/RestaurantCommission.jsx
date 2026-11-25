@@ -10,11 +10,13 @@ import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 export default function RestaurantCommission() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [commissions, setCommissions] = useState([])
   const [approvedRestaurants, setApprovedRestaurants] = useState([])
@@ -365,6 +367,7 @@ export default function RestaurantCommission() {
             </div>
 
             <div className="flex items-center gap-2">
+              {canCreate && (
               <button 
                 onClick={handleAdd}
                 className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 transition-all shadow-md"
@@ -372,6 +375,7 @@ export default function RestaurantCommission() {
                 <Plus className="w-4 h-4" />
                 Add Commission
               </button>
+              )}
             </div>
           </div>
 
@@ -489,7 +493,8 @@ export default function RestaurantCommission() {
                         {visibleColumns.status && (
                           <td className="px-6 py-4 whitespace-nowrap">
                             <button
-                              onClick={() => handleToggleStatus(commission)}
+                              onClick={() => canEdit && handleToggleStatus(commission)}
+                              disabled={!canEdit}
                               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                                 commission.status ? "bg-green-600" : "bg-slate-300"
                               }`}
@@ -512,6 +517,7 @@ export default function RestaurantCommission() {
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
+                              {canEdit && (
                               <button
                                 onClick={() => handleEdit(commission)}
                                 className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
@@ -519,6 +525,8 @@ export default function RestaurantCommission() {
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
+                              )}
+                              {canDelete && (
                               <button
                                 onClick={() => handleDelete(commission)}
                                 className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
@@ -526,6 +534,7 @@ export default function RestaurantCommission() {
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
+                              )}
                             </div>
                           </td>
                         )}

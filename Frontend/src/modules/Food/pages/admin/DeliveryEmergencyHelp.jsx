@@ -7,6 +7,7 @@ import { ZoneSettingBadge } from "@food/components/admin/zones/ZoneSettingStatus
 import { getZoneId, getZoneLabel } from "@food/hooks/useAdminZoneFilter"
 import { useZoneScopedSettings } from "@food/hooks/useZoneScopedSettings"
 import { toast } from "sonner"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const FIELD_LIMITS = {
   medicalEmergency: 3,
@@ -58,6 +59,7 @@ const toDraft = (value, field, data) => {
 const digitsOf = (value) => String(value || "").replace(/[^\d]/g, "")
 
 export default function DeliveryEmergencyHelp() {
+  const { canEdit } = useAdminPermissions()
   const s = useZoneScopedSettings({
     fields: FIELDS,
     fetchSettings,
@@ -207,6 +209,7 @@ export default function DeliveryEmergencyHelp() {
 
               {/* Submit Button */}
               <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-3">
+                {canEdit && (
                 <button
                   type="submit"
                   disabled={s.isBusy}
@@ -224,7 +227,9 @@ export default function DeliveryEmergencyHelp() {
                     </>
                   )}
                 </button>
+                )}
                 {s.zoneId && anyOverridden && (
+                  canEdit && (
                   <button
                     type="button"
                     onClick={handleUseDefaults}
@@ -234,6 +239,7 @@ export default function DeliveryEmergencyHelp() {
                     <RotateCcw className="w-5 h-5" />
                     Use default numbers
                   </button>
+                  )
                 )}
               </div>
             </form>

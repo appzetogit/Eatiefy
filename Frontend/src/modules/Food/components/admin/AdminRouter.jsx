@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
+import RequireAdminAction from "./RequireAdminAction";
 import PermissionRoute from "./PermissionRoute";
 import AdminLayout from "./AdminLayout";
 import AuthRedirect from "@food/components/AuthRedirect";
@@ -210,13 +211,13 @@ export default function AdminRouter() {
             <Route path="zone-setup" element={<ZoneSetup />} />
             <Route path="zone-setup/map" element={<AllZonesMap />} />
             <Route path="zone-setup/delivery-boy-view" element={<DeliveryBoyViewMap />} />
-            <Route path="zone-setup/add" element={<AddZone />} />
-            <Route path="zone-setup/edit/:id" element={<AddZone />} />
+            <Route path="zone-setup/add" element={<RequireAdminAction action="create" backTo="/admin/food/zone-setup"><AddZone /></RequireAdminAction>} />
+            <Route path="zone-setup/edit/:id" element={<RequireAdminAction action="edit" backTo="/admin/food/zone-setup"><AddZone /></RequireAdminAction>} />
             <Route path="zone-setup/view/:id" element={<ViewZone />} />
             <Route path="food-approval" element={<FoodApproval />} />
             <Route path="restaurants" element={<RestaurantsList />} />
-            <Route path="restaurants/add" element={<AddRestaurant />} />
-            <Route path="restaurants/edit/:id" element={<EditRestaurant />} />
+            <Route path="restaurants/add" element={<RequireAdminAction action="create" backTo="/admin/food/restaurants"><AddRestaurant /></RequireAdminAction>} />
+            <Route path="restaurants/edit/:id" element={<RequireAdminAction action="edit" backTo="/admin/food/restaurants"><EditRestaurant /></RequireAdminAction>} />
             <Route path="restaurants/joining-request" element={<JoiningRequest />} />
             <Route path="restaurants/top-restaurants" element={<TopRestaurants />} />
             <Route path="restaurants/commission" element={<RestaurantCommission />} />

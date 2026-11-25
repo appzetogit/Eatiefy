@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BellRing, ChevronLeft, ChevronRight, History, Loader2, Search, Send, Trash2, X } from "lucide-react";
 import { adminAPI } from "@food/api";
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const TARGET_OPTIONS = [
   { value: "ALL", label: "All" },
@@ -43,6 +44,7 @@ const toDateLabel = (value) => {
 };
 
 export default function NotificationBroadcast() {
+  const { canCreate, canDelete } = useAdminPermissions()
   const [form, setForm] = useState(() => {
     const savedTarget = typeof sessionStorage !== "undefined" ? sessionStorage.getItem("admin_broadcast_targetType") : null;
     return {
@@ -381,6 +383,7 @@ export default function NotificationBroadcast() {
           </label>
 
           <div className="flex justify-end pt-1">
+            {canCreate && (
             <button
               type="submit"
               disabled={submitting}
@@ -389,6 +392,7 @@ export default function NotificationBroadcast() {
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               Send Broadcast
             </button>
+            )}
           </div>
 
           {form.targetType === "CUSTOM" && (
@@ -677,6 +681,7 @@ export default function NotificationBroadcast() {
                               {toDateLabel(item?.createdAt)}
                             </td>
                             <td className="py-4 px-4 w-32 text-right pr-5 whitespace-nowrap">
+                              {canDelete && (
                               <button
                                 type="button"
                                 onClick={() => handleDelete(item?._id)}
@@ -685,6 +690,7 @@ export default function NotificationBroadcast() {
                                 <Trash2 className="w-3.5 h-3.5" />
                                 Delete
                               </button>
+                              )}
                             </td>
                           </tr>
                         ))}

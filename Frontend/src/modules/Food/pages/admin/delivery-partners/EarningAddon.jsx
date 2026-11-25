@@ -6,12 +6,14 @@ import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { useAdminZoneFilter, getZoneId, getZoneLabel } from "@food/hooks/useAdminZoneFilter"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function EarningAddon() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -322,6 +324,7 @@ export default function EarningAddon() {
                 />
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               </div>
+              {canCreate && (
               <button
                 onClick={() => handleOpenDialog()}
                 className="px-4 py-2.5 text-sm font-medium rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 flex items-center gap-2 transition-all"
@@ -329,6 +332,7 @@ export default function EarningAddon() {
                 <Plus className="w-4 h-4" />
                 <span>Create Offer</span>
               </button>
+              )}
               <button 
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all"
@@ -482,6 +486,7 @@ export default function EarningAddon() {
                         {visibleColumns.actions && (
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
+                              {canEdit && (
                               <button
                                 onClick={() => handleToggleStatus(addon._id, addon.status)}
                                 className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -493,6 +498,8 @@ export default function EarningAddon() {
                                   <ToggleLeft className="w-5 h-5 text-gray-400" />
                                 )}
                               </button>
+                              )}
+                              {canEdit && (
                               <button
                                 onClick={() => handleOpenDialog(addon)}
                                 className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -500,6 +507,8 @@ export default function EarningAddon() {
                               >
                                 <Edit className="w-4 h-4 text-blue-500" />
                               </button>
+                              )}
+                              {canDelete && (
                               <button
                                 onClick={() => handleDelete(addon._id)}
                                 className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -507,6 +516,7 @@ export default function EarningAddon() {
                               >
                                 <Trash2 className="w-4 h-4 text-red-500" />
                               </button>
+                              )}
                             </div>
                           </td>
                         )}

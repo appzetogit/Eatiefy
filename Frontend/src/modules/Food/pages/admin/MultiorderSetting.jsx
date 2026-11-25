@@ -6,6 +6,7 @@ import { ZoneDefaultHint, ZoneSettingBadge } from "@food/components/admin/zones/
 import { getZoneId, getZoneLabel } from "@food/hooks/useAdminZoneFilter"
 import { useZoneScopedSettings } from "@food/hooks/useZoneScopedSettings"
 import { toast } from "sonner"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const FIELD = "maxConcurrentOrders"
 const FIELDS = [FIELD]
@@ -14,6 +15,7 @@ const fetchSettings = (params) => adminAPI.getDeliveryCashLimit(params)
 const saveSettings = (body) => adminAPI.updateDeliveryCashLimit(body)
 
 export default function MultiorderSetting() {
+  const { canEdit } = useAdminPermissions()
   const s = useZoneScopedSettings({
     fields: FIELDS,
     fetchSettings,
@@ -132,6 +134,7 @@ export default function MultiorderSetting() {
                 />
               </div>
               <div className="flex gap-2 sm:mt-5">
+                {canEdit && (
                 <button
                   onClick={handleSave}
                   disabled={!canSave}
@@ -140,7 +143,9 @@ export default function MultiorderSetting() {
                   {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
                   Save
                 </button>
+                )}
                 {overridden && (
+                  canEdit && (
                   <button
                     type="button"
                     onClick={handleUseDefault}
@@ -150,6 +155,7 @@ export default function MultiorderSetting() {
                     <RotateCcw className="h-4 w-4" />
                     Use default
                   </button>
+                  )
                 )}
               </div>
             </div>

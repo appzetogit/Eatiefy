@@ -7,6 +7,7 @@ import { adminAPI, restaurantAPI } from "@food/api"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
+import { formatRestaurantId } from "@food/utils/formatRestaurantId"
 import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
 import { getRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
@@ -850,7 +851,7 @@ export default function JoiningRequest() {
                         )}
                         <div className="flex items-center gap-1 text-slate-600">
                           <Building2 className="w-4 h-4" />
-                          <span className="text-sm">{r?.restaurantId || r?._id || "N/A"}</span>
+                          <span className="text-sm" title={String(r?.restaurantId || r?._id || "")}>{r?.restaurantId || r?._id ? formatRestaurantId(r?.restaurantId || r?._id) : "N/A"}</span>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           approvalStatus === "approved" ? "bg-green-100 text-green-700" : approvalStatus === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
@@ -1322,7 +1323,7 @@ export default function JoiningRequest() {
                         {r.restaurantId && (
                           <div>
                             <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
-                            <p className="font-medium text-slate-900">{r.restaurantId}</p>
+                            <p className="font-medium text-slate-900" title={String(r.restaurantId)}>{formatRestaurantId(r.restaurantId)}</p>
                           </div>
                         )}
                         {r.approvedAt != null && (

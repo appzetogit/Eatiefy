@@ -957,7 +957,7 @@ export async function verifyPayment(userId, dto) {
   // Notify Customer about payment success
   await notifyOwnersSafely([{ ownerType: "USER", ownerId: userId }], {
     title: "Payment Successful",
-    body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order._id.toString()}.`,
+    body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order.order_id || order._id.toString()}.`,
     idempotencyKey: `payment_success_${order._id}`,
     eventId: `payment_success_${order._id}`,
     tag: `payment_success_${order._id}`,
@@ -1709,6 +1709,12 @@ export async function listOrdersRestaurant(restaurantId, query) {
       { "payment.status": { $in: ["paid", "authorized", "captured", "settled", "refunded"] } },
     ],
   };
+  // The Feedback/Reviews screen asks for delivered orders only. The filter used
+  // to be ignored, so its pages were mostly filled with open/cancelled orders.
+  // Only this value is honoured: other callers pass UI-side status names.
+  if (String(query?.status || "").trim().toLowerCase() === "delivered") {
+    filter.orderStatus = "delivered";
+  }
   const [docs, total] = await Promise.all([
     FoodOrder.find(filter)
       .populate("userId", "name phone email profileImage")
@@ -1846,7 +1852,7 @@ export async function updateOrderStatusRestaurant(
   }
 
   // Custom messages / titles for status updates
-  let title = `Order ${order._id.toString()} updated`;
+  let title = `Order #${order.order_id || order._id.toString()} updated`;
   let body = `Status changed to ${String(orderStatus).replace(/_/g, " ")}`;
 
   // Fetch restaurant name for rich notifications

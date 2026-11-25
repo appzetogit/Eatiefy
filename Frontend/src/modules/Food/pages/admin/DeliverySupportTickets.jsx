@@ -4,6 +4,7 @@ import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { Textarea } from "@food/components/ui/textarea"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -22,6 +23,7 @@ const canMoveTo = (ticket, status) =>
   (ticket.allowedStatusTransitions || []).includes(status)
 
 export default function DeliverySupportTickets() {
+  const { canEdit } = useAdminPermissions()
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -335,6 +337,7 @@ export default function DeliverySupportTickets() {
                         >
                           <Eye className="w-4 h-4 text-gray-600" />
                         </button>
+                        {canEdit && (
                         <button
                           onClick={() => handleRespond(ticket)}
                           className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
@@ -342,6 +345,7 @@ export default function DeliverySupportTickets() {
                         >
                           <Edit className="w-4 h-4 text-blue-600" />
                         </button>
+                        )}
                         {/* Always rendered: hiding this for closed tickets left
                             them with no way back, which is why a status could
                             never be corrected once set. The options themselves
@@ -349,6 +353,7 @@ export default function DeliverySupportTickets() {
                         <select
                           value={ticket.status}
                           onChange={(e) => handleStatusChange(ticket._id, e.target.value)}
+                          disabled={!canEdit}
                           className="text-xs px-2 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -490,14 +495,17 @@ export default function DeliverySupportTickets() {
                   actually allows that move from the ticket's current status. */}
               <div className="flex flex-col sm:flex-row gap-3 pt-5 border-t border-gray-200">
                 {selectedTicket.status !== 'closed' && (
+                  canEdit && (
                   <button
                     onClick={() => handleRespond(selectedTicket)}
                     className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors shadow-sm"
                   >
                     {selectedTicket.adminResponse ? "Edit Response" : "Send Response"}
                   </button>
+                  )
                 )}
                 {canMoveTo(selectedTicket, 'resolved') && (
+                  canEdit && (
                   <button
                     onClick={() => {
                       handleStatusChange(selectedTicket._id, 'resolved')
@@ -507,8 +515,10 @@ export default function DeliverySupportTickets() {
                   >
                     Mark Resolved
                   </button>
+                  )
                 )}
                 {canMoveTo(selectedTicket, 'closed') && (
+                  canEdit && (
                   <button
                     onClick={() => {
                       handleStatusChange(selectedTicket._id, 'closed')
@@ -518,8 +528,10 @@ export default function DeliverySupportTickets() {
                   >
                     Close Ticket
                   </button>
+                  )
                 )}
                 {selectedTicket.status === 'closed' && canMoveTo(selectedTicket, 'in_progress') && (
+                  canEdit && (
                   <button
                     onClick={() => {
                       handleStatusChange(selectedTicket._id, 'in_progress')
@@ -529,6 +541,7 @@ export default function DeliverySupportTickets() {
                   >
                     Reopen Ticket
                   </button>
+                  )
                 )}
               </div>
               </div>

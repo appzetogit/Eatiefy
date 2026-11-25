@@ -876,12 +876,50 @@ function getNotificationKey(payload = {}) {
 }
 
 /**
+ * Every key one logical notification can be known by.
+ *
+ * The socket `order_status_update` carries no backend eventId, so it keys on
+ * `orderMongoId::status`, while the FCM push for the same event keys on its
+ * backend eventId (`order_status_…`, `delivery_status_user_…`). Those never
+ * matched, so a customer with the app open saw the same update twice (socket
+ * toast + push toast). The order+status key and the title/body key below are
+ * identical on both channels, so either one collapses the pair.
+ */
+function buildOsNotificationDedupeKeys(source = {}) {
+  const data = isRecord(source?.data) ? source.data : source;
+  const keys = [buildOsNotificationDedupeKey(source)];
+
+  const orderRef = String(data?.orderMongoId || source?.orderMongoId || "").trim();
+  const status = String(data?.orderStatus || source?.orderStatus || "").trim();
+  if (orderRef && status) keys.push([orderRef, status].join("::"));
+
+  const clean = (value) =>
+    String(value || "")
+      .replace(/^(?:👤|🏪|🛵|🛡️?)\s*/u, "")
+      .replace(/^\[(User|Shop|Rider|Admin)\]\s*/i, "")
+      .trim()
+      .toLowerCase();
+  const title = clean(source?.notification?.title || data?.title || source?.title);
+  const body = clean(
+    source?.notification?.body || data?.body || data?.message || source?.body || source?.message,
+  );
+  if (title && body) keys.push(`content::${orderRef}::${title}::${body}`);
+
+  return [...new Set(keys.filter(Boolean))];
+}
+
+/**
  * Returns true when the same OS notification was already handled recently
  * (shared by FCM foreground/background handlers and socket fallbacks).
  */
 export function shouldSkipDuplicateOsNotification(source = {}) {
-  const notificationKey = buildOsNotificationDedupeKey(source);
-  return wasRecentlyHandled(notificationKey);
+  // Check (and record) every key: the first one seen wins, so the same event
+  // arriving over socket and FCM collapses to a single notification.
+  let isDuplicate = false;
+  for (const key of buildOsNotificationDedupeKeys(source)) {
+    if (wasRecentlyHandled(key)) isDuplicate = true;
+  }
+  return isDuplicate;
 }
 
 function readSharedOsNotificationDedup() {
@@ -1772,7 +1810,7 @@ function showForegroundNotification(payload = {}) {
 
   const notificationKey = getNotificationKey(payload);
   pushDebugLog(PUSH_DEBUG_PREFIX, "showForegroundNotification received", { notificationKey, payload });
-  if (wasRecentlyHandled(notificationKey)) {
+  if (shouldSkipDuplicateOsNotification(payload)) {
     return;
   }
 
@@ -2059,6 +2097,92 @@ export async function setupPendingVerificationPushListeners(moduleName) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Keeps trying to get a push token for a partner who is waiting for approval.
+ *
+ * The approval push can only reach a device whose token is saved on the server,
+ * and for pending partners that was a one-shot attempt at page load (about 7s of
+ * retries): 46 of 46 delivery and 63 of 103 restaurant approvals went out with no
+ * token at all. A phone's FCM token often only becomes available later (the app
+ * is still starting, the user grants permission after the page opened), so:
+ *   - retry every 15s (and when the app returns to the foreground) until saved;
+ *   - on the web, ask for notification permission on the first tap anywhere on
+ *     the page, because a browser only shows the prompt after a user gesture and
+ *     the optional "Enable Notifications" button was rarely pressed.
+ * Returns a cleanup function.
+ */
+export function startPendingPushAutoSync(moduleName, phone) {
+  if (typeof window === "undefined" || !moduleName || !phone) return () => {};
+
+  const MAX_ATTEMPTS = 20;
+  const RETRY_MS = 15000;
+  const gestureEvents = ["pointerup", "keydown", "touchend"];
+  let attempts = 0;
+  let saved = false;
+  let busy = false;
+  let stopped = false;
+  let timer = null;
+
+  const tryOnce = async () => {
+    if (stopped || saved || busy || attempts >= MAX_ATTEMPTS) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    busy = true;
+    attempts += 1;
+    try {
+      saved = Boolean(
+        await persistPendingModuleFcmToken(moduleName, phone, { maxAttempts: 2, retryDelayMs: 500 })
+      );
+    } catch {
+      /* try again on the next tick */
+    } finally {
+      busy = false;
+    }
+    if (saved) stop();
+  };
+
+  const onGesture = () => {
+    detachGesture();
+    if (stopped || saved) return;
+    void enablePendingVerificationPush(moduleName, phone)
+      .then((ok) => {
+        if (ok) {
+          saved = true;
+          stop();
+        }
+      })
+      .catch(() => {});
+  };
+
+  const detachGesture = () => {
+    gestureEvents.forEach((name) => window.removeEventListener(name, onGesture, true));
+  };
+
+  const onVisible = () => {
+    if (document.visibilityState === "visible") void tryOnce();
+  };
+
+  function stop() {
+    stopped = true;
+    if (timer) clearInterval(timer);
+    detachGesture();
+    document.removeEventListener("visibilitychange", onVisible);
+  }
+
+  timer = setInterval(() => void tryOnce(), RETRY_MS);
+  document.addEventListener("visibilitychange", onVisible);
+
+  // Browser only: the native app has its own permission flow.
+  if (
+    !isNativeAppWebView() &&
+    typeof Notification !== "undefined" &&
+    Notification.permission === "default"
+  ) {
+    gestureEvents.forEach((name) => window.addEventListener(name, onGesture, true));
+  }
+
+  return stop;
 }
 
 /**

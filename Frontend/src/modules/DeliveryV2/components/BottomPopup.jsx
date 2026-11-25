@@ -350,9 +350,15 @@ export default function BottomPopup({
                   <button
                     onClick={handleClose}
                     className="ml-auto p-2 rounded-full hover:bg-gray-100 transition-colors"
-                    aria-label="Close"
+                    aria-label={collapsedContent ? "Collapse" : "Close"}
                   >
-                    <ChevronDown className="w-6 h-6 text-gray-600" />
+                    {/* The button only collapses when there is collapsed content;
+                        otherwise it closes the popup, so show a close (X) icon. */}
+                    {collapsedContent ? (
+                      <ChevronDown className="w-6 h-6 text-gray-600" />
+                    ) : (
+                      <X className="w-6 h-6 text-gray-600" />
+                    )}
                   </button>
                 )}
               </div>

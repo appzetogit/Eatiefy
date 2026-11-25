@@ -4,6 +4,7 @@ import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const formatCurrency = (amount) =>
   `\u20B9${Number(amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -24,6 +25,7 @@ const formatDate = (dateString) => {
 }
 
 export default function DeliverymanBonus() {
+  const { canCreate } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -141,6 +143,7 @@ export default function DeliverymanBonus() {
                 />
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               </div>
+              {canCreate && (
               <button
                 type="button"
                 onClick={() => setIsAddOpen(true)}
@@ -149,6 +152,7 @@ export default function DeliverymanBonus() {
                 <Plus className="w-4 h-4" />
                 Add Bonus
               </button>
+              )}
             </div>
           </div>
 

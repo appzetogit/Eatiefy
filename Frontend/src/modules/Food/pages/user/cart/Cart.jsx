@@ -2716,13 +2716,12 @@ export default function Cart() {
   }
 
   const handleGoToOrders = () => {
-    setShowSavingsCongrats(false)
-    setCongratssSavingsAmount(0)
-    setCongratssSavingsPercentage(0)
-    setCongratssSavingsItems([])
-    setOrderSuccessSavingsAmount(0)
-    setShowOrderSuccess(false)
-    setShowPlacingOrder(false)
+    // Do NOT reset the success/placing flags here. The cart was already cleared
+    // when the order was placed, so turning them off made this screen fall
+    // through to "Your cart is empty" for as long as the tracking page (a lazy
+    // chunk plus its first fetch) took to appear. The overlay stays up until
+    // the route changes, and all of this state goes away when Cart unmounts.
+    //
     // Only a confirmed order id opens tracking; without one (malformed response)
     // the placed order is still listed in My Orders - never `/orders/null`.
     if (!placedOrderId) {

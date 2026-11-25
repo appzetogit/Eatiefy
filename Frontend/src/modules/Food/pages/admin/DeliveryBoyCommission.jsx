@@ -5,12 +5,14 @@ import { adminAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
 import EatiefyIncentivePanel from "@food/components/admin/deliveryman/EatiefyIncentivePanel"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function DeliveryBoyCommission() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [commissions, setCommissions] = useState([])
   const [zones, setZones] = useState([])
@@ -482,6 +484,7 @@ export default function DeliveryBoyCommission() {
                   )}
                 </select>
               </div>
+              {canCreate && (
               <button
                 onClick={handleAdd}
                 disabled={!selectedZoneId}
@@ -489,6 +492,7 @@ export default function DeliveryBoyCommission() {
               >
                 Add Rule
               </button>
+              )}
               <button 
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 transition-all"
@@ -622,7 +626,8 @@ export default function DeliveryBoyCommission() {
                       {visibleColumns.status && (
                         <td className="px-6 py-4 whitespace-nowrap">
                           <button
-                            onClick={() => handleToggleStatus(commission)}
+                            onClick={() => canEdit && handleToggleStatus(commission)}
+                            disabled={!canEdit}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                               commission.status ? "bg-green-600" : "bg-slate-300"
                             }`}
@@ -638,6 +643,7 @@ export default function DeliveryBoyCommission() {
                       {visibleColumns.actions && (
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <div className="flex items-center justify-center gap-2">
+                            {canEdit && (
                             <button
                               onClick={() => handleEdit(commission)}
                               className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
@@ -645,6 +651,8 @@ export default function DeliveryBoyCommission() {
                             >
                               <Edit className="w-4 h-4" />
                             </button>
+                            )}
+                            {canDelete && (
                             <button
                               onClick={() => handleDelete(commission)}
                               className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
@@ -652,6 +660,7 @@ export default function DeliveryBoyCommission() {
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
+                            )}
                           </div>
                         </td>
                       )}

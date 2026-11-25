@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { publishOnlineStatus } from "@food/utils/restaurantOnlineStatus"
+import { publishOnlineStatus, fetchAuthoritativeOnlineStatus } from "@food/utils/restaurantOnlineStatus"
 import { useNavigate } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import { motion, AnimatePresence } from "framer-motion"
@@ -54,8 +54,10 @@ export default function DeliverySettings() {
       debugError("Error saving delivery status locally:", error)
     }
 
-    // Single publisher writes the shared mirror and notifies every listener.
+    // Single publisher writes the shared mirror and notifies every listener,
+    // then the real effective state (toggle AND outlet timings) is re-read.
     publishOnlineStatus(value)
+    void fetchAuthoritativeOnlineStatus().catch(() => {})
   }
 
   // Load delivery status from backend on mount
