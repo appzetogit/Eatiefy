@@ -41,7 +41,7 @@ export default function NotificationsV2() {
     markAsRead: markBroadcastAsRead,
     dismiss: dismissBroadcastNotification,
     dismissAll: dismissAllBroadcastNotifications,
-  } = useNotificationInbox("delivery", { limit: 100 });
+  } = useNotificationInbox("delivery", { limit: 100, markSeen: true });
 
   useEffect(() => {
     const syncNotifications = () => {
@@ -55,6 +55,15 @@ export default function NotificationsV2() {
       window.removeEventListener("storage", syncNotifications);
     };
   }, []);
+
+  // Device-local alerts are seen as soon as this page shows them.
+  useEffect(() => {
+    const unread = notifications.filter((item) => !item.read);
+    if (!unread.length) return;
+    unread.forEach((item) => markDeliveryNotificationAsRead(item.id));
+    setNotifications((prev) => prev.map((item) => (item.read ? item : { ...item, read: true })));
+    window.dispatchEvent(new CustomEvent("deliveryNotificationsUpdated"));
+  }, [notifications]);
 
   const mergedNotifications = [
     ...(broadcastNotifications || []).map((item) => ({

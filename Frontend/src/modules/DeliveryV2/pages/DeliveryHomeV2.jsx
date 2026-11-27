@@ -139,7 +139,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const newOrders = useDeliveryStore((state) => state.newOrders);
   const currentOffer = newOrder || (newOrders && newOrders.length > 0 ? newOrders[0] : null);
   const companyName = useCompanyName();
-  const { items: broadcastItems, unreadCount: notificationUnreadCount, markAsRead: markBroadcastAsRead, dismissAll: dismissAllBroadcast } = useNotificationInbox("delivery", { limit: 20 });
+  const { items: broadcastItems, unreadCount: notificationUnreadCount, markAsRead: markBroadcastAsRead, markAllAsRead: markAllBroadcastRead, dismissAll: dismissAllBroadcast } = useNotificationInbox("delivery", { limit: 20 });
 
   /*
    * Accept / pass for the incoming-offer card. Refs rather than state, so a
@@ -196,6 +196,13 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   const [cashLimitNotice, setCashLimitNotice] = useState(null);
   const [currentTab, setCurrentTab] = useState(tab);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Opening the sheet means the notifications have been seen: clear the bell badge.
+  useEffect(() => {
+    if (showNotifications && notificationUnreadCount > 0) markAllBroadcastRead();
+    // Keyed on opening only, so a failing request cannot loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showNotifications]);
   useEffect(() => {
     setCurrentTab(tab);
   }, [tab]);

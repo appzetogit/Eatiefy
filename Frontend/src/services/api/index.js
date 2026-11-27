@@ -174,6 +174,8 @@ export const notificationAPI = {
     }),
   markAsRead: (id, config = {}) =>
     apiClient.patch(`/food/notifications/${String(id)}/read`, {}, config),
+  markAllAsRead: (config = {}) =>
+    apiClient.patch("/food/notifications/inbox/read-all", {}, config),
   dismiss: (id, config = {}) =>
     apiClient.delete(`/food/notifications/${String(id)}`, config),
   dismissAll: (config = {}) =>

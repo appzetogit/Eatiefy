@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BellRing, ChevronLeft, ChevronRight, History, Loader2, Search, Send, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { adminAPI } from "@food/api";
 import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
@@ -8,7 +9,7 @@ const TARGET_OPTIONS = [
   { value: "USER", label: "Users" },
   { value: "RESTAURANT", label: "Restaurants" },
   { value: "DELIVERY", label: "Delivery Partners" },
-  { value: "CUSTOM", label: "Particular Persons" },
+  { value: "CUSTOM", label: "Specific Person(s)" },
 ];
 
 // Target types where a zone filter makes sense. "Particular Persons" is a
@@ -234,8 +235,20 @@ export default function NotificationBroadcast() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!form.title.trim() || !form.message.trim()) return;
-    if (form.targetType === "CUSTOM" && selectedRecipients.length === 0) return;
+    if (!form.title.trim() || !form.message.trim()) {
+      toast.error("Enter both a title and a message");
+      return;
+    }
+    if (form.targetType === "CUSTOM" && selectedRecipients.length === 0) {
+      toast.error("Search and select at least one person to send to");
+      return;
+    }
+    const sentTo =
+      form.targetType === "CUSTOM"
+        ? selectedRecipients.length === 1
+          ? selectedRecipients[0].label
+          : `${selectedRecipients.length} selected people`
+        : TARGET_OPTIONS.find((option) => option.value === form.targetType)?.label || "recipients";
 
     try {
       setSubmitting(true);
@@ -264,8 +277,11 @@ export default function NotificationBroadcast() {
       setSearch("");
       setCategoryFilter("ALL");
       setPage(1);
+      toast.success(`Notification sent to ${sentTo}`);
       window.dispatchEvent(new Event("adminBroadcastUpdated"));
       await loadHistory({ silent: true });
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Could not send the notification");
     } finally {
       setSubmitting(false);
     }
@@ -345,54 +361,6 @@ export default function NotificationBroadcast() {
                 ))}
               </select>
             </label>
-          </div>
-
-          {showZoneSelector && (
-            <label className="block">
-              <span className="text-sm font-semibold text-slate-700">Zone</span>
-              <select
-                value={form.zoneId}
-                onChange={(event) => setForm((prev) => ({ ...prev, zoneId: event.target.value }))}
-                disabled={zonesLoading}
-                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-semibold disabled:opacity-60"
-              >
-                <option value={GLOBAL_ZONE_VALUE}>Global — All Areas</option>
-                {zones.map((zone) => (
-                  <option key={zone._id} value={zone._id}>
-                    {zone.name || zone.zoneName || zone.serviceLocation || "Unnamed Zone"}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block text-xs text-slate-400">
-                {form.zoneId
-                  ? "Only recipients in this zone will receive the notification."
-                  : "Sent everywhere — all cities and areas."}
-              </span>
-            </label>
-          )}
-
-          <label className="block">
-            <span className="text-sm font-semibold text-slate-700">Message</span>
-            <textarea
-              value={form.message}
-              onChange={(event) => setForm((prev) => ({ ...prev, message: event.target.value }))}
-              placeholder="Enter notification message"
-              rows={4}
-              className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-y"
-            />
-          </label>
-
-          <div className="flex justify-end pt-1">
-            {canCreate && (
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60 shadow-md shadow-blue-500/20 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer"
-            >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Send Broadcast
-            </button>
-            )}
           </div>
 
           {form.targetType === "CUSTOM" && (
@@ -479,6 +447,28 @@ export default function NotificationBroadcast() {
                   Selected: {selectedRecipients.length}
                 </span>
               </div>
+
+              {selectedRecipients.length > 0 && (
+                <div className="flex flex-wrap gap-2" aria-label="Selected people">
+                  {selectedRecipients.map((item) => (
+                    <span
+                      key={`${item.ownerType}:${item.ownerId}`}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 py-1 pl-3 pr-1.5 text-xs font-semibold text-blue-700"
+                    >
+                      {item.label}
+                      <span className="font-medium text-blue-500">({item.ownerType.replaceAll("_", " ").toLowerCase()})</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleRecipient(item)}
+                        aria-label={`Remove ${item.label}`}
+                        className="rounded-full p-0.5 hover:bg-blue-100"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <div className="max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white divide-y divide-slate-100">
                 {recipientLoading && allRecipients.length === 0 ? (
@@ -607,6 +597,57 @@ export default function NotificationBroadcast() {
               </div>
             </div>
           )}
+
+          {showZoneSelector && (
+            <label className="block">
+              <span className="text-sm font-semibold text-slate-700">Zone</span>
+              <select
+                value={form.zoneId}
+                onChange={(event) => setForm((prev) => ({ ...prev, zoneId: event.target.value }))}
+                disabled={zonesLoading}
+                className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-semibold disabled:opacity-60"
+              >
+                <option value={GLOBAL_ZONE_VALUE}>Global — All Areas</option>
+                {zones.map((zone) => (
+                  <option key={zone._id} value={zone._id}>
+                    {zone.name || zone.zoneName || zone.serviceLocation || "Unnamed Zone"}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-slate-400">
+                {form.zoneId
+                  ? "Only recipients in this zone will receive the notification."
+                  : "Sent everywhere — all cities and areas."}
+              </span>
+            </label>
+          )}
+
+          <label className="block">
+            <span className="text-sm font-semibold text-slate-700">Message</span>
+            <textarea
+              value={form.message}
+              onChange={(event) => setForm((prev) => ({ ...prev, message: event.target.value }))}
+              placeholder="Enter notification message"
+              rows={4}
+              className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-y"
+            />
+          </label>
+
+          <div className="flex justify-end pt-1">
+            {canCreate && (
+            <button
+              type="submit"
+              disabled={submitting}
+              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60 shadow-md shadow-blue-500/20 hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer"
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {form.targetType === "CUSTOM"
+                ? `Send to ${selectedRecipients.length} selected`
+                : "Send Broadcast"}
+            </button>
+            )}
+          </div>
+
         </form>
       </div>
 
