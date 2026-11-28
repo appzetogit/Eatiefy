@@ -54,6 +54,7 @@ export const SUB_ADMIN_PERMISSION_MODULES = [
   { key: 'restaurant_report', label: 'Restaurant Report', pathPrefixes: ['/admin/food/restaurant-report'] },
   { key: 'feedback_experience', label: 'Feedback Experience', pathPrefixes: ['/admin/food/customer-report/feedback-experience'] },
   { key: 'restaurant_withdraws', label: 'Restaurant Withdraws', pathPrefixes: ['/admin/food/restaurant-withdraws'] },
+  { key: 'restaurant_wallet', label: 'Restaurant Wallet', pathPrefixes: ['/admin/food/restaurant-wallet'] },
   { key: 'landing_page_management', label: 'Landing Page Management', pathPrefixes: ['/admin/food/hero-banner-management'] },
   { key: 'dining_banners', label: 'Dining Banners', pathPrefixes: ['/admin/food/dining-management'] },
   { key: 'dining_list', label: 'Dining List', pathPrefixes: ['/admin/food/dining-list'] },

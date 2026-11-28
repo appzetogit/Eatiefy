@@ -351,6 +351,12 @@ export const adminAPI = {
   getWithdrawalRequests: (params) => adminAPI.getWithdrawals(params),
   approveWithdrawalRequest: (id) => adminAPI.updateWithdrawalStatus(id, { status: "approved" }),
   rejectWithdrawalRequest: (id, reason) => adminAPI.updateWithdrawalStatus(id, { status: "rejected", rejectionReason: reason }),
+  /** Restaurant wallets: per-restaurant earnings, withdrawals and balance. */
+  getRestaurantWallets: (params) =>
+    apiClient.get("/food/admin/restaurant-wallet", {
+      params,
+      contextModule: "admin",
+    }),
   /** Delivery boy wallets (stub until backend implements - returns empty so list still loads) */
   getDeliveryBoyWallets: (params) =>
     apiClient.get("/food/admin/delivery/wallets", {

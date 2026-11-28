@@ -71,6 +71,7 @@ const STABLE_KEYS_BY_PATH = {
   "/admin/food/restaurant-report": "restaurant_report",
   "/admin/food/customer-report/feedback-experience": "feedback_experience",
   "/admin/food/restaurant-withdraws": "restaurant_withdraws",
+  "/admin/food/restaurant-wallet": "restaurant_wallet",
   "/admin/food/hero-banner-management": "landing_page_management",
   "/admin/food/promotional-banner": "landing_page_management",
   "/admin/food/dining-management": "dining_banners",

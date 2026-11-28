@@ -56,6 +56,7 @@ const CashLimitSettlement = lazy(() => import("@food/pages/admin/CashLimitSettle
 const CashConfirmations = lazy(() => import("@food/pages/admin/CashConfirmations"));
 const DeliveryWithdrawal = lazy(() => import("@food/pages/admin/DeliveryWithdrawal"));
 const DeliveryBoyWallet = lazy(() => import("@food/pages/admin/DeliveryBoyWallet"));
+const RestaurantWallet = lazy(() => import("@food/pages/admin/RestaurantWallet"));
 const DeliveryEmergencyHelp = lazy(() => import("@food/pages/admin/DeliveryEmergencyHelp"));
 const DeliverySupportTickets = lazy(() => import("@food/pages/admin/DeliverySupportTickets"));
 const JoinRequest = lazy(() => import("@food/pages/admin/delivery-partners/JoinRequest"));
@@ -274,6 +275,7 @@ export default function AdminRouter() {
             <Route path="tax-report" element={<TaxReport />} />
             
             <Route path="restaurant-withdraws" element={<RestaurantWithdraws />} />
+            <Route path="restaurant-wallet" element={<RestaurantWallet />} />
             
 
             {/* SUB ADMIN MANAGEMENT (full ADMIN only) */}

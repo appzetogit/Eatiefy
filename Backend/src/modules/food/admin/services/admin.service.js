@@ -7620,6 +7620,158 @@ export async function deleteZone(id) {
     return { id: String(zoneOid), name: zone.name };
 }
 
+// ----- Restaurant wallets (admin) -----
+
+/**
+ * Money figures per restaurant, keyed by id. "Available balance" follows the same
+ * rule as getRestaurantFinance (the restaurant app): unsettled shares of delivered
+ * orders, minus withdrawals that are pending or approved.
+ */
+async function computeRestaurantWalletTotals(restaurantIds) {
+    if (!restaurantIds.length) return { earnings: new Map(), withdrawals: new Map() };
+
+    const [earningRows, withdrawalRows] = await Promise.all([
+        FoodTransaction.aggregate([
+            { $match: { restaurantId: { $in: restaurantIds }, status: { $in: ['captured', 'authorized'] } } },
+            {
+                $lookup: {
+                    from: FoodOrder.collection.name,
+                    localField: 'orderId',
+                    foreignField: '_id',
+                    as: 'order'
+                }
+            },
+            { $match: { 'order.orderStatus': { $in: ['delivered', 'completed'] } } },
+            {
+                $group: {
+                    _id: '$restaurantId',
+                    deliveredOrders: { $sum: 1 },
+                    totalEarning: { $sum: { $ifNull: ['$amounts.restaurantShare', 0] } },
+                    commission: { $sum: { $ifNull: ['$amounts.restaurantCommission', 0] } },
+                    unsettledEarning: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$settlement.isRestaurantSettled', true] },
+                                0,
+                                { $ifNull: ['$amounts.restaurantShare', 0] }
+                            ]
+                        }
+                    }
+                }
+            }
+        ]),
+        FoodRestaurantWithdrawal.aggregate([
+            { $match: { restaurantId: { $in: restaurantIds } } },
+            {
+                $group: {
+                    _id: { restaurantId: '$restaurantId', status: { $toLower: { $trim: { input: '$status' } } } },
+                    total: { $sum: '$amount' }
+                }
+            }
+        ])
+    ]);
+
+    const earnings = new Map(earningRows.map((row) => [String(row._id), row]));
+    const withdrawals = new Map();
+    for (const row of withdrawalRows) {
+        const key = String(row._id.restaurantId);
+        const entry = withdrawals.get(key) || {};
+        entry[row._id.status] = row.total;
+        withdrawals.set(key, entry);
+    }
+    return { earnings, withdrawals };
+}
+
+/**
+ * Restaurant wallets with totals over every matching restaurant (not only the
+ * returned page). Lists approved restaurants plus any other restaurant that has
+ * money history, so a balance does not disappear while a profile change is
+ * waiting for approval.
+ */
+export async function getRestaurantWallets(query = {}) {
+    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 20, 1), 500);
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+
+    const [idsWithOrders, idsWithWithdrawals] = await Promise.all([
+        FoodTransaction.distinct('restaurantId', { status: { $in: ['captured', 'authorized'] } }),
+        FoodRestaurantWithdrawal.distinct('restaurantId')
+    ]);
+
+    const conditions = [{
+        $or: [
+            { status: 'approved' },
+            { _id: { $in: [...idsWithOrders, ...idsWithWithdrawals] } }
+        ]
+    }];
+
+    const zoneOid = parseZoneFilter(query.zoneId);
+    if (zoneOid) conditions.push({ zoneId: zoneOid });
+
+    const search = String(query.search || '').trim().slice(0, 80);
+    if (search) {
+        const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        conditions.push({
+            $or: [
+                { restaurantName: regex },
+                { ownerName: regex },
+                { ownerPhone: regex },
+                { primaryContactNumber: regex }
+            ]
+        });
+    }
+
+    const restaurants = await FoodRestaurant.find({ $and: conditions })
+        .select('restaurantName ownerName ownerPhone primaryContactNumber status')
+        .lean();
+
+    const { earnings, withdrawals } = await computeRestaurantWalletTotals(restaurants.map((r) => r._id));
+
+    const rows = restaurants.map((r) => {
+        const key = String(r._id);
+        const earned = earnings.get(key);
+        const withdrawn = withdrawals.get(key);
+        const totalWithdrawn = roundMoney(withdrawn?.approved);
+        const pendingWithdrawal = roundMoney(withdrawn?.pending);
+        return {
+            restaurantId: key,
+            name: r.restaurantName || '',
+            ownerName: r.ownerName || '',
+            phone: r.ownerPhone || r.primaryContactNumber || '',
+            status: r.status,
+            deliveredOrders: earned?.deliveredOrders || 0,
+            totalEarning: roundMoney(earned?.totalEarning),
+            commission: roundMoney(earned?.commission),
+            totalWithdrawn,
+            pendingWithdrawal,
+            availableBalance: roundMoney(
+                Math.max(0, (Number(earned?.unsettledEarning) || 0) - totalWithdrawn - pendingWithdrawal)
+            )
+        };
+    });
+
+    // Money owed first, then the busiest, then by name.
+    rows.sort((a, b) =>
+        b.availableBalance - a.availableBalance ||
+        b.totalEarning - a.totalEarning ||
+        a.name.localeCompare(b.name)
+    );
+
+    const sum = (field) => roundMoney(rows.reduce((total, row) => total + row[field], 0));
+
+    return {
+        wallets: rows.slice((page - 1) * limit, page * limit),
+        summary: {
+            availableBalance: sum('availableBalance'),
+            totalEarning: sum('totalEarning'),
+            commission: sum('commission'),
+            totalWithdrawn: sum('totalWithdrawn'),
+            pendingWithdrawal: sum('pendingWithdrawal'),
+            deliveredOrders: rows.reduce((total, row) => total + row.deliveredOrders, 0)
+        },
+        pagination: { total: rows.length, page, limit, pages: Math.ceil(rows.length / limit) || 1 }
+    };
+}
+
 // ----- Withdrawals (admin) -----
 export async function getWithdrawals(query = {}) {
     const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 500);

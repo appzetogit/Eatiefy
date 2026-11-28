@@ -1776,6 +1776,15 @@ export async function getDeliveryWallets(req, res, next) {
     }
 }
 
+export async function getRestaurantWallets(req, res, next) {
+    try {
+        const data = await adminService.getRestaurantWallets(req.query || {});
+        res.status(200).json({ success: true, message: 'Restaurant wallets fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
 export async function updateDeliveryPartnerWallet(req, res, next) {
     try {
         const { id } = req.params;

@@ -67,6 +67,7 @@ export const adminSidebarMenu = [
           { label: "Onboarding Pricing", path: "/admin/food/onboarding-pricing" },
         ],
       },
+      { type: "link", label: "Restaurant Wallet", path: "/admin/food/restaurant-wallet", icon: "PiggyBank" },
     ],
   },
   {
