@@ -7369,25 +7369,38 @@ export async function getDeliveryWithdrawals(query = {}) {
 
 export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, rejectionReason, transactionId }) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) throw new ValidationError('Invalid withdrawal ID');
-    
+
+    // Only a pending request can be decided, and only once. The pocket balance counts
+    // approved + pending withdrawals, so moving a paid (approved) request to rejected —
+    // or to any status outside the enum — would free that money to be withdrawn again.
+    const nextStatus = String(status || '').trim().toLowerCase();
+    if (nextStatus !== 'approved' && nextStatus !== 'rejected') {
+        throw new ValidationError('Status must be Approved or Rejected');
+    }
+
     const update = {
-        status: String(status).toLowerCase(),
+        status: nextStatus,
         adminNote,
         rejectionReason,
         transactionId,
         processedAt: new Date()
     };
 
-    const updated = await FoodDeliveryWithdrawal.findByIdAndUpdate(
-        id,
+    // Atomic pending → decided transition: two concurrent clicks cannot both apply.
+    const updated = await FoodDeliveryWithdrawal.findOneAndUpdate(
+        { _id: id, status: 'pending' },
         { $set: update },
-        { new: true }
+        { new: true, runValidators: true }
     ).populate('deliveryPartnerId', 'name phone profilePartnerId').lean();
 
-    if (!updated) throw new ValidationError('Withdrawal request not found');
+    if (!updated) {
+        const existing = await FoodDeliveryWithdrawal.findById(id).select('status').lean();
+        if (!existing) throw new ValidationError('Withdrawal request not found');
+        throw new ValidationError(`Withdrawal request is already ${existing.status}`);
+    }
 
     // If approved, deduct from wallet balance
-    if (status.toLowerCase() === 'approved' || status.toLowerCase() === 'processed') {
+    if (nextStatus === 'approved') {
         const amount = Number(updated.amount || 0);
         if (amount > 0) {
             await FoodDeliveryWallet.findOneAndUpdate(

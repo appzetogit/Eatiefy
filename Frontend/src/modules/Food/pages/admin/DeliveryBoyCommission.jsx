@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react"
-import { Search, Edit, Trash2, IndianRupee, Settings, Check, Columns, MapPin, Loader2 } from "lucide-react"
+import { Search, Edit, Trash2, IndianRupee, Settings, Check, Columns, MapPin, Loader2, AlertTriangle } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { adminAPI } from "@food/api"
 import { API_BASE_URL } from "@food/api/config"
@@ -62,28 +62,31 @@ export default function DeliveryBoyCommission() {
     return `${min}-${max} km`
   }
 
-  // Calculate total commission for a given distance
-  const calculateTotalCommission = (commission, distance) => {
-    // Check if distance falls within this commission tier
-    if (distance < commission.minDistance) return 0
-    if (commission.maxDistance !== null && distance > commission.maxDistance) return 0
-    
-    // For 0-x slab we usually want per-km on full distance; for other slabs apply per-km after minDistance
-    const min = Number(commission.minDistance) || 0
-    const extraDistance = Math.max(0, distance - min)
-    const kmForRate = min === 0 ? distance : extraDistance
-    return commission.basePayout + (kmForRate * commission.commissionPerKm)
-  }
-
-  // Calculate example commission for display (using mid-point of range)
-  const getExampleCommission = (commission) => {
-    if (commission.maxDistance === null) {
-      const exampleDistance = commission.minDistance + 5 // Example: 10km for 10+ km tier
-      return calculateTotalCommission(commission, exampleDistance)
+  // Payout only pays km that fall inside an active slab (riderEarning.service.js), so a
+  // gap between slabs is unpaid distance and an overlap pays those km twice. Flag both.
+  const slabIssues = useMemo(() => {
+    const active = (commissions || [])
+      .filter((c) => c.status !== false)
+      .map((c) => ({
+        min: Number(c.minDistance) || 0,
+        max: c.maxDistance === null || c.maxDistance === undefined || c.maxDistance === "" ? null : Number(c.maxDistance),
+      }))
+      .sort((a, b) => a.min - b.min)
+    if (!active.length) return []
+    const issues = []
+    if (active[0].min !== 0) issues.push(`No active slab starts at 0 km — riders get no base payout.`)
+    for (let i = 1; i < active.length; i++) {
+      const prev = active[i - 1]
+      const cur = active[i]
+      if (prev.max === null) {
+        issues.push(`Slab ${prev.min}+ km is open-ended but another slab starts at ${cur.min} km — those km are paid twice.`)
+        break
+      }
+      if (cur.min > prev.max) issues.push(`Gap: ${prev.max}–${cur.min} km is not covered by any slab, so riders earn nothing for it.`)
+      else if (cur.min < prev.max) issues.push(`Overlap: ${cur.min}–${prev.max} km is covered by two slabs and paid twice.`)
     }
-    const midDistance = (commission.minDistance + commission.maxDistance) / 2
-    return calculateTotalCommission(commission, midDistance)
-  }
+    return issues
+  }, [commissions])
 
   useEffect(() => {
     const fetchZones = async () => {
@@ -497,6 +500,20 @@ export default function DeliveryBoyCommission() {
               </button>
             </div>
           </div>
+
+          {slabIssues.length > 0 && (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-300 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                <div className="text-sm text-amber-900">
+                  <p className="font-semibold mb-1">Check this zone&apos;s slabs</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {slabIssues.map((msg) => <li key={msg}>{msg}</li>)}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Info Card */}
           <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">

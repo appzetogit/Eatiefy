@@ -51,7 +51,9 @@ export async function resolveFeeSettingsForZone(zoneId) {
 
 /**
  * Resolve active delivery commission rules for a zone.
- * Prefer exact zone; if empty, fall back to another zone that has active rules.
+ * Order: exact zone → global rules (no zoneId) → another zone's rules as a last
+ * resort, logged as an error so the unconfigured zone gets noticed (paying by a
+ * neighbouring zone's rates beats paying the rider ₹0).
  */
 export async function resolveCommissionRulesForZone(zoneId) {
     const oid = toObjectId(zoneId);
@@ -62,6 +64,18 @@ export async function resolveCommissionRulesForZone(zoneId) {
             status: { $ne: false }
         }).lean();
         if (exact?.length) return exact;
+    }
+
+    // Global rules (no zoneId) are the platform default — prefer them over borrowing.
+    const legacy = await FoodDeliveryCommissionRule.find({
+        status: { $ne: false },
+        $or: [{ zoneId: null }, { zoneId: { $exists: false } }]
+    }).lean();
+    if (legacy?.length) {
+        logger.warn(
+            `Commission rules missing for zone ${zoneId || 'n/a'}; using global rules`
+        );
+        return legacy;
     }
 
     const fallbackZone = await FoodDeliveryCommissionRule.aggregate([
@@ -78,23 +92,12 @@ export async function resolveCommissionRulesForZone(zoneId) {
             status: { $ne: false }
         }).lean();
         if (fallbackRules?.length) {
-            logger.warn(
-                `Commission rules missing for zone ${zoneId || 'n/a'}; using fallback zone ${fallbackZoneId}`
+            logger.error(
+                `Commission rules missing for zone ${zoneId || 'n/a'} and no global rules exist; ` +
+                `paying by zone ${fallbackZoneId}'s rates. Add Delivery Boy Commission slabs for this zone.`
             );
             return fallbackRules;
         }
-    }
-
-    // Pre-migration safety: legacy docs without zoneId
-    const legacy = await FoodDeliveryCommissionRule.find({
-        status: { $ne: false },
-        $or: [{ zoneId: null }, { zoneId: { $exists: false } }]
-    }).lean();
-    if (legacy?.length) {
-        logger.warn(
-            `Commission rules missing for zone ${zoneId || 'n/a'}; using legacy global rules`
-        );
-        return legacy;
     }
 
     return [];
