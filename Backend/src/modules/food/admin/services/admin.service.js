@@ -7964,15 +7964,6 @@ export async function getDeliveryWithdrawals(query = {}) {
 export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, rejectionReason, transactionId }) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) throw new ValidationError('Invalid withdrawal ID');
 
-    // Only a pending request can be decided, and only once. The pocket balance counts
-    // approved + pending withdrawals, so moving a paid (approved) request to rejected —
-    // or to any status outside the enum — would free that money to be withdrawn again.
-    const nextStatus = String(status || '').trim().toLowerCase();
-    if (nextStatus !== 'approved' && nextStatus !== 'rejected') {
-        throw new ValidationError('Status must be Approved or Rejected');
-    }
-
-
     // "processed" is the legacy name for approved.
     const rawStatus = String(status || '').trim().toLowerCase();
     const nextStatus = rawStatus === 'processed' ? 'approved' : rawStatus;
@@ -7982,14 +7973,10 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
 
     const update = {
         status: nextStatus,
-        status: nextStatus,
         adminNote,
         processedAt: new Date()
     };
 
-    // Atomic pending → decided transition: two concurrent clicks cannot both apply.
-    const updated = await FoodDeliveryWithdrawal.findOneAndUpdate(
-        { _id: id, status: 'pending' },
     if (nextStatus === 'approved') {
         // The bank / UPI reference of the payout the admin just made. It is the only
         // proof of payment if the partner later disputes a withdrawal, so approval
@@ -8009,8 +7996,10 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
         update.rejectionReason = String(rejectionReason || '').trim();
     }
 
-    // Only a pending request can be decided, and only once. Previously any status could
-    // be written over any other, so approving twice deducted the wallet twice.
+    // Only a pending request can be decided, and only once, in one atomic update.
+    // The pocket balance counts approved + pending withdrawals, so letting a paid
+    // (approved) request move to rejected would free that money to be withdrawn again,
+    // and approving twice would deduct the wallet twice.
     const updated = await FoodDeliveryWithdrawal.findOneAndUpdate(
         { _id: id, status: 'pending' },
         { $set: update },
@@ -8020,26 +8009,20 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
     if (!updated) {
         const existing = await FoodDeliveryWithdrawal.findById(id).select('status').lean();
         if (!existing) throw new ValidationError('Withdrawal request not found');
-        throw new ValidationError(`Withdrawal request is already ${existing.status}`);
-    }
-    if (!updated) {
-        const existing = await FoodDeliveryWithdrawal.findById(id).select('status').lean();
-        if (!existing) throw new ValidationError('Withdrawal request not found');
         throw new ValidationError(`This withdrawal was already ${existing.status}`);
     }
 
     // If approved, deduct from wallet balance
     if (nextStatus === 'approved') {
-    if (nextStatus === 'approved') {
         const amount = Number(updated.amount || 0);
         if (amount > 0) {
             await FoodDeliveryWallet.findOneAndUpdate(
                 { deliveryPartnerId: updated.deliveryPartnerId?._id || updated.deliveryPartnerId },
-                { 
-                    $inc: { 
+                {
+                    $inc: {
                         balance: -amount,
-                        totalSettled: amount 
-                    } 
+                        totalSettled: amount
+                    }
                 }
             );
         }

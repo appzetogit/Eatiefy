@@ -87,6 +87,15 @@ export default function DeliveryBoyCommission() {
       if (cur.min > prev.max) issues.push(`Gap: ${prev.max}–${cur.min} km is not covered by any slab, so riders earn nothing for it.`)
       else if (cur.min < prev.max) issues.push(`Overlap: ${cur.min}–${prev.max} km is covered by two slabs and paid twice.`)
     }
+    // Without an open-ended slab, km past the last slab's max earn nothing, so every
+    // longer order pays the same as one exactly at that max.
+    if (!active.some((s) => s.max === null)) {
+      const coveredUpTo = Math.max(...active.map((s) => s.max))
+      issues.push(
+        `No slab covers distance beyond ${coveredUpTo} km — riders earn nothing for those km, so a 10 km order pays the same as a ${coveredUpTo} km one. ` +
+        `Add a slab from ${coveredUpTo} km with Max Distance left empty (unlimited) and base payout 0.`
+      )
+    }
     return issues
   }, [commissions])
 
@@ -626,7 +635,9 @@ export default function DeliveryBoyCommission() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex flex-col">
                             <span className="text-sm font-medium text-slate-900">{getDistanceSlabLabel(commission)}</span>
-                            <span className="text-xs text-slate-500">Base payout slab</span>
+                            <span className="text-xs text-slate-500">
+                              {Number(commission.minDistance || 0) === 0 ? "Base payout slab" : "Per-km slab (adds to base)"}
+                            </span>
                           </div>
                         </td>
                       )}
