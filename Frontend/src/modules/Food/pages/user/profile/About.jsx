@@ -125,8 +125,8 @@ export default function About() {
                 <div className="relative">
                   <div className="relative bg-white dark:bg-gray-800 rounded-full p-4 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
                     <img
-                      src={logoUrl || eatiefyLogo}
-                      alt={`${aboutData.appName} Logo`}
+                      src={aboutData.logo || logoUrl || eatiefyLogo}
+                      alt={`${aboutData.appName || companyName || 'Eatiefy'} Logo`}
                       className="h-16 w-16 md:h-20 md:w-20 object-contain rounded-full"
                       onError={(e) => {
                         e.currentTarget.onerror = null
@@ -168,16 +168,16 @@ export default function About() {
                 {aboutData.version ? `Version ${aboutData.version}` : " "}
               </motion.p>
 
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, duration: 0.5 }}
-                className="text-gray-700 dark:text-gray-300 leading-relaxed text-base md:text-lg max-w-2xl mx-auto"
-              >
-                {aboutData.description
-                  ? aboutData.description
-                  : "This page will appear once the admin adds About content."}
-              </motion.p>
+              {aboutData.description ? (
+                <motion.p
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5, duration: 0.5 }}
+                  className="text-gray-700 dark:text-gray-300 leading-relaxed text-base md:text-lg max-w-2xl mx-auto"
+                >
+                  {aboutData.description}
+                </motion.p>
+              ) : null}
             </div>
           </Card>
         </motion.div>
@@ -299,7 +299,7 @@ export default function About() {
           className="text-center mt-8 mb-4"
         >
           <p className="text-sm text-gray-500 dark:text-gray-500">
-            � {new Date().getFullYear()} {companyName}. All rights reserved.
+            &copy; {new Date().getFullYear()} {companyName || 'Eatiefy'}. All rights reserved.
           </p>
         </motion.div>
       </div>

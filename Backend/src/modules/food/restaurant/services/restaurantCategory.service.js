@@ -31,7 +31,7 @@ const getRestaurantContext = async (restaurantId) => {
         throw new ValidationError('Restaurant not found');
     }
 
-    const foodType = restaurant.foodType || (restaurant.pureVegRestaurant ? 'Veg' : 'Mixed');
+    const foodType = restaurant.pureVegRestaurant ? 'Veg' : (restaurant.foodType || 'Mixed');
     return {
         restaurantId: toObjectId(restaurantId),
         zoneId: restaurant.zoneId ? String(restaurant.zoneId) : '',
@@ -82,8 +82,7 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
                     ]
                 },
                 {
-                    restaurantId: context.restaurantId,
-                    $or: APPROVED_CATEGORY_FILTER
+                    restaurantId: context.restaurantId
                 }
             ]
         }
@@ -107,12 +106,21 @@ export async function listRestaurantCategories(restaurantId, query = {}) {
     }
     applyZoneVisibilityFilter(filter.$and, zoneIdRaw);
 
-    if (compact) {
-        if (context.foodType === 'Veg') {
-            filter.$and.push({ foodTypeScope: 'Veg' });
-        } else if (context.foodType === 'Non-Veg') {
-            filter.$and.push({ foodTypeScope: 'Non-Veg' });
+    const requestedScope = typeof query.foodTypeScope === 'string' ? query.foodTypeScope.trim() : '';
+    if (requestedScope && ['Veg', 'Non-Veg', 'Both'].includes(requestedScope)) {
+        if ((context.foodType === 'Veg' || context.pureVegRestaurant) && (requestedScope === 'Non-Veg' || requestedScope.toLowerCase() === 'non-veg')) {
+            filter.$and.push({ _id: null });
+        } else if (context.foodType === 'Non-Veg' && requestedScope === 'Veg') {
+            filter.$and.push({ _id: null });
+        } else {
+            filter.$and.push({ foodTypeScope: requestedScope });
         }
+    } else if (context.foodType === 'Veg' || context.pureVegRestaurant) {
+        // Pure veg restaurants must never see non-veg categories
+        filter.$and.push({ foodTypeScope: { $nin: ['Non-Veg', 'non-veg'] } });
+    } else if (context.foodType === 'Non-Veg') {
+        // Non-veg exclusive restaurants must never see pure veg categories
+        filter.$and.push({ foodTypeScope: { $nin: ['Veg', 'veg'] } });
     }
 
     const queryBuilder = FoodCategory.find(filter)
@@ -312,15 +320,17 @@ export async function createRestaurantCategory(restaurantId, body = {}) {
         sortOrder: Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0,
         restaurantId: context.restaurantId,
         createdByRestaurantId: context.restaurantId,
-        approvalStatus: 'pending',
-        isApproved: false,
+        approvalStatus: 'approved',
+        isApproved: true,
         rejectionReason: '',
         requestedAt: new Date(),
+        approvedAt: new Date(),
         zoneId: context.zoneId && mongoose.Types.ObjectId.isValid(context.zoneId)
             ? new mongoose.Types.ObjectId(context.zoneId)
             : undefined
     });
     await doc.save();
+
     return doc.toObject();
 }
 
@@ -376,20 +386,10 @@ export async function updateRestaurantCategory(restaurantId, id, body = {}) {
     }
 
     doc.createdByRestaurantId = doc.createdByRestaurantId || context.restaurantId;
-
-    // Only a change admins review (name, image, type, diet scope, order) sends the
-    // category back for approval. Switching it on/off is the restaurant's own
-    // availability decision and used to wrongly reset an approved category.
-    const reviewedFields = ['name', 'image', 'type', 'foodTypeScope', 'sortOrder'];
-    const needsReapproval = reviewedFields.some((field) => doc.isModified(field));
-    if (needsReapproval) {
-        doc.approvalStatus = 'pending';
-        doc.isApproved = false;
-        doc.rejectionReason = '';
-        doc.requestedAt = new Date();
-        doc.approvedAt = undefined;
-        doc.rejectedAt = undefined;
-    }
+    // Private restaurant categories do not require approval
+    doc.approvalStatus = 'approved';
+    doc.isApproved = true;
+    doc.approvedAt = doc.approvedAt || new Date();
 
     const activeChanged = doc.isModified('isActive');
     await doc.save();

@@ -283,9 +283,27 @@ export const checkOnboardingStatus = async () => {
 
 
 export const clearOnboardingFromLocalStorage = () => {
-  const key = getOnboardingStorageKey()
-  localStorage.removeItem(key)
-  localStorage.removeItem("restaurant_pendingPhone")
+  try {
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (
+        k &&
+        (k.startsWith("restaurant_onboarding_data") ||
+          k.startsWith("restaurant_pending") ||
+          k === "restaurant_registrationToken" ||
+          k === ONBOARDING_STORAGE_KEY)
+      ) {
+        keysToRemove.push(k)
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k))
+  } catch (e) {
+    debugError("Failed to clear onboarding localStorage:", e)
+  }
+  try {
+    localStorage.setItem("restaurant_onboarding_photos_cleared", "true")
+  } catch (e) {}
 }
 
 export const hasRestaurantStep1Progress = (step1 = {}) => {
@@ -317,11 +335,21 @@ export const hasRestaurantStep1Progress = (step1 = {}) => {
 
 export const clearAllFilesFromDB = async () => {
   try {
-    if (typeof indexedDB === "undefined") return
+    if (typeof indexedDB === "undefined") return Promise.resolve(true)
     const ONBOARDING_FILES_DB = "RestaurantOnboardingFiles"
-    const request = indexedDB.deleteDatabase(ONBOARDING_FILES_DB)
-    request.onerror = (e) => console.error("Database deletion error", e)
+    return new Promise((resolve) => {
+      const request = indexedDB.deleteDatabase(ONBOARDING_FILES_DB)
+      request.onsuccess = () => resolve(true)
+      request.onerror = (e) => {
+        console.error("Database deletion error", e)
+        resolve(false)
+      }
+      request.onblocked = () => {
+        resolve(false)
+      }
+    })
   } catch (err) {
     console.error("Failed to delete IndexedDB database", err)
+    return Promise.resolve(false)
   }
 }

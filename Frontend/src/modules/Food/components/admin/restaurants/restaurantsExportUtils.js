@@ -1,9 +1,31 @@
 // Export utility functions for restaurants
+const resolveDietLabel = (restaurant) => {
+  const r = restaurant?.originalData || restaurant
+  const rawFt = String(r?.foodType || r?.onboarding?.step1?.foodType || "").trim().toLowerCase()
+  if (
+    rawFt === "veg" ||
+    rawFt === "pure-veg" ||
+    rawFt === "pure veg" ||
+    rawFt === "pure-vegan" ||
+    rawFt === "pure vegan" ||
+    r?.pureVegRestaurant === true ||
+    r?.pureVeganRestaurant === true ||
+    r?.onboarding?.step1?.pureVegRestaurant === true
+  ) {
+    return "Pure Veg"
+  }
+  if (rawFt === "non-veg" || rawFt === "non veg" || r?.hasNonVegMenuOnly === true || r?.onboarding?.step1?.foodType === "Non-Veg") {
+    return "Non-Veg"
+  }
+  return "Mixed"
+}
+
 export const exportRestaurantsToExcel = (restaurants, filename = "restaurants") => {
   const headers = [
     "SI",
     "Restaurant ID",
     "Restaurant Name",
+    "Diet Type",
     "Owner Name",
     "Owner Phone",
     "Zone",
@@ -16,6 +38,7 @@ export const exportRestaurantsToExcel = (restaurants, filename = "restaurants") 
     index + 1,
     restaurant.originalData?.restaurantId || restaurant.originalData?._id || restaurant._id || restaurant.id || "N/A",
     restaurant.name || "N/A",
+    resolveDietLabel(restaurant),
     restaurant.ownerName || "N/A",
     restaurant.ownerPhone || "N/A",
     restaurant.zone || "N/A",
@@ -45,6 +68,7 @@ export const exportRestaurantsToPDF = (restaurants, filename = "restaurants") =>
     "SI",
     "Restaurant ID",
     "Restaurant Name",
+    "Diet Type",
     "Owner Name",
     "Owner Phone",
     "Zone",
@@ -57,6 +81,7 @@ export const exportRestaurantsToPDF = (restaurants, filename = "restaurants") =>
     index + 1,
     restaurant.originalData?.restaurantId || restaurant.originalData?._id || restaurant._id || restaurant.id || "N/A",
     restaurant.name || "N/A",
+    resolveDietLabel(restaurant),
     restaurant.ownerName || "N/A",
     restaurant.ownerPhone || "N/A",
     restaurant.zone || "N/A",

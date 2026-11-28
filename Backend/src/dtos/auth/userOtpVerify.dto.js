@@ -15,7 +15,7 @@ const schema = z.object({
   ref: z.string().trim().max(64).optional().or(z.literal("")),
   fcmToken: z.string().optional(),
   platform: z.enum(["web", "mobile"]).optional(),
-  name: z.string().trim().min(2, "Name must be at least 2 characters").max(100).optional(),
+  name: z.string().trim().min(2, "Name must be at least 2 characters").max(40, "Name must be at most 40 characters").optional(),
   confirmAction: z.enum(["restore", "new"]).optional(),
 });
 

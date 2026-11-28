@@ -350,8 +350,14 @@ export const useVoiceSearch = (onResult, onError) => {
             return;
         }
 
+        // Claim the "starting" slot BEFORE the async permission check. Mic buttons
+        // fire both touchstart and click, so a second call used to slip past the
+        // guard during the await and spawn two competing recognizers.
+        isStartingRef.current = true;
+
         const hasPermission = await ensureMicrophonePermission();
         if (!hasPermission) {
+            isStartingRef.current = false;
             const message = isNativeWebView()
                 ? WEBVIEW_MIC_DENIED_MESSAGE
                 : 'Microphone access denied.';

@@ -5,6 +5,7 @@ import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const TABS = [
   { id: "pricing", label: "Pricing Rules" },
@@ -214,6 +215,7 @@ function useServerRows() {
  * by the backend at checkout, and historical payments keep their own price snapshot.
  */
 export default function OnboardingPricing() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   // Deep link support, e.g. the dashboard's Onboarding Earning box opens ?tab=payments.
   const [tab, setTab] = useState(() => {
     try {
@@ -584,10 +586,12 @@ export default function OnboardingPricing() {
               A zone rule wins over the “All zones” rule. Without either, restaurants join without
               an onboarding fee.
             </p>
+            {canCreate && (
             <Button onClick={() => openRuleForm()} className="gap-1.5">
               <Plus className="h-4 w-4" />
               Add pricing rule
             </Button>
+            )}
           </div>
 
           {showRuleForm && (
@@ -712,6 +716,7 @@ export default function OnboardingPricing() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1.5">
+                            {canEdit && (
                             <button
                               type="button"
                               onClick={() => openRuleForm(rule)}
@@ -721,6 +726,8 @@ export default function OnboardingPricing() {
                             >
                               <Edit className="h-4 w-4" />
                             </button>
+                            )}
+                            {canEdit && (
                             <button
                               type="button"
                               onClick={() => toggleRule(rule)}
@@ -730,6 +737,8 @@ export default function OnboardingPricing() {
                               {busyAction === "toggle" && <Loader2 className="h-3 w-3 animate-spin" />}
                               {rule.isActive ? "Disable" : "Enable"}
                             </button>
+                            )}
+                            {canDelete && (
                             <button
                               type="button"
                               onClick={() => deleteRule(rule)}
@@ -743,6 +752,7 @@ export default function OnboardingPricing() {
                                 <Trash2 className="h-4 w-4" />
                               )}
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -763,10 +773,12 @@ export default function OnboardingPricing() {
               Slots are consumed only by verified payments; failed or cancelled attempts are
               released automatically.
             </p>
+            {canCreate && (
             <Button onClick={() => openOfferForm()} className="gap-1.5">
               <Plus className="h-4 w-4" />
               Add offer
             </Button>
+            )}
           </div>
 
           {showOfferForm && (
@@ -952,6 +964,7 @@ export default function OnboardingPricing() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1.5">
+                            {canEdit && (
                             <button
                               type="button"
                               onClick={() => openOfferForm(offer)}
@@ -961,6 +974,8 @@ export default function OnboardingPricing() {
                             >
                               <Edit className="h-4 w-4" />
                             </button>
+                            )}
+                            {canEdit && (
                             <button
                               type="button"
                               onClick={() => toggleOffer(offer)}
@@ -970,6 +985,8 @@ export default function OnboardingPricing() {
                               {busyAction === "toggle" && <Loader2 className="h-3 w-3 animate-spin" />}
                               {offer.isActive ? "Disable" : "Enable"}
                             </button>
+                            )}
+                            {canDelete && (
                             <button
                               type="button"
                               onClick={() => deleteOffer(offer)}
@@ -983,6 +1000,7 @@ export default function OnboardingPricing() {
                                 <Trash2 className="h-4 w-4" />
                               )}
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>

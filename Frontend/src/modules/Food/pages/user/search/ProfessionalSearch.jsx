@@ -177,7 +177,7 @@ export default function ProfessionalSearch() {
       })
 
       const all = res.data?.success ? (res.data.data?.restaurants || []) : []
-      const restaurantsRaw = all.filter(r => r.matchType === 'restaurant' || !r.matchType)
+      const restaurantsRaw = all.filter(r => (r.matchType === 'restaurant' || !r.matchType) && r.hasDishes !== false && (r.totalMenuItems === undefined || r.totalMenuItems > 0))
       const dishesRaw = all.filter(r => r.matchType === 'food')
 
       const restaurants = filterRestaurantsForVegMode(restaurantsRaw, {

@@ -3,6 +3,7 @@ import { config } from './env.js';
 import { logger } from '../utils/logger.js';
 import { verifyAccessToken } from '../core/auth/token.util.js';
 import { getFirebaseDB } from './firebase.js';
+import { isAllowedOrigin } from './cors.js';
 
 let io = null;
 
@@ -32,6 +33,7 @@ const roomNames = {
     restaurant: (id) => `restaurant:${String(id)}`,
     user: (id) => `user:${String(id)}`,
     delivery: (id) => `delivery:${String(id)}`,
+    admins: () => 'admins:all',
     tracking: (orderId) => `tracking:${String(orderId)}`
 };
 
@@ -44,7 +46,15 @@ const roomNames = {
 export const initSocket = async (server) => {
     io = new Server(server, {
         cors: {
-            origin: config.socketCorsOrigin,
+            origin: (origin, callback) => {
+                if (isAllowedOrigin(origin)) {
+                    callback(null, true);
+                    return;
+                }
+                logger.warn(`[Socket.IO CORS] Blocked origin: ${origin}`);
+                callback(new Error('CORS origin not allowed'));
+            },
+            credentials: true,
             methods: ['GET', 'POST']
         }
     });
@@ -119,6 +129,14 @@ export const initSocket = async (server) => {
         if (userId && role) {
             if (role === 'RESTAURANT') socket.join(roomNames.restaurant(userId));
             if (role === 'USER') socket.join(roomNames.user(userId));
+            // Every signed-in admin / sub-admin receives live panel alerts
+            // (e.g. a new delivery partner waiting for approval).
+            if (role === 'ADMIN' || role === 'SUB_ADMIN') {
+                socket.join(roomNames.admins());
+                // Fresh counts right away, so a panel that just (re)connected is
+                // current without waiting for the next broadcast tick.
+                void sendAdminBadgesTo(socket);
+            }
             if (role === 'DELIVERY_PARTNER') {
                 // Private room only. The fleet-wide 'all_delivery' room this
                 // used to also join was the one channel through which a rider
@@ -132,6 +150,14 @@ export const initSocket = async (server) => {
                 });
             }
         }
+
+        // Explicit join for admin orders channel
+        socket.on('join-admin-orders', () => {
+            if (socket.user?.role === 'ADMIN' || socket.user?.role === 'SUB_ADMIN') {
+                socket.join(roomNames.admins());
+                socket.emit('admin-orders-room-joined', { room: roomNames.admins() });
+            }
+        });
 
         // Explicit join (used by existing restaurant client hook).
         socket.on('join-restaurant', (restaurantId) => {
@@ -353,8 +379,49 @@ export const initSocket = async (server) => {
         });
     });
 
+    startAdminBadgeBroadcaster();
+
     logger.info('Socket.IO infrastructure initialized');
     return io;
+};
+
+// ─── Live admin panel updates ───────────────────────────────────────────────
+// Every admin notification / pending-count change reaches an open panel through
+// here, so nothing waits for a manual refresh. Not queued anywhere: BullMQ is not
+// involved, and the broadcaster runs inside the API process itself.
+const ADMIN_BADGE_TICK_MS = 8000;
+let lastAdminBadgesJson = '';
+let adminBadgeTimer = null;
+
+const loadAdminBadges = async () => {
+    const { getSidebarBadges } = await import('../modules/food/admin/services/admin.service.js');
+    return getSidebarBadges();
+};
+
+const sendAdminBadgesTo = async (socket) => {
+    try {
+        socket.emit('admin_badges_update', { counts: await loadAdminBadges(), initial: true });
+    } catch (err) {
+        logger.warn(`[Socket] initial admin badges failed: ${err?.message || err}`);
+    }
+};
+
+const startAdminBadgeBroadcaster = () => {
+    if (adminBadgeTimer) return;
+    adminBadgeTimer = setInterval(async () => {
+        try {
+            const adminRoom = io?.sockets?.adapter?.rooms?.get(roomNames.admins());
+            if (!adminRoom || adminRoom.size === 0) return; // nobody to tell
+            const counts = await loadAdminBadges();
+            const json = JSON.stringify(counts);
+            if (json === lastAdminBadgesJson) return;
+            lastAdminBadgesJson = json;
+            io.to(roomNames.admins()).emit('admin_badges_update', { counts });
+        } catch (err) {
+            logger.warn(`[Socket] admin badge broadcast failed: ${err?.message || err}`);
+        }
+    }, ADMIN_BADGE_TICK_MS);
+    adminBadgeTimer.unref?.();
 };
 
 /**
@@ -415,3 +482,20 @@ export const getIO = () => {
 };
 
 export const rooms = roomNames;
+
+/**
+ * Best-effort live alert to every connected admin panel. Never throws: the
+ * registration / approval flow that calls this must not fail because a socket
+ * could not be reached.
+ */
+export const emitToAdmins = (event, payload = {}) => {
+    try {
+        const server = io;
+        if (!server) return false;
+        server.to(roomNames.admins()).emit(event, payload);
+        return true;
+    } catch (err) {
+        logger.warn(`[Socket] emitToAdmins(${event}) failed: ${err?.message || err}`);
+        return false;
+    }
+};

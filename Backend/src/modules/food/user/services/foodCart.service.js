@@ -3,6 +3,7 @@ import { FoodCart } from '../models/foodCart.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { getInactiveCategoryIds, isFoodCategoryInactive } from '../../shared/inactiveCategories.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
+import { FoodAddon } from '../../restaurant/models/foodAddon.model.js';
 import { ValidationError, NotFoundError } from '../../../../core/auth/errors.js';
 import {
   applyOtherPriceToFood,
@@ -11,6 +12,46 @@ import {
 import { serializeFoodVariants } from '../../admin/services/foodVariant.service.js';
 
 const MAX_QTY = 99;
+
+/**
+ * Add-ons ("Complete your meal with") live in their own collection, not in
+ * FoodItem, but the cart adds them as ordinary lines. Shape an add-on like a
+ * menu item so the cart/order pipeline can treat it uniformly.
+ */
+export function addonToItemDoc(addon) {
+  if (!addon) return null;
+  const p = addon.published || null;
+  const live =
+    addon.approvalStatus === 'approved' &&
+    addon.isDeleted !== true &&
+    addon.isAvailable !== false &&
+    p;
+  return {
+    _id: addon._id,
+    restaurantId: addon.restaurantId,
+    name: p?.name || '',
+    price: Number(p?.price) || 0,
+    image: p?.image || '',
+    images: Array.isArray(p?.images) ? p.images : [],
+    foodType: 'Veg',
+    isVeg: true,
+    variants: [],
+    categoryId: null,
+    categoryName: '',
+    approvalStatus: live ? 'approved' : 'rejected',
+    isAvailable: Boolean(live),
+    isAddon: true,
+  };
+}
+
+export async function loadAddonItemDocs(ids = []) {
+  const valid = ids.filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+  if (!valid.length) return [];
+  const addons = await FoodAddon.find({ _id: { $in: valid } })
+    .select('restaurantId published approvalStatus isAvailable isDeleted')
+    .lean();
+  return addons.map(addonToItemDoc);
+}
 
 const toObjectId = (value) => {
   if (!value) return null;
@@ -42,7 +83,11 @@ async function loadItemDoc(itemId) {
   const item = await FoodItem.findById(oid)
     .select('restaurantId name price adminPrice otherPrice priceOnOtherPlatforms image images foodType isAvailable approvalStatus variants categoryId categoryName')
     .lean();
-  if (!item) throw new NotFoundError('Item not found');
+  if (!item) {
+    const [addonDoc] = await loadAddonItemDocs([oid]);
+    if (addonDoc) return addonDoc;
+    throw new NotFoundError('Item not found');
+  }
   item.categoryInactive = await isFoodCategoryInactive(item);
   return item;
 }
@@ -216,6 +261,14 @@ export async function hydrateFoodCart(cartDoc) {
       .lean()
     : [];
   const docMap = new Map(docs.map((d) => [String(d._id), d]));
+  // Lines whose id isn't a menu item may be add-ons.
+  const unresolvedIds = itemIds.filter((id) => !docMap.has(String(id)));
+  if (unresolvedIds.length) {
+    for (const addonDoc of await loadAddonItemDocs(unresolvedIds)) {
+      docMap.set(String(addonDoc._id), addonDoc);
+      docs.push(addonDoc);
+    }
+  }
 
   let restaurant = null;
   if (cartDoc.restaurantId) {

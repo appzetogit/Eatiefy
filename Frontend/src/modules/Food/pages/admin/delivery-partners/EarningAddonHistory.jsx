@@ -24,12 +24,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function EarningAddonHistory() {
+  const { canEdit } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -72,9 +74,18 @@ export default function EarningAddonHistory() {
     fetchHistory()
   }, [currentPage, pageSize, debouncedSearch])
 
-  const fetchHistory = async () => {
+  // New completions are added by the server as riders deliver orders, so keep the list
+  // fresh while the page is open (quietly: no loading flash, and only for a visible tab).
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") fetchHistory({ silent: true })
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [currentPage, pageSize, debouncedSearch])
+
+  const fetchHistory = async ({ silent = false } = {}) => {
     try {
-      setIsLoading(true)
+      if (!silent) setIsLoading(true)
       const response = await adminAPI.getEarningAddonHistory({
         page: currentPage,
         limit: pageSize,
@@ -92,6 +103,8 @@ export default function EarningAddonHistory() {
       }
     } catch (error) {
       debugError("Error fetching earning addon history:", error)
+      // A failed background refresh keeps the list as it is instead of blanking it.
+      if (silent) return
       const errorMessage = error.response?.data?.message || error.message || "Failed to fetch earning addon history"
       toast.error(errorMessage)
       setHistory([])
@@ -247,6 +260,7 @@ export default function EarningAddonHistory() {
             </div>
 
             <div className="flex items-center gap-3">
+              {canEdit && (
               <button
                 onClick={handleCheckAllCompletions}
                 disabled={isCheckingCompletions}
@@ -256,6 +270,7 @@ export default function EarningAddonHistory() {
                 <RefreshCw className={`w-4 h-4 ${isCheckingCompletions ? 'animate-spin' : ''}`} />
                 <span>{isCheckingCompletions ? 'Checking...' : 'Check Completions'}</span>
               </button>
+              )}
               <div className="relative flex-1 sm:flex-initial min-w-[250px]">
                 <input
                   type="text"
@@ -458,6 +473,7 @@ export default function EarningAddonHistory() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               {item.status === 'pending' && (
+                                canEdit && (
                                 <button
                                   onClick={() => handleOpenCreditDialog(item)}
                                   className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-all"
@@ -465,8 +481,10 @@ export default function EarningAddonHistory() {
                                 >
                                   Credit
                                 </button>
+                                )
                               )}
                               {item.status === 'pending' && (
+                                canEdit && (
                                 <button
                                   onClick={() => handleCancel(item._id)}
                                   className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
@@ -474,6 +492,7 @@ export default function EarningAddonHistory() {
                                 >
                                   <XCircle className="w-4 h-4 text-red-500" />
                                 </button>
+                                )
                               )}
                             </div>
                           </td>
@@ -608,8 +627,8 @@ export default function EarningAddonHistory() {
 
       {/* Settings Dialog */}
       <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent className="max-w-md bg-white">
-          <DialogHeader>
+        <DialogContent className="max-w-md bg-white p-6 sm:p-8">
+          <DialogHeader className="pr-10 mb-4">
             <DialogTitle className="flex items-center gap-2">
               <Settings className="w-5 h-5" />
               Table Settings

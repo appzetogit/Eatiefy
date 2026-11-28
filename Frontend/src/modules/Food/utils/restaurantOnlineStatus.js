@@ -94,11 +94,30 @@ export const getNextOperatingTransitionAt = () => lastKnownTransitionAt
  * `refreshCurrentRestaurant` deliberately bypasses the 15s profile cache, so a
  * status change made moments ago is never masked by a stale cached response.
  */
-export const fetchAuthoritativeOnlineStatus = async () => {
+let statusRequestSeq = 0
+let latestStatusRequest = null
+
+/**
+ * Concurrent callers (Home mounting while a timings save is still finishing,
+ * the status toggle, a tab refocus) each fire a read. Responses can come back
+ * out of order, and a slower, older read used to publish its stale value last.
+ * Only the newest request may publish; older ones just resolve to its result.
+ */
+export const fetchAuthoritativeOnlineStatus = () => {
+  const seq = ++statusRequestSeq
+  const request = readAuthoritativeOnlineStatus(seq)
+  latestStatusRequest = request
+  return request
+}
+
+const readAuthoritativeOnlineStatus = async (seq) => {
   const [profileRes, timingsRes] = await Promise.allSettled([
     restaurantAPI.refreshCurrentRestaurant(),
     restaurantAPI.getOutletTimings(),
   ])
+
+  // A newer read started while this one was in flight: let it decide.
+  if (seq !== statusRequestSeq) return latestStatusRequest
 
   if (profileRes.status !== "fulfilled") {
     // Network trouble: keep showing what we last knew rather than flipping to

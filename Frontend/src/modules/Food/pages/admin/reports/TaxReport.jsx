@@ -176,6 +176,21 @@ export default function TaxReport() {
       alert("No data to export")
       return
     }
+
+    const cleanAmount = (val) => {
+      if (val === null || val === undefined) return "0.00"
+      if (typeof val === "number") return val.toFixed(2)
+      const str = String(val).replace(/^[^\d.-]+/, "").replace(/,/g, "").trim()
+      const num = Number(str)
+      return isNaN(num) ? String(val) : num.toFixed(2)
+    }
+
+    const exportData = reports.map((report) => ({
+      ...report,
+      totalIncome: cleanAmount(report.totalIncomeRaw ?? report.totalIncome),
+      totalTax: cleanAmount(report.totalTaxRaw ?? report.totalTax),
+    }))
+
     const headers = [
       { key: "sl", label: "SI" },
       { key: "incomeSource", label: "Income Source" },
@@ -183,10 +198,10 @@ export default function TaxReport() {
       { key: "totalTax", label: "Total Tax" },
     ]
     switch (format) {
-      case "csv": exportReportsToCSV(reports, headers, "tax_report"); break
-      case "excel": exportReportsToExcel(reports, headers, "tax_report"); break
+      case "csv": exportReportsToCSV(exportData, headers, "tax_report"); break
+      case "excel": exportReportsToExcel(exportData, headers, "tax_report"); break
       case "pdf": exportReportsToPDF(reports, headers, "tax_report", "Tax Report"); break
-      case "json": exportReportsToJSON(reports, "tax_report"); break
+      case "json": exportReportsToJSON(exportData, "tax_report"); break
     }
   }
 

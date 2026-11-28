@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { Clock3, ShieldCheck, AlertTriangle, X } from "lucide-react"
+import { Clock3, ShieldCheck, AlertTriangle, X, CheckCircle2 } from "lucide-react"
+import { toast } from "sonner"
+import { deliveryAPI } from "@food/api"
 import { clearModuleAuth } from "@food/utils/auth"
 import {
   enablePendingVerificationPush,
@@ -8,6 +10,7 @@ import {
   isNativeAppWebView,
   persistModuleFcmToken,
   setupPendingVerificationPushListeners,
+  startPendingPushAutoSync,
   syncNativeAppPushToken,
   syncPendingPartnerFcmQuick,
 } from "@food/utils/firebaseMessaging"
@@ -49,6 +52,12 @@ export default function VerificationPending() {
   }, [location.state?.rejectionReason])
 
   const parsedMessage = useMemo(() => {
+    if (liveRejection.message || liveRejection.reason) {
+      return {
+        text: liveRejection.message || "Your delivery partner application has been rejected. Please contact support.",
+        reason: liveRejection.reason || "",
+      }
+    }
     if (!localMessage) {
       return {
         text: "Your delivery partner application has been rejected. Please contact support.",
@@ -62,9 +71,15 @@ export default function VerificationPending() {
     }
 
     return { text: localMessage, reason: rejectionReason || "" }
-  }, [localMessage, rejectionReason])
+  }, [localMessage, rejectionReason, liveRejection])
 
-  const isRejected = localStatus === "rejected"
+  // Live status: the screen used to trust whatever was in sessionStorage when it
+  // opened, so an approval (or rejection) made later was never noticed unless the
+  // partner got a push - and a device with no push token never did.
+  const [liveStatus, setLiveStatus] = useState(null)
+  const [liveRejection, setLiveRejection] = useState({ message: "", reason: "" })
+  const isApproved = liveStatus === "approved"
+  const isRejected = !isApproved && (liveStatus === "rejected" || (liveStatus === null && localStatus === "rejected"))
   const [pushPermission, setPushPermission] = useState(() => getWebNotificationPermission())
   const [enablingPush, setEnablingPush] = useState(false)
 
@@ -94,10 +109,82 @@ export default function VerificationPending() {
 
     void syncPushToken()
 
+    // Keep retrying until the token is saved, so the approval push can reach this device.
+    const stopAutoSync = startPendingPushAutoSync("delivery", pendingPhone)
+
     return () => {
       cancelled = true
+      stopAutoSync()
     }
   }, [pendingPhone])
+
+  const announcedApprovalRef = useRef(false)
+
+  // Poll the approval status while the screen is open; also re-check when the
+  // app comes back to the foreground (the normal case: the partner switched away
+  // and is returning because they were told, or just checking).
+  useEffect(() => {
+    const digits = String(pendingPhone || "").replace(/\D/g, "").slice(-10)
+    if (digits.length !== 10 || localStatus === "rejected" || isApproved) return undefined
+
+    let cancelled = false
+    const check = async () => {
+      if (cancelled || document.visibilityState === "hidden") return
+      try {
+        const res = await deliveryAPI.getVerificationStatus(digits)
+        const data = res?.data?.data || res?.data || {}
+        const status = String(data.status || "").toLowerCase()
+        if (cancelled) return
+
+        if (status === "approved") {
+          setLiveStatus("approved")
+          if (!announcedApprovalRef.current) {
+            announcedApprovalRef.current = true
+            toast.success("Your delivery account has been approved! Please log in to start.")
+            try {
+              navigator.vibrate?.([200, 100, 200])
+              if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+                new Notification("Account approved!", {
+                  body: "Your Eatiefy delivery partner account is approved. Log in to go online.",
+                })
+              }
+            } catch {
+              /* feedback is best-effort */
+            }
+          }
+        } else if (status === "rejected") {
+          const reason = data.rejectionReason ? String(data.rejectionReason) : ""
+          setLiveStatus("rejected")
+          setLiveRejection({
+            message: "Your delivery partner application has been rejected. Please contact support.",
+            reason,
+          })
+          try {
+            sessionStorage.setItem("delivery_pendingStatus", "rejected")
+            if (reason) sessionStorage.setItem("delivery_pendingRejectionReason", reason)
+          } catch {
+            /* sessionStorage unavailable */
+          }
+        }
+      } catch {
+        // Keep the pending screen as-is; the next tick retries.
+      }
+    }
+
+    void check()
+    const interval = setInterval(check, 5000)
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check()
+    }
+    window.addEventListener("focus", onVisible)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+      window.removeEventListener("focus", onVisible)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [pendingPhone, localStatus, isApproved])
 
   const handleEnablePush = async () => {
     if (!pendingPhone || enablingPush) return
@@ -156,6 +243,15 @@ export default function VerificationPending() {
     >
       <div className="mx-auto flex w-full max-w-md min-h-[calc(100dvh-2rem)] flex-col justify-center py-2 sm:py-0">
         <div className="w-full rounded-[20px] sm:rounded-[28px] border border-slate-200 bg-white p-5 sm:p-8 shadow-[0_24px_70px_rgba(14,75,156,0.08)]">
+          {isApproved ? (
+            <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4" role="status">
+              <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" />
+              <div className="text-sm text-emerald-900">
+                <p className="font-bold">Your account is approved!</p>
+                <p className="mt-1">Log in with your phone number to go online and start receiving orders.</p>
+              </div>
+            </div>
+          ) : null}
           <div className="mb-4 sm:mb-6 flex items-center justify-center">
             {isRejected ? (
               <div className="flex items-center justify-center my-2 select-none">
@@ -273,11 +369,11 @@ export default function VerificationPending() {
                     disabled={enablingPush}
                     onClick={handleEnablePush}
                   >
-                    {enablingPush ? "Enabling..." : "Allow Mail Notifications"}
+                    {enablingPush ? "Enabling..." : "Enable Notifications"}
                   </button>
                 ) : null}
                 <button type="button" className={DELIVERY_PRIMARY_BTN} onClick={handleBackToLogin}>
-                  Back to login
+                  {isApproved ? "Continue to login" : "Back to login"}
                 </button>
               </>
             )}

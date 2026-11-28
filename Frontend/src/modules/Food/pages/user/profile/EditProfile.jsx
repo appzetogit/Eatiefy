@@ -41,6 +41,8 @@ import dayjs from 'dayjs'
 const debugLog = (...args) => { }
 const debugWarn = (...args) => { }
 const debugError = (...args) => { }
+const NAME_MIN_LENGTH = 2
+const NAME_MAX_LENGTH = 40
 const EDIT_PROFILE_DRAFT_KEY = "user_edit_profile_draft"
 
 // Gender options
@@ -78,9 +80,22 @@ const saveProfileToStorage = (data) => {
 const normalizePhoneToTenDigits = (value) =>
   String(value || "").replace(/\D/g, "").slice(-10)
 
+// Cleans what the user types / pastes / autofills into the mobile field. A
+// pasted "+91 98765 43210", "919876543210" or "09876543210" used to be cut to
+// its first 10 digits ("9198765432"), keeping the country code and losing the
+// real number's tail. Short input (typing in progress) is left untouched.
+const sanitizeMobileInput = (value) => {
+  let digits = String(value || "").replace(/\D/g, "")
+  if (digits.length > 10) {
+    if (digits.startsWith("91") && digits.length >= 12) digits = digits.slice(2)
+    else if (digits.startsWith("0")) digits = digits.replace(/^0+/, "")
+  }
+  return digits.slice(0, 10)
+}
+
 const buildFormDataFromProfile = (profile = {}) => ({
   name: profile.name || "",
-  mobile: normalizePhoneToTenDigits(profile.mobile || profile.phone || ""),
+  mobile: sanitizeMobileInput(profile.mobile || profile.phone || ""),
   email: profile.email || "",
   dateOfBirth: profile.dateOfBirth
     ? (typeof profile.dateOfBirth === 'string'
@@ -170,9 +185,17 @@ export default function EditProfile() {
     return EMAIL_REGEX.test(value) ? "" : "Please enter a valid email"
   }
 
+  const validateName = (value) => {
+    const v = String(value || "").trim()
+    if (!v) return "Name is required"
+    if (v.length < NAME_MIN_LENGTH) return `Name must be at least ${NAME_MIN_LENGTH} characters`
+    return ""
+  }
+
   const validateMobile = (value) => {
     if (!value) return ""
-    return /^\d{10}$/.test(value) ? "" : "Mobile number must be 10 digits"
+    if (!/^\d{10}$/.test(value)) return "Mobile number must be 10 digits"
+    return /^[6-9]/.test(value) ? "" : "Enter a valid Indian mobile number (starts with 6-9)"
   }
 
   const validateDateOfBirth = (value) => {
@@ -187,9 +210,10 @@ export default function EditProfile() {
     let errorMessage = ""
 
     if (field === "name") {
-      normalizedValue = String(value || "").replace(/[^a-zA-Z\s]/g, "")
+      normalizedValue = String(value || "").replace(/[^a-zA-Z\s]/g, "").replace(/\s{2,}/g, " ").slice(0, NAME_MAX_LENGTH)
+      errorMessage = validateName(normalizedValue)
     } else if (field === "mobile") {
-      normalizedValue = String(value || "").replace(/\D/g, "").slice(0, 10)
+      normalizedValue = sanitizeMobileInput(value)
       errorMessage = validateMobile(normalizedValue)
     } else if (field === "email") {
       normalizedValue = String(value || "").trim()
@@ -203,7 +227,7 @@ export default function EditProfile() {
       [field]: normalizedValue
     }))
 
-    if (field === "mobile" || field === "email" || field === "dateOfBirth") {
+    if (field === "name" || field === "mobile" || field === "email" || field === "dateOfBirth") {
       setFieldErrors((prev) => ({
         ...prev,
         [field]: errorMessage
@@ -226,6 +250,7 @@ export default function EditProfile() {
       return
     }
 
+    const preparingToastId = toast.loading("Preparing photo...")
     try {
       const prepared = await compressImageForUpload(file, {
         ...PROFILE_PRESET,
@@ -237,6 +262,8 @@ export default function EditProfile() {
     } catch (err) {
       console.error("Could not prepare selected image:", err)
       toast.error("Could not read this image. Please try another photo.")
+    } finally {
+      toast.dismiss(preparingToastId)
     }
   }
 
@@ -279,6 +306,7 @@ export default function EditProfile() {
 
   const validateForm = () => {
     const nextErrors = {
+      name: validateName(formData.name),
       mobile: !formData.mobile
         ? "Mobile number is required"
         : validateMobile(formData.mobile),
@@ -528,8 +556,12 @@ export default function EditProfile() {
                 {(imagePreview && typeof imagePreview === "string" && imagePreview.trim() !== "" && imagePreview !== "null" && imagePreview !== "undefined") ? (
                   <img
                     src={normalizeImageUrl(imagePreview)}
-                    alt={formData.name || 'User'}
-                    className="w-full h-full object-cover rounded-full"
+                    alt="Profile photo"
+                    className="w-full h-full object-cover rounded-full text-[0px]"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null
+                      e.currentTarget.src = "/assets/images/profile_avatar.webp"
+                    }}
                   />
                 ) : (
                   <img
@@ -543,8 +575,9 @@ export default function EditProfile() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
+                      type="button"
                       disabled={isUploadingImage}
-                      className="absolute bottom-1 right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border-[1.5px] border-gray-100 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="absolute -bottom-1 -right-1 z-30 w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-md border-[1.5px] border-gray-100 hover:bg-gray-50 transition-colors touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isUploadingImage ? (
                         <Loader2 className="h-4 w-4 text-[#1F6B45] animate-spin" />
@@ -566,7 +599,7 @@ export default function EditProfile() {
                       <span>Delete Photo</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={handleProfileImageAction}
+                      onSelect={handleProfileImageAction}
                       className="cursor-pointer text-[15.5px] font-medium py-3.5 px-4 rounded-[20px] bg-[#E5E7EB] dark:bg-[#333] text-gray-900 dark:text-gray-100 focus:bg-[#D1D5DB] dark:focus:bg-[#444] hover:bg-[#D1D5DB] dark:hover:bg-[#444] outline-none flex justify-center tracking-wide shadow-sm"
                     >
                       <span>Change photo</span>
@@ -575,9 +608,10 @@ export default function EditProfile() {
                 </DropdownMenu>
               ) : (
                 <button
+                  type="button"
                   onClick={handleProfileImageAction}
                   disabled={isUploadingImage}
-                  className="absolute bottom-1 right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md border-[1.5px] border-gray-100 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="absolute -bottom-1 -right-1 z-30 w-11 h-11 bg-white rounded-full flex items-center justify-center shadow-md border-[1.5px] border-gray-100 hover:bg-gray-50 transition-colors touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUploadingImage ? (
                     <Loader2 className="h-4 w-4 text-[#1F6B45] animate-spin" />
@@ -591,7 +625,9 @@ export default function EditProfile() {
                 type="file"
                 accept="image/*"
                 onChange={handleImageSelect}
-                className="hidden"
+                tabIndex={-1}
+                aria-hidden="true"
+                className="sr-only"
               />
             </div>
           </div>
@@ -607,16 +643,21 @@ export default function EditProfile() {
                     id="name"
                     type="text"
                     value={formData.name}
+                    maxLength={NAME_MAX_LENGTH}
                     onChange={(e) => handleChange('name', e.target.value)}
-                    className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1"
+                    className="w-full min-w-0 flex-1 bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 truncate"
                   />
                   {formData.name && (
-                    <button type="button" onClick={() => handleClear('name')} className="text-gray-400 hover:text-gray-600">
+                    <button type="button" onClick={() => handleClear('name')} className="shrink-0 ml-2 text-gray-400 hover:text-gray-600">
                       <X className="h-4 w-4" />
                     </button>
                   )}
                 </div>
               </fieldset>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-red-600">{fieldErrors.name || ""}</span>
+                <span className="text-xs text-gray-400">{String(formData.name || "").length}/{NAME_MAX_LENGTH}</span>
+              </div>
             </div>
 
             {/* Mobile Field */}
@@ -630,10 +671,10 @@ export default function EditProfile() {
                     type="tel"
                     inputMode="numeric"
                     autoComplete="tel"
-                    maxLength={10}
+                    maxLength={16}
                     value={formData.mobile}
                     onChange={(e) => handleChange('mobile', e.target.value)}
-                    placeholder="Enter 10-digit mobile number"
+                    placeholder="Enter 10-digit mobile number (without +91)"
                     className="w-full bg-transparent border-none outline-none text-gray-800 dark:text-white text-[16px] font-medium pb-1 placeholder:text-gray-400"
                   />
                   <button

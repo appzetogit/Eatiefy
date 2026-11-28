@@ -39,6 +39,8 @@ const STABLE_KEYS_BY_PATH = {
   "/admin/food/orders/payment-failed": "orders",
   "/admin/food/orders/refunded": "orders",
   "/admin/food/orders/offline-payments": "orders",
+  "/admin/food/refund-requests": "orders",
+  "/admin/food/order-refunds": "orders",
   "/admin/food/order-detect-delivery": "order_detect_delivery",
   "/admin/food/coupons": "restaurant_coupons_offers",
   "/admin/food/customers": "customers",
@@ -69,7 +71,9 @@ const STABLE_KEYS_BY_PATH = {
   "/admin/food/restaurant-report": "restaurant_report",
   "/admin/food/customer-report/feedback-experience": "feedback_experience",
   "/admin/food/restaurant-withdraws": "restaurant_withdraws",
+  "/admin/food/restaurant-wallet": "restaurant_wallet",
   "/admin/food/hero-banner-management": "landing_page_management",
+  "/admin/food/promotional-banner": "landing_page_management",
   "/admin/food/dining-management": "dining_banners",
   "/admin/food/dining-list": "dining_list",
   "/admin/food/dining-requests": "dining_category_request",
@@ -115,8 +119,10 @@ function pushModule(modules, seenKeys, label, path) {
   if (key === "orders") {
     if (seenKeys.has("orders")) {
       const existing = modules.find((m) => m.key === "orders")
-      if (existing && !existing.pathPrefixes.includes("/admin/food/orders")) {
-        existing.pathPrefixes.push("/admin/food/orders")
+      if (existing) {
+        if (!existing.pathPrefixes.includes("/admin/food/orders")) existing.pathPrefixes.push("/admin/food/orders")
+        if (!existing.pathPrefixes.includes("/admin/food/refund-requests")) existing.pathPrefixes.push("/admin/food/refund-requests")
+        if (!existing.pathPrefixes.includes("/admin/food/order-refunds")) existing.pathPrefixes.push("/admin/food/order-refunds")
       }
       return
     }
@@ -124,7 +130,26 @@ function pushModule(modules, seenKeys, label, path) {
     modules.push({
       key: "orders",
       label: "Orders",
-      pathPrefixes: ["/admin/food/orders"],
+      pathPrefixes: ["/admin/food/orders", "/admin/food/refund-requests", "/admin/food/order-refunds"],
+    })
+    return
+  }
+
+  // Group landing page / promotional banner links
+  if (key === "landing_page_management") {
+    if (seenKeys.has("landing_page_management")) {
+      const existing = modules.find((m) => m.key === "landing_page_management")
+      if (existing) {
+        if (!existing.pathPrefixes.includes("/admin/food/hero-banner-management")) existing.pathPrefixes.push("/admin/food/hero-banner-management")
+        if (!existing.pathPrefixes.includes("/admin/food/promotional-banner")) existing.pathPrefixes.push("/admin/food/promotional-banner")
+      }
+      return
+    }
+    seenKeys.add("landing_page_management")
+    modules.push({
+      key: "landing_page_management",
+      label: String(label).trim(),
+      pathPrefixes: ["/admin/food/hero-banner-management", "/admin/food/promotional-banner"],
     })
     return
   }
@@ -249,18 +274,22 @@ export function canAccessPath(user, pathname) {
  * - view: true if view OR any write flag (so writers can open the page)
  * - create/edit/delete: must be explicitly granted (view alone is never enough)
  */
-export function hasPermission(user, pathname, action = "view") {
+export function hasPermission(user, pathnameOrKey, action = "view") {
   if (!user) return false
   if (isFullAdmin(user)) return true
   if (!isSubAdmin(user)) return false
 
-  const path = String(pathname || "")
-  if (path.includes("/admin/food/profile") || path.includes("/admin/food/settings")) {
+  const target = String(pathnameOrKey || "")
+  if (target.includes("/admin/food/profile") || target.includes("/admin/food/settings")) {
     return true
   }
-  if (path.includes("/admin/food/sub-admins")) return false
+  if (target.includes("/admin/food/sub-admins") || target === "sub_admins") return false
 
-  const key = findModuleKeyForPath(pathname)
+  // Direct module key check or path prefix resolution
+  let key = target
+  if (!user.permissions?.[key]) {
+    key = findModuleKeyForPath(target)
+  }
   if (!key) return false
   const perms = user.permissions?.[key]
   if (!perms) return false
@@ -322,3 +351,5 @@ export function filterSidebarMenuByPermissions(menu, user) {
     })
     .filter(Boolean)
 }
+
+export { useAdminPermissions } from "@food/hooks/useAdminPermissions"

@@ -28,6 +28,7 @@ import { FoodOrder } from '../../orders/models/order.model.js';
 import { FoodRestaurantOutletTimings } from '../models/outletTimings.model.js';
 import { EATIEFY_99_PRICE, buildEatiefy99CandidateFilter, selectEatiefy99Foods } from '../utils/eatiefy99.js';
 import { buildActiveCategoryFoodClause, withActiveCategoryFilter } from '../../shared/inactiveCategories.js';
+import { getRestaurantIdsWithDishes, getRestaurantIdSetWithDishes } from '../../shared/orderableRestaurants.js';
 import { seedOutletTimingsForRestaurant } from './outletTimings.service.js';
 import { logger } from '../../../../utils/logger.js';
 import { fetchDrivingDistancesKmBatch, fetchDrivingDistanceKm } from '../../orders/utils/googleMaps.js';
@@ -255,7 +256,7 @@ const toRestaurantProfile = (doc) => {
         accountType: doc.accountType || '',
         upiId: doc.upiId || '',
         upiQrImage: doc.upiQrImage ? { url: doc.upiQrImage } : null,
-        foodType: doc.foodType || (doc.pureVegRestaurant ? 'Veg' : 'Mixed'),
+        foodType: doc.pureVegRestaurant ? 'Veg' : (doc.foodType || 'Mixed'),
         pureVegRestaurant: doc.foodType === 'Veg' || Boolean(doc.pureVegRestaurant),
         pureVeganRestaurant: false,
         profileImage: doc.profileImage ? { url: doc.profileImage } : null,
@@ -279,6 +280,7 @@ const toRestaurantProfile = (doc) => {
             // Lets the user app offer "Pay at Pickup" for this restaurant.
             payAtPickupEnabled: doc.takeawaySettings?.payAtPickupEnabled === true
         },
+        isTakeawayEnabled: doc.takeawaySettings?.isEnabled === true,
         isAcceptingOrders: doc.isAcceptingOrders !== false,
         status: doc.status || null,
         rejectionReason: doc.rejectionReason || null,
@@ -757,7 +759,7 @@ export const registerRestaurant = async (payload, files, draftImageRefs = {}, { 
                         { label: 'Phone', value: restaurant.ownerPhone || '—' },
                         { label: 'Email', value: restaurant.ownerEmail || '—' },
                         { label: 'City', value: restaurant.location?.city || restaurant.city || restaurant.location?.area || '—' },
-                        { label: 'Food Type', value: restaurant.foodType || (restaurant.pureVegRestaurant ? 'Pure Veg' : 'Mixed') },
+                        { label: 'Food Type', value: restaurant.pureVegRestaurant ? 'Pure Veg' : (restaurant.foodType || 'Mixed') },
                         { label: 'Restaurant ID', value: String(restaurant._id) }
                     ]
                 });
@@ -766,8 +768,12 @@ export const registerRestaurant = async (payload, files, draftImageRefs = {}, { 
             }
         }
 
+        const { signRegistrationToken } = await import('../../../../core/auth/onboardingToken.js');
+        const registrationToken = signRegistrationToken(ownerPhone);
+
         return {
             ...restaurant.toObject(),
+            registrationToken,
             onboarding: {
                 paymentRequired: onboardingFeeDue,
                 // Scoped, short-lived credential so the unapproved restaurant can drive
@@ -1046,14 +1052,23 @@ export const updateCurrentRestaurantTakeawaySettings = async (restaurantId, body
         return Boolean(fallback);
     };
 
+    const rawEnabled = body.isEnabled !== undefined ? body.isEnabled : body.isTakeawayEnabled;
+    const nextIsEnabled = parseBoolean(rawEnabled, currentTakeawaySettings.isEnabled);
+
+    const updateSet = {
+        'takeawaySettings.isEnabled': nextIsEnabled
+    };
+    if (body.payAtPickupEnabled !== undefined) {
+        updateSet['takeawaySettings.payAtPickupEnabled'] = parseBoolean(
+            body.payAtPickupEnabled,
+            currentTakeawaySettings.payAtPickupEnabled
+        );
+    }
+
     const doc = await FoodRestaurant.findByIdAndUpdate(
         restaurantId,
         {
-            $set: {
-                takeawaySettings: {
-                    isEnabled: parseBoolean(body.isEnabled, currentTakeawaySettings.isEnabled)
-                }
-            }
+            $set: updateSet
         },
         {
             new: true,
@@ -1842,6 +1857,11 @@ export const listApprovedRestaurants = async (query = {}) => {
         };
     }
 
+    // Restaurants with no orderable dish must never be visible to users.
+    // Applied in the query (not post-filtered) so total/pagination stay correct.
+    const restaurantIdsWithDishes = await getRestaurantIdsWithDishes();
+    filter._id = { $in: restaurantIdsWithDishes };
+
     const radiusKm = toFiniteNumber(query.radiusKm) ?? toFiniteNumber(query.maxDistance);
     const sortBy = parseSortBy(query.sortBy);
 
@@ -2037,7 +2057,7 @@ export const listApprovedRestaurants = async (query = {}) => {
     }, {});
 
     const restaurants = pageDocs.map(r => {
-        const foodType = r.foodType || (r.pureVegRestaurant === true ? 'Veg' : 'Mixed');
+        const foodType = r.pureVegRestaurant === true ? 'Veg' : (r.foodType || 'Mixed');
         return {
             ...r,
             restaurantId: r._id,
@@ -2244,6 +2264,7 @@ export const listPublicOffers = async (query = {}) => {
         .populate({ path: 'restaurantId', select: 'restaurantName restaurantNameNormalized profileImage estimatedDeliveryTime rating zoneId' })
         .lean();
 
+    const dishesIdSet = await getRestaurantIdSetWithDishes();
     const allOffers = list
         .filter((o) => {
             // Restaurant-selected coupon only belongs in a zone if its restaurant
@@ -2252,6 +2273,7 @@ export const listPublicOffers = async (query = {}) => {
             if (o.restaurantScope !== 'selected') return true;
             const restaurant = o.restaurantId && typeof o.restaurantId === 'object' ? o.restaurantId : null;
             if (!restaurant) return false; // selected scope with missing restaurant: skip
+            if (!dishesIdSet.has(String(restaurant._id))) return false; // restaurant with no dishes: skip
             if (!hasZone) return true;
             return String(restaurant.zoneId || '') === String(zoneIdRaw);
         })
@@ -2397,7 +2419,7 @@ export const listRestaurantsUnderPriceLimit = async (query = {}) => {
                 const rid = String(r._id);
                 const items = restaurantItemsMap[rid] || [];
                 const hasNonVegInItems = items.some((item) => !item.isVeg);
-                const foodType = r.foodType || (r.pureVegRestaurant === true ? 'Veg' : 'Mixed');
+                const foodType = r.pureVegRestaurant === true ? 'Veg' : (r.foodType || 'Mixed');
                 const hasNonVegMenu = foodType !== 'Veg';
                 return {
                     ...r,
@@ -2532,4 +2554,128 @@ export const listRestaurantsUnderPriceLimit = async (query = {}) => {
         targetPrice: EATIEFY_99_PRICE,
     };
 };
+
+export const getRestaurantVerificationStatus = async ({ token = null, registrationToken = null, phone = null } = {}) => {
+    let restaurant = null;
+    let verifiedPhoneLast10 = null;
+    let isAuthenticatedWithToken = false;
+
+    // 1. Try bearer token
+    if (token) {
+        try {
+            const { verifyAccessToken } = await import('../../../../core/auth/token.util.js');
+            const decoded = verifyAccessToken(token);
+            if (decoded?.userId) {
+                restaurant = await FoodRestaurant.findById(decoded.userId).lean();
+                if (restaurant) isAuthenticatedWithToken = true;
+            }
+        } catch {}
+    }
+
+    // 2. Try registration token (cryptographic proof that OTP was verified for this phone)
+    if (!restaurant && registrationToken) {
+        try {
+            const { verifyRegistrationToken } = await import('../../../../core/auth/onboardingToken.js');
+            const decoded = verifyRegistrationToken(registrationToken);
+            if (decoded?.phoneLast10) {
+                verifiedPhoneLast10 = decoded.phoneLast10;
+                const regRegex = new RegExp(`${verifiedPhoneLast10}$`);
+                restaurant = await FoodRestaurant.findOne({
+                    $or: [
+                        { ownerPhone: { $regex: regRegex } },
+                        { primaryContactNumber: { $regex: regRegex } }
+                    ]
+                }).sort({ createdAt: -1 }).lean();
+            }
+        } catch {}
+    }
+
+    // 3. Fallback to phone query
+    if (!restaurant && phone) {
+        const last10 = String(phone).replace(/\D/g, '').slice(-10);
+        if (last10.length === 10) {
+            const phoneRegex = new RegExp(`${last10}$`);
+            restaurant = await FoodRestaurant.findOne({
+                $or: [
+                    { ownerPhone: { $regex: phoneRegex } },
+                    { primaryContactNumber: { $regex: phoneRegex } }
+                ]
+            }).sort({ createdAt: -1 }).lean();
+        }
+    }
+
+    if (!restaurant) {
+        return {
+            status: 'not_found',
+            message: 'Restaurant registration not found'
+        };
+    }
+
+    const status = String(restaurant.status || 'pending').toLowerCase();
+
+    if (status === 'approved') {
+        // Only mint live auth tokens if the requester has proven ownership via registrationToken or valid token
+        const canMintTokens = isAuthenticatedWithToken || Boolean(verifiedPhoneLast10);
+        if (canMintTokens) {
+            const { signAccessToken, signRefreshToken } = await import('../../../../core/auth/token.util.js');
+            const { FoodRefreshToken } = await import('../../../../core/auth/models/refreshToken.model.js');
+            const { ROLES } = await import('../../../../core/auth/constants.js');
+            const { config } = await import('../../../../config/env.js');
+            const ms = (await import('ms')).default;
+            const { sanitizeRestaurantForAuthResponse } = await import('../../../../core/auth/auth.service.js');
+
+            const payload = { userId: restaurant._id.toString(), role: ROLES.RESTAURANT };
+            const accessToken = signAccessToken(payload);
+            const refreshToken = signRefreshToken(payload);
+            const ttlMs = ms(config.jwtRefreshExpiresIn || '7d');
+            const expiresAt = new Date(Date.now() + ttlMs);
+
+            await FoodRefreshToken.create({
+                userId: restaurant._id,
+                token: refreshToken,
+                expiresAt,
+            });
+
+            return {
+                status: 'approved',
+                token: accessToken,
+                accessToken,
+                refreshToken,
+                user: sanitizeRestaurantForAuthResponse(restaurant),
+                message: 'Restaurant is approved'
+            };
+        } else {
+            return {
+                status: 'approved',
+                needsLogin: true,
+                message: 'Restaurant has been approved'
+            };
+        }
+    }
+
+    if (status === 'rejected') {
+        return {
+            status: 'rejected',
+            isRejected: true,
+            rejectionReason: restaurant.rejectionReason || null,
+            message: restaurant.rejectionReason
+                ? `Your restaurant registration has been rejected. Reason: ${restaurant.rejectionReason}`
+                : 'Your restaurant registration has been rejected. Please contact support.'
+        };
+    }
+
+    if (status === 'banned' || status === 'deleted') {
+        return {
+            status: 'banned',
+            isDisabled: true,
+            message: 'Your restaurant has been disabled. Reason: Disabled by admin'
+        };
+    }
+
+    return {
+        status: 'pending',
+        message: 'Your restaurant registration is pending approval.'
+    };
+};
+
 

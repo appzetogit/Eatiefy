@@ -71,6 +71,10 @@ const deliveryPartnerSchema = new mongoose.Schema(
             type: [String],
             default: []
         },
+        fcmTokenMobileAlarm: {
+            type: [String],
+            default: []
+        },
         /** iPhones that ring new delivery offers as a VoIP (CallKit) call. */
         voipDevices: {
             type: [voipDeviceSchema],

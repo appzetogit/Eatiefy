@@ -989,7 +989,7 @@ export default function HubMenu() {
       return
     }
     
-    toast.message('Finish category setup on Menu Categories so you can choose veg, non-veg, or both before admin approval.')
+    toast.message('Finish category setup on Menu Categories so you can choose veg, non-veg, or both.')
     navigate('/food/restaurant/menu-categories', {
       state: {
         draftCategoryName: newCategoryName.trim(),

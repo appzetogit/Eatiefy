@@ -168,6 +168,28 @@ export const markNotificationAsRead = async ({ notificationId, ownerType, ownerI
     return notification;
 };
 
+/** Marks every unread inbox row as read (the owner has seen the list). Nothing is removed. */
+export const markAllNotificationsAsRead = async ({ ownerType, ownerId } = {}) => {
+    const result = await FoodNotification.updateMany(
+        {
+            ownerType: normalizeOwnerType(ownerType),
+            ownerId: ensureObjectId(ownerId, 'ownerId'),
+            dismissedAt: null,
+            isRead: false
+        },
+        {
+            $set: {
+                isRead: true,
+                readAt: new Date()
+            }
+        }
+    );
+
+    return {
+        modifiedCount: Number(result?.modifiedCount || 0)
+    };
+};
+
 export const dismissNotification = async ({ notificationId, ownerType, ownerId } = {}) => {
     const notification = await FoodNotification.findOneAndUpdate(
         {

@@ -139,6 +139,7 @@ export default function RestaurantRouter() {
           </ProtectedRoute>
         }>
           <Route path="" element={<OrdersMain />} />
+          <Route path="orders" element={<Navigate to="/food/restaurant" replace />} />
           <Route path="orders/all" element={<AllOrdersPage />} />
           <Route path="orders/:id" element={<OrderDetails />} />
           <Route path="notifications" element={<RestaurantNotifications />} />
@@ -152,6 +153,7 @@ export default function RestaurantRouter() {
           <Route path="outlet-timings/:day" element={<DaySlots />} />
           <Route path="outlet-info" element={<OutletInfo />} />
           <Route path="ratings-reviews" element={<RatingsReviews />} />
+          <Route path="reviews" element={<Navigate to="/food/restaurant/feedback?tab=reviews" replace />} />
           <Route path="edit-owner" element={<EditOwner />} />
           <Route path="edit-cuisines" element={<EditCuisines />} />
           <Route path="edit-address" element={<EditRestaurantAddress />} />

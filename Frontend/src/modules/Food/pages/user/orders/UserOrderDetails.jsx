@@ -140,7 +140,7 @@ export default function UserOrderDetails() {
     )
   }
 
-  const orderIdDisplay = order.orderId || order._id || orderId
+  const orderIdDisplay = order.orderId || order.order_id || (orderId && !/^[a-f0-9]{24}$/i.test(String(orderId)) ? orderId : null) || order._id || orderId
   // Use fetched restaurant data if available, otherwise use order.restaurantId or order.restaurant
   const restaurantObj = restaurant || order.restaurantId || order.restaurant || {}
   const restaurantName =
@@ -645,11 +645,27 @@ export default function UserOrderDetails() {
                 </span>
               </div>
             )}
+            {Number(pricing.packagingFee || order.packagingFee || order.packagingCharge || 0) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Packaging fee</span>
+                <span className="text-gray-800 dark:text-gray-200">
+                  ₹{Number(pricing.packagingFee || order.packagingFee || order.packagingCharge || 0).toFixed(2)}
+                </span>
+              </div>
+            )}
             {Number(pricing.platformFee || 0) > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500 dark:text-gray-400">Platform fee</span>
                 <span className="text-gray-800 dark:text-gray-200">
                   ₹{Number(pricing.platformFee || 0).toFixed(2)}
+                </span>
+              </div>
+            )}
+            {Number(pricing.discount || order.discountAmount || order.couponDiscount || 0) > 0 && (
+              <div className="flex justify-between text-[#1F6B45] dark:text-green-400">
+                <span className="font-medium">Coupon Discount</span>
+                <span className="font-medium">
+                  -₹{Number(pricing.discount || order.discountAmount || order.couponDiscount || 0).toFixed(2)}
                 </span>
               </div>
             )}

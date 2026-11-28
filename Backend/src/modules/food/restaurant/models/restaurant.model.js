@@ -83,7 +83,6 @@ const restaurantSchema = new mongoose.Schema(
     foodType: {
       type: String,
       enum: ['Veg', 'Non-Veg', 'Mixed'],
-      default: 'Mixed',
       index: true,
     },
     pureVegRestaurant: {
@@ -356,18 +355,18 @@ restaurantSchema.pre("validate", function normalizeDerivedFields(next) {
   this.ownerPhoneLast10 = digits ? digits.slice(-10) : undefined;
 
   // Food type normalization and legacy sync
-  if (this.foodType) {
-    const rawFt = String(this.foodType).trim();
-    if (rawFt.toLowerCase() === 'veg' || rawFt.toLowerCase() === 'pure-veg' || rawFt.toLowerCase() === 'pure veg') {
-      this.foodType = 'Veg';
-      this.pureVegRestaurant = true;
-    } else if (rawFt.toLowerCase() === 'non-veg' || rawFt.toLowerCase() === 'non veg') {
-      this.foodType = 'Non-Veg';
-      this.pureVegRestaurant = false;
-    } else {
-      this.foodType = 'Mixed';
-      this.pureVegRestaurant = false;
-    }
+  const isPureVegExplicit = this.pureVegRestaurant === true;
+  const rawFt = this.foodType ? String(this.foodType).trim().toLowerCase() : '';
+
+  if (isPureVegExplicit || rawFt === 'veg' || rawFt === 'pure-veg' || rawFt === 'pure veg') {
+    this.foodType = 'Veg';
+    this.pureVegRestaurant = true;
+  } else if (rawFt === 'non-veg' || rawFt === 'non veg') {
+    this.foodType = 'Non-Veg';
+    this.pureVegRestaurant = false;
+  } else if (rawFt === 'mixed' || rawFt === 'mixed menu') {
+    this.foodType = 'Mixed';
+    this.pureVegRestaurant = false;
   } else if (typeof this.pureVegRestaurant === 'boolean') {
     this.foodType = this.pureVegRestaurant ? 'Veg' : 'Mixed';
   } else {

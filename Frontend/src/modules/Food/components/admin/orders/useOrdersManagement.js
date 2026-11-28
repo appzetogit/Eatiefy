@@ -2,6 +2,7 @@ import { useState, useMemo } from "react"
 import { exportToCSV, exportToExcel, exportToPDF, exportToJSON } from "./ordersExportUtils"
 import eatiefyLogo from "@food/assets/logo.png"
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings"
+import { resolveRestaurantItemUnitPrice, resolveItemMarkupUnit } from "@food/utils/restaurantOrderPricing"
 const debugError = () => {}
 
 
@@ -312,19 +313,36 @@ export function useOrdersManagement(orders, statusKey, title, options = {}) {
       const logoDataUrl = await imageUrlToDataUrl(logoUrl)
 
       const items = Array.isArray(order.items) ? order.items : []
-      const itemsSubtotal = items.reduce((sum, item) => {
+      const computedBase = items.reduce((sum, item) => {
         const qty = toNumber(item?.quantity || 1)
-        const unitPrice = toNumber(item?.price)
-        return sum + (qty * unitPrice)
+        return sum + (qty * resolveRestaurantItemUnitPrice(item))
       }, 0)
-      const subtotal = itemsSubtotal > 0
-        ? itemsSubtotal
-        : toNumber(
-            order.totalItemAmount ??
-            order.subtotal ??
-            order.pricing?.subtotal ??
-            order.totalAmount
-          )
+      const computedMarkup = items.reduce((sum, item) => {
+        const qty = toNumber(item?.quantity || 1)
+        return sum + (qty * resolveItemMarkupUnit(item))
+      }, 0)
+      const baseSubtotal = toNumber(
+        order.baseSubtotal ??
+        order.pricing?.baseSubtotal ??
+        (computedBase > 0 ? computedBase : order.totalItemAmount) ??
+        0
+      )
+      const markupTotal = toNumber(
+        order.markupTotal ??
+        order.pricing?.markupTotal ??
+        computedMarkup ??
+        0
+      )
+      const packagingFee = toNumber(
+        order.packagingCharge ??
+        order.packagingFee ??
+        order.pricing?.packagingFee
+      )
+      const platformFee = toNumber(
+        order.platformFee ??
+        order.platformCharge ??
+        order.pricing?.platformFee
+      )
       const deliveryFee = toNumber(
         order.deliveryCharge ??
         order.deliveryFee ??
@@ -343,7 +361,7 @@ export function useOrdersManagement(orders, statusKey, title, options = {}) {
         order.discountAmount ??
         order.pricing?.discount
       )
-      const computedTotal = subtotal + deliveryFee + taxAmount - discountAmount
+      const computedTotal = baseSubtotal + markupTotal + packagingFee + deliveryFee + platformFee + taxAmount - discountAmount
       const totalAmount = toNumber(
         order.totalAmount ??
         order.pricing?.total ??
@@ -512,7 +530,7 @@ export function useOrdersManagement(orders, statusKey, title, options = {}) {
         ? items.map((item) => {
           const qty = toNumber(item.quantity || 1)
           const title = item.name || item.itemName || item.title || "Item"
-          const unitPrice = toNumber(item.price)
+          const unitPrice = resolveRestaurantItemUnitPrice(item)
           const lineTotal = qty * unitPrice
           return [qty, title, formatMoney(unitPrice), formatMoney(lineTotal)]
         })
@@ -550,34 +568,40 @@ export function useOrdersManagement(orders, statusKey, title, options = {}) {
         margin: { left: 14, right: 14 },
       })
 
+      const summaryRows = [
+        ["Subtotal (Restaurant)", formatMoney(baseSubtotal)],
+        ...(markupTotal > 0 ? [["Admin Pricing", `+ ${formatMoney(markupTotal)}`]] : []),
+        ["Packaging Fee", formatMoney(packagingFee)],
+        ["Delivery Fee", formatMoney(deliveryFee)],
+        ["Platform Fee", formatMoney(platformFee)],
+        ["Tax", formatMoney(taxAmount)],
+        ...(discountAmount > 0 ? [["Coupon Discount", `- ${formatMoney(discountAmount)}`]] : []),
+        ["Grand Total", formatMoney(totalAmount)],
+      ]
+
       const summaryStartY = (doc.lastAutoTable?.finalY || 130) + 10
+      const summaryBoxHeight = summaryRows.length * 6.5 + 4
       doc.setDrawColor(226, 232, 240)
       doc.setFillColor(248, 250, 252)
-      doc.roundedRect(pageWidth - 92, summaryStartY - 5, 78, 35, 2, 2, "FD")
+      doc.roundedRect(pageWidth - 92, summaryStartY - 5, 78, summaryBoxHeight, 2, 2, "FD")
       autoTable(doc, {
         startY: summaryStartY,
-        body: [
-          ["Subtotal", formatMoney(subtotal)],
-          ["Delivery Fee", formatMoney(deliveryFee)],
-          ["Tax", formatMoney(taxAmount)],
-          ["Discount", `- ${formatMoney(discountAmount)}`],
-          ["Grand Total", formatMoney(totalAmount)],
-        ],
+        body: summaryRows,
         theme: "plain",
         styles: {
-          fontSize: 10,
+          fontSize: 9.5,
           textColor: [30, 41, 59],
-          cellPadding: 1.8,
+          cellPadding: 1.5,
         },
         columnStyles: {
-          0: { cellWidth: 34, fontStyle: "bold" },
-          1: { cellWidth: 40, halign: "right" },
+          0: { cellWidth: 38, fontStyle: "bold" },
+          1: { cellWidth: 36, halign: "right" },
         },
         margin: { left: pageWidth - 88 },
         didParseCell: (hookData) => {
-          if (hookData.row.index === 4) {
+          if (hookData.row.index === summaryRows.length - 1) {
             hookData.cell.styles.fontStyle = "bold"
-            hookData.cell.styles.fontSize = 11
+            hookData.cell.styles.fontSize = 10.5
             hookData.cell.styles.textColor = [15, 118, 110]
           }
         },

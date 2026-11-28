@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@food/components/ui/select"
 import { TableSkeleton } from "@food/components/ui/loading-skeletons"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const MAX_TOP = 10
 // Remembers the admin's selected zone across refreshes (cleared on logout).
@@ -67,6 +68,7 @@ const getScrollParent = (el) => {
 }
 
 export default function TopRestaurants() {
+  const { canEdit } = useAdminPermissions()
   const [activeTab, setActiveTab] = useState("delivery") // 'delivery' | 'takeaway'
   const [zones, setZones] = useState([])
   const [selectedZone, setSelectedZone] = useState("")
@@ -448,6 +450,7 @@ export default function TopRestaurants() {
             </div>
 
             <div className="flex items-center gap-3">
+              {canEdit && (
               <button
                 onClick={handleReset}
                 disabled={assignedCount === 0 || saving || loading}
@@ -457,6 +460,7 @@ export default function TopRestaurants() {
                 <RotateCcw className="h-4 w-4" />
                 Reset
               </button>
+              )}
               <Select value={selectedZone} onValueChange={setSelectedZone}>
                 <SelectTrigger className="min-w-[180px] border-slate-300 bg-white text-slate-900">
                   <SelectValue placeholder="Select zone" />
@@ -470,6 +474,7 @@ export default function TopRestaurants() {
                 </SelectContent>
               </Select>
 
+              {canEdit && (
               <button
                 onClick={handleSave}
                 disabled={!isDirty || saving || loading}
@@ -478,6 +483,7 @@ export default function TopRestaurants() {
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save Top Restaurants
               </button>
+              )}
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">
@@ -580,6 +586,7 @@ export default function TopRestaurants() {
                             <select
                               value={rank === "" ? "" : String(rank)}
                               onChange={(e) => handleSelectSlot(id, e.target.value)}
+                              disabled={!canEdit}
                               title="Set top number"
                               className="w-24 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >

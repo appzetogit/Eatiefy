@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notificationAPI } from "@food/api";
 import { isModuleAuthenticated } from "@food/utils/auth";
 
@@ -165,6 +165,35 @@ export default function useNotificationInbox(module, options = {}) {
     [cacheKey, fetchInbox, module],
   );
 
+  const markAllAsRead = useCallback(async () => {
+    if (!module) return;
+    setItems((prev) => prev.map((item) => (item.read ? item : { ...item, read: true })));
+    setUnreadCount(0);
+    try {
+      await notificationAPI.markAllAsRead({ contextModule: module });
+      // Every other instance (header bell, bottom-nav dot) re-reads the count.
+      dispatchNotificationInboxRefresh();
+    } catch {
+      fetchInbox({ force: true });
+    }
+  }, [fetchInbox, module]);
+
+  /*
+   * `markSeen`: set by a screen that shows the list. Opening it is "seeing" the
+   * notifications, so the unread badge clears. Previously only tapping each row
+   * (or "Clear all") did that, and a badge stayed on after everything was read.
+   * Tried once per set of unread rows, so a failing request cannot loop.
+   */
+  const markSeen = Boolean(options?.markSeen);
+  const seenAttemptRef = useRef("");
+  useEffect(() => {
+    if (!markSeen || !enabled || loading || unreadCount <= 0) return;
+    const signature = `${unreadCount}:${items.filter((item) => !item.read).map((item) => item.id).join(",")}`;
+    if (seenAttemptRef.current === signature) return;
+    seenAttemptRef.current = signature;
+    markAllAsRead();
+  }, [enabled, items, loading, markAllAsRead, markSeen, unreadCount]);
+
   const dismiss = useCallback(
     async (id) => {
       if (!id || !module) return;
@@ -204,9 +233,10 @@ export default function useNotificationInbox(module, options = {}) {
       loading,
       refresh: () => fetchInbox({ force: true }),
       markAsRead,
+      markAllAsRead,
       dismiss,
       dismissAll,
     }),
-    [dismiss, dismissAll, fetchInbox, items, loading, markAsRead, unreadCount],
+    [dismiss, dismissAll, fetchInbox, items, loading, markAllAsRead, markAsRead, unreadCount],
   );
 }

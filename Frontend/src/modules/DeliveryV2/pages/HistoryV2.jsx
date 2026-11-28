@@ -154,7 +154,8 @@ export const HistoryV2 = () => {
            const isCOD =
              method === 'cash' ||
              method === 'cod' ||
-             method === 'cash on delivery';
+             method === 'cash on delivery' ||
+             method === 'cash_on_delivery';
            if (isCOD) {
              const collected = Number(trip.codCollectedAmount);
              const due = Number(trip.codAmount);
@@ -163,7 +164,7 @@ export const HistoryV2 = () => {
                ? collected
                : Number.isFinite(due) && due > 0
                  ? due
-                 : (Number.isFinite(fallback) ? fallback : 0);
+                 : (Number.isFinite(fallback) && fallback > 0 ? fallback : 0);
              acc.cod += amount;
            }
         }
@@ -296,16 +297,35 @@ export const HistoryV2 = () => {
                    const isCancelled = (trip.status || '').toLowerCase() === 'cancelled';
                    const isPending = !isCompleted && !isCancelled;
                    const payout = Number(trip.deliveryEarning ?? trip.amount ?? trip.earningAmount ?? 0) || 0;
+                   const method = String(trip.paymentMethod || '').toLowerCase();
+                   const isQR = method === 'razorpay_qr';
+                   const isCOD =
+                     method === 'cash' ||
+                     method === 'cod' ||
+                     method === 'cash on delivery' ||
+                     method === 'cash_on_delivery';
+
                    const collectedRaw = Number(trip.codCollectedAmount);
                    const dueRaw = Number(trip.codAmount);
                    const totalRaw = Number(trip.orderTotal);
-                   const collection = Number.isFinite(collectedRaw) && collectedRaw > 0
-                     ? collectedRaw
-                     : Number.isFinite(dueRaw) && dueRaw > 0
-                       ? dueRaw
-                       : (Number.isFinite(totalRaw) ? totalRaw : 0);
-                   const isQR = (trip.paymentMethod || '').toLowerCase() === 'razorpay_qr';
-                   const isCOD = (trip.paymentMethod || '').toLowerCase() === 'cash' || (trip.paymentMethod || '').toLowerCase() === 'cod';
+
+                   let collection = 0;
+                   if (isCOD) {
+                     if (isCompleted) {
+                       collection = Number.isFinite(collectedRaw) && collectedRaw > 0
+                         ? collectedRaw
+                         : Number.isFinite(dueRaw) && dueRaw > 0
+                           ? dueRaw
+                           : (Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : 0);
+                     } else if (isPending) {
+                       collection = Number.isFinite(dueRaw) && dueRaw > 0
+                         ? dueRaw
+                         : (Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : 0);
+                     } else {
+                       // Cancelled order: no COD collected
+                       collection = 0;
+                     }
+                   }
 
                    return (
                       <div key={trip.orderId || idx} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm active:scale-[0.99] transition-all">

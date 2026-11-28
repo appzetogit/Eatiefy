@@ -35,7 +35,7 @@ const notificationSchema = new mongoose.Schema(
         },
         source: {
             type: String,
-            enum: ['ADMIN_BROADCAST', 'FSSAI_EXPIRY', 'ORDER_UPDATE', 'RESTAURANT_APPROVAL', 'DELIVERY_PARTNER_APPROVAL'],
+            enum: ['ADMIN_BROADCAST', 'FSSAI_EXPIRY', 'ORDER_UPDATE', 'RESTAURANT_APPROVAL', 'DELIVERY_PARTNER_APPROVAL', 'SUPPORT_TICKET_REPLY'],
             default: 'ADMIN_BROADCAST',
             index: true
         },

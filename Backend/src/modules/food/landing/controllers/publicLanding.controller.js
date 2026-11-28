@@ -8,6 +8,7 @@ import { FoodExploreIcon } from '../models/exploreIcon.model.js';
 import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { sendResponse } from '../../../../utils/response.js';
 import { resolveServiceZone, buildZoneServiceabilityClause } from '../../shared/zoneLocation.js';
+import { getRestaurantIdsWithDishes, getRestaurantIdSetWithDishes } from '../../shared/orderableRestaurants.js';
 
 /** Public hero banners for user home: active only, sorted, with linkedRestaurants populated for click-through */
 /** Shared by the standalone route and the aggregated /public/app-config payload. */
@@ -36,11 +37,14 @@ export const loadPublicHeroBanners = async (zoneId) => {
             .lean();
     }
 
+    const dishesIdSet = await getRestaurantIdSetWithDishes();
     return (docs || []).map((b) => {
         const { linkedRestaurantIds, ...rest } = b;
+        const linkedRestaurants = (Array.isArray(linkedRestaurantIds) ? linkedRestaurantIds : [])
+            .filter((r) => r && dishesIdSet.has(String(r._id || r)));
         return {
             ...rest,
-            linkedRestaurants: Array.isArray(linkedRestaurantIds) ? linkedRestaurantIds : [],
+            linkedRestaurants,
             imageUrl: b.imageUrl
         };
     });
@@ -205,11 +209,16 @@ export const loadPublicLandingSettings = async (zoneId) => {
             ? { zoneId: new mongoose.Types.ObjectId(String(zoneId)) }
             : null);
 
+    // Restaurants with no orderable dish must never be visible to users.
+    const restaurantIdsWithDishes = await getRestaurantIdsWithDishes();
+    const dishesIdSet = new Set(restaurantIdsWithDishes.map((id) => String(id)));
+
     let recommendedRestaurants = [];
     const validObjectIds = Array.isArray(ids)
         ? ids
             .filter((id) => mongoose.Types.ObjectId.isValid(String(id)))
             .map((id) => new mongoose.Types.ObjectId(String(id)))
+            .filter((oid) => dishesIdSet.has(String(oid)))
         : [];
 
     if (validObjectIds.length > 0) {
@@ -240,30 +249,31 @@ export const loadPublicLandingSettings = async (zoneId) => {
                 .filter(Boolean)
         );
 
-        const fallbackFilter = {
-            status: 'approved',
-            isAcceptingOrders: { $ne: false },
-        };
-        if (existingIds.size > 0) {
-            fallbackFilter._id = { $nin: Array.from(existingIds).map((id) => new mongoose.Types.ObjectId(id)) };
-        }
-        if (zoneClause) {
-            fallbackFilter.$and = [zoneClause];
-        }
+        const candidateIds = restaurantIdsWithDishes.filter((id) => !existingIds.has(String(id)));
+        if (candidateIds.length > 0) {
+            const fallbackFilter = {
+                status: 'approved',
+                isAcceptingOrders: { $ne: false },
+                _id: { $in: candidateIds },
+            };
+            if (zoneClause) {
+                fallbackFilter.$and = [zoneClause];
+            }
 
-        const additionalCandidates = await FoodRestaurant.find(fallbackFilter)
-            .sort({ rating: -1, totalRatings: -1, createdAt: -1 })
-            .limit(DESIRED_COUNT * 2)
-            .select(RESTAURANT_SELECT)
-            .lean();
+            const additionalCandidates = await FoodRestaurant.find(fallbackFilter)
+                .sort({ rating: -1, totalRatings: -1, createdAt: -1 })
+                .limit(DESIRED_COUNT * 2)
+                .select(RESTAURANT_SELECT)
+                .lean();
 
-        for (const candidate of additionalCandidates) {
-            if (recommendedRestaurants.length >= DESIRED_COUNT) break;
-            const normName = (candidate.restaurantName || '').toLowerCase().trim();
-            // Avoid adding identical restaurant name duplicate cards
-            if (normName && existingNames.has(normName)) continue;
-            if (normName) existingNames.add(normName);
-            recommendedRestaurants.push(candidate);
+            for (const candidate of additionalCandidates) {
+                if (recommendedRestaurants.length >= DESIRED_COUNT) break;
+                const normName = (candidate.restaurantName || '').toLowerCase().trim();
+                // Avoid adding identical restaurant name duplicate cards
+                if (normName && existingNames.has(normName)) continue;
+                if (normName) existingNames.add(normName);
+                recommendedRestaurants.push(candidate);
+            }
         }
     }
 

@@ -74,6 +74,7 @@ const Logout = lazy(() => import("@food/pages/user/profile/Logout"))
 const ReferEarn = lazy(() => import("@food/pages/user/profile/ReferEarn"))
 const UserCMSHelpSupportPage = lazy(() => import("@food/pages/user/profile/UserCMSHelpSupportPage"))
 const Settings = lazy(() => import("@food/pages/user/profile/Settings"))
+const UserFeedbackExperience = lazy(() => import("@food/pages/user/profile/UserFeedbackExperience"))
 
 // Auth
 const SignIn = lazy(() => import("@food/pages/user/auth/SignIn"))
@@ -285,6 +286,7 @@ export default function UserRouter() {
             {/* Orders */}
             <Route path="orders" element={<OrderFlowBoundary scope="orders-list" message="We couldn't show your orders right now. Please try again."><Orders /></OrderFlowBoundary>} />
             <Route path="orders/:orderId" element={<OrderFlowBoundary scope="order-tracking" message={ORDER_SAVED_MESSAGE}><OrderTracking /></OrderFlowBoundary>} />
+            <Route path="order-tracking/:orderId" element={<OrderFlowBoundary scope="order-tracking" message={ORDER_SAVED_MESSAGE}><OrderTracking /></OrderFlowBoundary>} />
             <Route path="orders/:orderId/invoice" element={<OrderFlowBoundary scope="order-invoice" message={ORDER_SAVED_MESSAGE}><OrderInvoice /></OrderFlowBoundary>} />
             <Route path="orders/:orderId/details" element={<OrderFlowBoundary scope="order-details" message={ORDER_SAVED_MESSAGE}><UserOrderDetails /></OrderFlowBoundary>} />
 
@@ -309,6 +311,7 @@ export default function UserRouter() {
             <Route path="profile/about" element={<About />} />
             <Route path="profile/report-safety-emergency" element={<ReportSafetyEmergency />} />
             <Route path="profile/accessibility" element={<Accessibility />} />
+            <Route path="profile/feedback" element={<UserFeedbackExperience />} />
             <Route path="profile/logout" element={<Logout />} />
             <Route path="profile/refer-earn" element={<ReferEarn />} />
             <Route path="profile/dining-bookings" element={diningEnabled ? <MyBookings /> : <Navigate to="/food/user/profile" replace />} />

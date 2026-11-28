@@ -38,6 +38,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { setupPdfFonts } from "@food/utils/pdfFontUtils";
 import ResendNotificationButton from "@food/components/restaurant/ResendNotificationButton";
+import OnboardingExitModal from "@/shared/components/OnboardingExitModal";
 import {
   getRestaurantItemLineTotal,
   getRestaurantOrderTotal,
@@ -338,16 +339,16 @@ function CompletedOrders({ onSelectOrder, refreshToken = 0 }) {
 
                   <div className="flex-1 flex flex-col justify-between min-h-[80px]">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[13px] font-bold text-slate-900 leading-none">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-bold text-slate-900 leading-none truncate">
                           Order #{order.orderId}
                         </p>
-                        <p className="text-[10px] text-gray-500 mt-1 font-medium capitalize">
+                        <p className="text-[10px] text-gray-500 mt-1 font-medium capitalize truncate">
                           {order.customerName}
                         </p>
                       </div>
 
-                      <div className="flex flex-col items-end gap-1">
+                      <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border border-emerald-200 bg-emerald-50 text-emerald-600">
                           <span className="h-1 w-1 rounded-full bg-emerald-500" />
                           {order.type === "Takeaway" ? "Picked Up" : "Delivered"}
@@ -565,16 +566,16 @@ function CancelledOrders({ onSelectOrder, refreshToken = 0 }) {
 
                   <div className="flex-1 flex flex-col justify-between min-h-[80px]">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[13px] font-bold text-slate-900 leading-none">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-bold text-slate-900 leading-none truncate">
                           Order #{order.orderId}
                         </p>
-                        <p className="text-[10px] text-gray-500 mt-1 font-medium capitalize">
+                        <p className="text-[10px] text-gray-500 mt-1 font-medium capitalize truncate">
                           {order.customerName}
                         </p>
                       </div>
 
-                      <div className="flex flex-col items-end gap-1">
+                      <div className="flex flex-col items-end gap-1 shrink-0">
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border ${order.cancelledBy === "user"
                               ? "border-orange-200 bg-orange-50 text-orange-600"
@@ -1415,6 +1416,17 @@ function OrdersMainInner() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [showExitAppModal, setShowExitAppModal] = useState(false);
+  const isSheetOpenRef = useRef(false);
+  isSheetOpenRef.current = isSheetOpen;
+  const showExitAppModalRef = useRef(false);
+  showExitAppModalRef.current = showExitAppModal;
+  const orderModalPushedRef = useRef(false);
+  const rootGuardPushedRef = useRef(false);
+
+  const showRejectPopupRef = useRef(false);
+  const showCancelPopupRef = useRef(false);
+  const showVerifyTakeawayPopupRef = useRef(false);
   const contentRef = useRef(null);
   const filterBarRef = useRef(null);
   const touchStartX = useRef(0);
@@ -2095,7 +2107,30 @@ function OrdersMainInner() {
    */
   useEffect(() => {
     let timer = null;
-    const onStatusUpdate = () => {
+    const onStatusUpdate = (event) => {
+      const payload = event?.detail || {};
+      const payloadNote = payload?.restaurantNote ?? payload?.note;
+      if (payloadNote !== undefined) {
+        setSelectedOrder((prev) => {
+          if (!prev) return prev;
+          const prevIds = [prev.orderMongoId, prev.mongoId, prev.orderId, prev.id, prev._id]
+            .filter(Boolean)
+            .map(String);
+          const eventIds = [payload.orderMongoId, payload.orderId, payload.displayOrderId, payload.order_id, payload.id, payload._id]
+            .filter(Boolean)
+            .map(String);
+          const isMatch = eventIds.some((id) => prevIds.includes(id));
+          if (isMatch) {
+            return {
+              ...prev,
+              note: payloadNote,
+              restaurantNote: payloadNote,
+            };
+          }
+          return prev;
+        });
+      }
+
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
@@ -2234,7 +2269,9 @@ function OrdersMainInner() {
                 restaurantId: orderToPopup.restaurantId,
                 restaurantName: orderToPopup.restaurantName,
                 items: orderToPopup.items || [],
-                total: orderToPopup.pricing?.total || 0,
+                pricing: orderToPopup.pricing || {},
+                packagingFee: orderToPopup.packagingFee || orderToPopup.pricing?.packagingFee || 0,
+                total: orderToPopup.pricing?.total || orderToPopup.total || 0,
                 customerAddress: orderToPopup.address,
                 status: orderToPopup.status,
                 // Raw backend status: `status` above is rewritten for the tabs
@@ -3099,10 +3136,115 @@ function OrdersMainInner() {
     }
   }, [activeFilter]);
 
-  const handleSelectOrder = (order) => {
+  showRejectPopupRef.current = showRejectPopup;
+  showCancelPopupRef.current = showCancelPopup;
+  showVerifyTakeawayPopupRef.current = showVerifyTakeawayPopup;
+
+  const closeOrderDetailsModal = useCallback(() => {
+    setIsSheetOpen(false);
+    setSelectedOrder(null);
+    if (orderModalPushedRef.current) {
+      orderModalPushedRef.current = false;
+      try {
+        window.history.back();
+      } catch {}
+    }
+  }, []);
+
+  const handleSelectOrder = useCallback((order) => {
     setSelectedOrder(order);
     setIsSheetOpen(true);
-  };
+    if (!orderModalPushedRef.current) {
+      try {
+        window.history.pushState({ restaurantOrderModal: true }, "", window.location.href);
+        orderModalPushedRef.current = true;
+      } catch {}
+    }
+  }, []);
+
+  const handleExitApp = useCallback(() => {
+    setShowExitAppModal(false);
+    if (window.flutter_inappwebview?.callHandler) {
+      window.flutter_inappwebview.callHandler("exitApp", {}).catch(() => {});
+      window.flutter_inappwebview.callHandler("closeApp", {}).catch(() => {});
+    }
+    if (window.navigator?.app?.exitApp) {
+      try {
+        window.navigator.app.exitApp();
+        return;
+      } catch {}
+    }
+    try {
+      window.close();
+    } catch {}
+  }, []);
+
+  const handleStayApp = useCallback(() => {
+    setShowExitAppModal(false);
+  }, []);
+
+  // Back button and exit app guard handling (Issues 51 & 52)
+  useEffect(() => {
+    const isRootRestaurantPath =
+      window.location.pathname === "/food/restaurant" ||
+      window.location.pathname === "/food/restaurant/";
+
+    if (isRootRestaurantPath && !rootGuardPushedRef.current) {
+      try {
+        window.history.pushState({ restaurantRootGuard: true }, "", window.location.href);
+        rootGuardPushedRef.current = true;
+      } catch {}
+    }
+
+    const handlePopState = () => {
+      // 1. If order details sheet is open, close it (Issue 51)
+      if (isSheetOpenRef.current || orderModalPushedRef.current) {
+        orderModalPushedRef.current = false;
+        setIsSheetOpen(false);
+        setSelectedOrder(null);
+        return;
+      }
+
+      // 2. If exit app modal is open and user presses back, close it
+      if (showExitAppModalRef.current) {
+        setShowExitAppModal(false);
+        return;
+      }
+
+      // 3. If any other popup is open, close it
+      if (showRejectPopupRef.current) {
+        setShowRejectPopup(false);
+        return;
+      }
+      if (showCancelPopupRef.current) {
+        setShowCancelPopup(false);
+        return;
+      }
+      if (showVerifyTakeawayPopupRef.current) {
+        setShowVerifyTakeawayPopup(false);
+        return;
+      }
+
+      // 4. User is on root restaurant screen and presses back: show themed exit modal (Issue 52)
+      if (isRootRestaurantPath) {
+        try {
+          window.history.pushState({ restaurantRootGuard: true }, "", window.location.href);
+        } catch {}
+        setShowExitAppModal(true);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      if (orderModalPushedRef.current) {
+        orderModalPushedRef.current = false;
+        try {
+          window.history.back();
+        } catch {}
+      }
+    };
+  }, []);
 
   const renderContent = () => {
     if (searchQuery.trim() !== "") {
@@ -3848,31 +3990,61 @@ function OrdersMainInner() {
                     );
                   })()}
 
-                  {/* Total bill — what this order pays the restaurant. */}
-                  <div className="mb-4 py-3 border-y border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <svg
-                          className="w-5 h-5 text-gray-700"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"
-                          />
-                        </svg>
-                        <span className="text-sm font-semibold text-gray-900">
-                          Total bill
-                        </span>
+                  {/* Total bill & breakdown — what this order pays the restaurant */}
+                  {(() => {
+                    const activeOrder = popupOrder || newOrder;
+                    const items = Array.isArray(activeOrder?.items) ? activeOrder.items : [];
+                    const itemsSubtotal = items.reduce(
+                      (sum, it) => sum + getRestaurantItemAmount(it),
+                      0
+                    );
+                    const packagingFee = Number(
+                      activeOrder?.pricing?.packagingFee ??
+                      activeOrder?.packagingFee ??
+                      activeOrder?.packagingCharge ??
+                      0
+                    ) || 0;
+                    const restaurantTotal = getPopupOrderTotal(activeOrder);
+
+                    return (
+                      <div className="mb-4 py-3 border-y border-gray-200 space-y-1.5">
+                        {packagingFee > 0 && (
+                          <>
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>Items Subtotal</span>
+                              <span className="font-semibold text-gray-800">₹{itemsSubtotal.toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>Packaging Charge</span>
+                              <span className="text-emerald-700 font-semibold">+₹{packagingFee.toFixed(2)}</span>
+                            </div>
+                          </>
+                        )}
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center gap-2">
+                            <svg
+                              className="w-5 h-5 text-gray-700"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"
+                              />
+                            </svg>
+                            <span className="text-sm font-semibold text-gray-900">
+                              Total bill
+                            </span>
+                          </div>
+                          <span className="text-base font-bold text-gray-900">
+                            ₹{restaurantTotal}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-base font-bold text-gray-900">
-                        ₹{getPopupOrderTotal(popupOrder || newOrder)}
-                      </span>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Payment method: treat cash/cod (any case) as COD */}
                   {(() => {
@@ -4360,9 +4532,9 @@ function OrdersMainInner() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setIsSheetOpen(false)}>
+            onClick={closeOrderDetailsModal}>
             <motion.div
-              className="w-full max-w-sm sm:max-w-md mx-auto max-h-[85vh] overflow-y-auto bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-gray-100 relative"
+              className="w-full max-w-sm sm:max-w-md mx-auto max-h-[85vh] overflow-y-auto overflow-x-hidden bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-gray-100 relative"
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -4374,21 +4546,21 @@ function OrdersMainInner() {
               </div>
 
               <div className="flex items-start justify-between gap-2 mb-2">
-                <div>
-                  <p className="text-base font-extrabold text-black">
+                <div className="flex-1 min-w-0">
+                  <p className="text-base font-extrabold text-black truncate">
                     Order #{selectedOrder.orderId}
                   </p>
-                  <p className="text-xs font-semibold text-gray-600 mt-0.5">
+                  <p className="text-xs font-semibold text-gray-600 mt-0.5 break-words [overflow-wrap:anywhere]">
                     {selectedOrder.customerName}
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5 font-medium">
+                  <p className="text-xs text-gray-500 mt-0.5 font-medium truncate">
                     {selectedOrder.type}
                     {selectedOrder.tableOrToken
                       ? ` • ${selectedOrder.tableOrToken}`
                       : ""}
                   </p>
                 </div>
-                <div className="flex flex-col items-end gap-1">
+                <div className="flex flex-col items-end gap-1 shrink-0">
                   <span
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black border uppercase tracking-wider ${(selectedOrder.status === "Ready" ||
                         String(selectedOrder.status).toLowerCase() === "delivered" ||
@@ -4427,7 +4599,7 @@ function OrdersMainInner() {
                         <ResendNotificationButton
                           orderId={selectedOrder.orderId}
                           mongoId={selectedOrder.mongoId}
-                          onSuccess={() => setIsSheetOpen(false)}
+                          onSuccess={closeOrderDetailsModal}
                         />
                       </div>
                     )}
@@ -4443,9 +4615,9 @@ function OrdersMainInner() {
                     .split(/,\s*/)
                     .filter(Boolean)
                     .map((itemStr, idx) => (
-                      <div key={idx} className="text-sm text-slate-900 font-bold flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm">
+                      <div key={idx} className="text-sm text-slate-900 font-bold flex items-center gap-2 bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm min-w-0">
                         <span className="w-2 h-2 rounded-full bg-[#2E7D52] shrink-0" />
-                        <span className="leading-snug">{itemStr}</span>
+                        <span className="leading-snug break-words [overflow-wrap:anywhere] min-w-0">{itemStr}</span>
                       </div>
                     ))}
                 </div>
@@ -4493,15 +4665,15 @@ function OrdersMainInner() {
               )}
 
               {(selectedOrder.restaurantNote || selectedOrder.note) && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-xl min-w-0">
                   <p className="text-[10px] font-bold text-[#2E7D52] uppercase mb-1">Note for Restaurant</p>
-                  <p className="text-xs text-blue-700 font-medium">{selectedOrder.restaurantNote || selectedOrder.note}</p>
+                  <p className="text-xs text-blue-700 font-medium break-words [overflow-wrap:anywhere]">{selectedOrder.restaurantNote || selectedOrder.note}</p>
                 </div>
               )}
 
               <button
                 className="w-full bg-gradient-to-br from-[#2E7D52] to-[#1B5E3F] text-white py-3 rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
-                onClick={() => setIsSheetOpen(false)}>
+                onClick={closeOrderDetailsModal}>
                 Close
               </button>
             </motion.div>
@@ -4509,6 +4681,17 @@ function OrdersMainInner() {
         )}
       </AnimatePresence>
 
+      {/* Themed Exit App Confirmation Modal (Issue 52) */}
+      <OnboardingExitModal
+        open={showExitAppModal}
+        onStay={handleStayApp}
+        onExit={handleExitApp}
+        title="Exit App?"
+        message="Are you sure you want to exit the restaurant app?"
+        stayLabel="Stay"
+        exitLabel="Exit App"
+        theme="restaurant"
+      />
 
       {/* Bottom Navigation - Sticky */}
       <BottomNavOrders />
@@ -4585,7 +4768,7 @@ const OrderCard = memo(function OrderCard({
       />
 
       <div
-        onClick={() => onSelect?.({ orderId, status, customerName, type, tableOrToken, timePlaced, eta, itemsSummary, paymentMethod, restaurantNote })}
+        onClick={() => onSelect?.({ orderId, mongoId, status, customerName, type, tableOrToken, timePlaced, eta, itemsSummary, paymentMethod, restaurantNote, deliveryPartnerId })}
         className="flex gap-3 items-center cursor-pointer pl-1">
 
         {/* Photo Container - Centered vertically and slightly larger */}

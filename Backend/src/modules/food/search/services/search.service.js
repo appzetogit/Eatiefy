@@ -2,6 +2,7 @@ import { FoodRestaurant } from '../../restaurant/models/restaurant.model.js';
 import { FoodItem } from '../../admin/models/food.model.js';
 import { FoodCategory } from '../../admin/models/category.model.js';
 import { withActiveCategoryFilter } from '../../shared/inactiveCategories.js';
+import { getRestaurantIdsWithDishes } from '../../shared/orderableRestaurants.js';
 import { FoodZone } from '../../admin/models/zone.model.js';
 import { getFoodDisplayPrice, serializeFoodVariants } from '../../admin/services/foodVariant.service.js';
 import mongoose from 'mongoose';
@@ -90,6 +91,10 @@ export const searchUnified = async (query = {}, options = {}) => {
     const baseConditions = [{ status: 'approved' }];
     const zoneCondition = await buildZoneCondition(zoneId);
     if (zoneCondition) baseConditions.push(zoneCondition);
+
+    // Restaurants with no orderable dish must never be visible to users.
+    const restaurantIdsWithDishes = await getRestaurantIdsWithDishes();
+    baseConditions.push({ _id: { $in: restaurantIdsWithDishes } });
 
     if (foodType) {
         const ft = String(foodType).trim().toLowerCase();

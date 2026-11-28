@@ -44,7 +44,8 @@ import * as dispatchService from './order-dispatch.service.js';
 import * as deliveryService from './order-delivery.service.js';
 import * as paymentService from './order-payment.service.js';
 import { detectZoneIdForPoint } from '../../utils/zoneGeo.js';
-import { isTakeawayEnabled, isDiningEnabled, isTakeawayPayAtPickupEnabled } from '../../admin/services/moduleAccess.service.js';
+import { isTakeawayEnabled, isDiningEnabled } from '../../admin/services/moduleAccess.service.js';
+import { loadCustomizationSettings } from '../../admin/controllers/systemConfig.controller.js';
 import {
   enqueueOrderEvent,
   assertRestaurantDeliversToZone,
@@ -105,6 +106,22 @@ export async function createOrderFromPendingIntent(rzOrderId, rzPaymentId, rzSig
   }
 }
 
+/**
+ * The zone an order is filed under: the restaurant's GPS zone first (prevents cross-city
+ * dispatch), then the restaurant's saved zone, then the client's zone. Undefined when none.
+ */
+async function resolveOrderZoneId(restaurant, clientZoneId) {
+  const [lng, lat] =
+    restaurant?.location?.coordinates?.length === 2
+      ? restaurant.location.coordinates
+      : [null, null];
+  const gpsZoneId = lat != null && lng != null ? await detectZoneIdForPoint(lat, lng) : null;
+  if (gpsZoneId) return new mongoose.Types.ObjectId(gpsZoneId);
+  if (restaurant?.zoneId) return new mongoose.Types.ObjectId(restaurant.zoneId);
+  if (clientZoneId) return new mongoose.Types.ObjectId(clientZoneId);
+  return undefined;
+}
+
 // ----- Initiate online payment (Razorpay) -----
 export async function initiateOnlinePayment(userId, dto) {
   // SECURITY: Razorpay amount must come from server-calculated pricing, never client totals.
@@ -143,8 +160,10 @@ export async function initiateOnlinePayment(userId, dto) {
     );
   }
 
-  const onlineConfig = await FoodSystemConfig.findOne({ key: "online_payment_enabled" }).select("value").lean();
-  if (onlineConfig && onlineConfig.value === false) {
+  const onlineCustomization = await loadCustomizationSettings({
+    zoneId: await resolveOrderZoneId(restaurant, dto.zoneId),
+  });
+  if (onlineCustomization.online_payment_enabled === false) {
     throw new ValidationError("Online payment is currently disabled");
   }
 
@@ -218,8 +237,8 @@ export async function initiatePickupPayment(userId, orderId) {
     throw new ValidationError("This order cannot be paid now");
   }
 
-  const onlineConfig = await FoodSystemConfig.findOne({ key: "online_payment_enabled" }).select("value").lean();
-  if (onlineConfig && onlineConfig.value === false) {
+  const pickupCustomization = await loadCustomizationSettings({ zoneId: order.zoneId });
+  if (pickupCustomization.online_payment_enabled === false) {
     throw new ValidationError("Online payment is currently disabled");
   }
   if (!isRazorpayConfigured()) {
@@ -317,6 +336,14 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
     );
   }
 
+  // The zone this order belongs to, decided ONCE. It is the zone the order is filed under,
+  // the zone whose Delivery Boy Payout rules / Eatiefy incentive apply (these used to read
+  // restaurant.zoneId, then the customer's zone, so when those differed the incentive saved
+  // for the real zone never applied) and the zone whose payment switches apply.
+  const resolvedOrderZoneId = await resolveOrderZoneId(restaurant, dto.zoneId);
+  // Platform-wide payment switches with this zone's overrides applied.
+  const customization = await loadCustomizationSettings({ zoneId: resolvedOrderZoneId });
+
   const orderType = dto.orderType || "delivery";
   // "Pay at Pickup (online)": a takeaway order placed now and paid online at the
   // counter. It is online-only (never cash) and must be allowed by BOTH the admin
@@ -327,7 +354,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
       throw new ValidationError("Takeaway is not available for this restaurant");
     }
     if (isPayAtPickup) {
-      if (!(await isTakeawayPayAtPickupEnabled())) {
+      if (customization.takeaway_pay_at_pickup_enabled === false) {
         throw new ValidationError("Pay at Pickup is currently unavailable");
       }
       if (restaurant.takeawaySettings?.payAtPickupEnabled !== true) {
@@ -379,19 +406,17 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
 
   // Global Customization Toggles Enforcement
   if (isCash) {
-    // Takeaway is online-payment only: cash / Pay-at-Pickup is never accepted,
-    // regardless of what the client sends. Enforced here (not just in the UI)
-    // so a direct API call cannot create an unpaid takeaway order.
-    if (orderType === "takeaway") {
+    // Takeaway is online-payment only UNLESS an admin explicitly turned "Takeaway COD"
+    // on in Customization Settings. Enforced here (not just in the UI) so a direct API
+    // call cannot create an unpaid takeaway order while the setting is off.
+    // (All switches below are the platform value with this order's zone overrides applied.)
+    if (orderType === "takeaway" && customization.takeaway_cod_enabled !== true) {
       throw new ValidationError("Takeaway orders must be paid online");
     }
 
     // 1. General COD Toggle (Master switch for non-takeaway)
-    if (orderType !== "takeaway") {
-      const globalCodConfig = await FoodSystemConfig.findOne({ key: "cod_enabled" }).select("value").lean();
-      if (globalCodConfig && globalCodConfig.value === false) {
-        throw new ValidationError("Cash on Delivery is currently disabled globally");
-      }
+    if (orderType !== "takeaway" && customization.cod_enabled === false) {
+      throw new ValidationError("Cash on Delivery is currently disabled globally");
     }
 
     // 2. Mode-specific COD Toggles
@@ -400,11 +425,8 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
     else if (orderType === "delivery") codEnabledKey = "delivery_cod_enabled";
     else if (orderType === "dining") codEnabledKey = "dining_cod_enabled";
 
-    if (codEnabledKey) {
-      const codConfig = await FoodSystemConfig.findOne({ key: codEnabledKey }).select("value").lean();
-      if (codConfig && codConfig.value === false) {
-        throw new ValidationError(`Cash on Delivery is currently disabled for ${orderType} orders`);
-      }
+    if (codEnabledKey && customization[codEnabledKey] === false) {
+      throw new ValidationError(`Cash on Delivery is currently disabled for ${orderType} orders`);
     }
 
     // 3. User-specific COD Auto Blocking
@@ -417,11 +439,8 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
     }
   }
 
-  if (isWallet) {
-    const walletConfig = await FoodSystemConfig.findOne({ key: "wallet_payment_enabled" }).select("value").lean();
-    if (walletConfig && walletConfig.value === false) {
-      throw new ValidationError("Wallet payment is currently disabled");
-    }
+  if (isWallet && customization.wallet_payment_enabled === false) {
+    throw new ValidationError("Wallet payment is currently disabled");
   }
 
   // SECURITY: ignore client pricing; use server-calculated amounts only.
@@ -447,8 +466,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
 
 
   if (paymentMethod === "razorpay" && !isPayAtPickup) {
-    const onlineConfig = await FoodSystemConfig.findOne({ key: "online_payment_enabled" }).select("value").lean();
-    if (onlineConfig && onlineConfig.value === false) {
+    if (customization.online_payment_enabled === false) {
       throw new ValidationError("Online payment is currently disabled");
     }
 
@@ -533,14 +551,15 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
     qr: {},
   };
 
+  // `resolvedOrderZoneId` (decided once, near the top of this function) is used for the
+  // order itself, the Delivery Boy Payout rules and the Eatiefy incentive.
   let distanceKm = null;
   // Zone-wise commission payout (unchanged) + admin Eatiefy incentive on top.
   let riderBaseEarning = 0;
-  // Same zone the Delivery Boy Payout rules are resolved for below.
   const eatiefyIncentive = await resolveEatiefyIncentiveForOrder({
     pricing: normalizedPricing,
     orderType,
-    zoneId: restaurant?.zoneId || dto.zoneId || null,
+    zoneId: resolvedOrderZoneId || null,
   });
   const eatiefyIncentiveAmount = eatiefyIncentive?.amount || 0;
   let riderEarning = combineRiderEarning(riderBaseEarning, eatiefyIncentiveAmount);
@@ -558,7 +577,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
         restaurant,
         deliveryAddress: { ...deliveryAddress },
         orderType,
-        zoneId: restaurant?.zoneId || dto.zoneId || null,
+        zoneId: resolvedOrderZoneId || null,
       })
         .then(async (earningResolved) => {
           try {
@@ -626,7 +645,7 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
         restaurant,
         deliveryAddress,
         orderType,
-        zoneId: restaurant?.zoneId || dto.zoneId || null,
+        zoneId: resolvedOrderZoneId || null,
       });
       distanceKm = earningResolved.distanceKm;
       riderBaseEarning = earningResolved.riderEarning;
@@ -693,24 +712,6 @@ export async function createOrder(userId, dto, { gatewayVerified = false } = {})
       restaurantCommission -
       riderEarning,
   );
-
-  const [restaurantLng, restaurantLat] =
-    restaurant?.location?.coordinates?.length === 2
-      ? restaurant.location.coordinates
-      : [null, null];
-  const restaurantGpsZoneId =
-    restaurantLat != null && restaurantLng != null
-      ? await detectZoneIdForPoint(restaurantLat, restaurantLng)
-      : null;
-
-  // Always prefer restaurant GPS zone over client/restaurant.zoneId (prevents cross-city dispatch).
-  const resolvedOrderZoneId = restaurantGpsZoneId
-    ? new mongoose.Types.ObjectId(restaurantGpsZoneId)
-    : restaurant.zoneId
-      ? new mongoose.Types.ObjectId(restaurant.zoneId)
-      : dto.zoneId
-        ? new mongoose.Types.ObjectId(dto.zoneId)
-        : undefined;
 
   const order = new FoodOrder({
     userId: new mongoose.Types.ObjectId(userId),
@@ -956,7 +957,7 @@ export async function verifyPayment(userId, dto) {
   // Notify Customer about payment success
   await notifyOwnersSafely([{ ownerType: "USER", ownerId: userId }], {
     title: "Payment Successful",
-    body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order._id.toString()}.`,
+    body: `We have received your payment of ₹${order.payment.amountDue} for Order #${order.order_id || order._id.toString()}.`,
     idempotencyKey: `payment_success_${order._id}`,
     eventId: `payment_success_${order._id}`,
     tag: `payment_success_${order._id}`,
@@ -1531,6 +1532,7 @@ export async function cancelOrder(orderId, userId, reason, refundDestination = "
       io.to(rooms.restaurant(order.restaurantId)).emit("order_cancelled_by_user", payload);
       io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", payload);
       io.to(rooms.user(userId)).emit("order_status_update", payload);
+      io.to(rooms.admins()).emit("order_status_update", payload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -1644,8 +1646,56 @@ export async function updateOrderInstructions(orderId, userId, instructions) {
     throw new ValidationError("Instructions can no longer be updated for this order");
   }
 
-  order.note = String(instructions || "").trim();
+  const trimmed = String(instructions || "").trim();
+  order.note = trimmed;
+  order.restaurantNote = trimmed;
   await order.save();
+
+  try {
+    const io = getIO();
+    if (io) {
+      const payload = {
+        _id: order._id.toString(),
+        id: order._id.toString(),
+        orderMongoId: order._id.toString(),
+        orderId: order._id.toString(),
+        displayOrderId: order.order_id || order.orderId || order._id.toString(),
+        order_id: order.order_id || order.orderId || order._id.toString(),
+        orderStatus: order.orderStatus,
+        status: order.orderStatus,
+        note: trimmed,
+        restaurantNote: trimmed,
+        deliveryInstructions: trimmed,
+        updatedAt: new Date().toISOString(),
+        message: "Order instructions updated",
+      };
+
+      if (order.restaurantId) {
+        io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", payload);
+      }
+      if (order.userId) {
+        io.to(rooms.user(order.userId)).emit("order_status_update", payload);
+      }
+      io.to(rooms.admins()).emit("order_status_update", payload);
+
+      const trackingIds = [
+        order._id?.toString?.(),
+        order.order_id ? String(order.order_id) : '',
+        order.orderId ? String(order.orderId) : '',
+        payload.displayOrderId,
+      ].filter(Boolean);
+      for (const tId of new Set(trackingIds)) {
+        io.to(rooms.tracking(tId)).emit("order_status_update", payload);
+      }
+
+      if (order.dispatch?.deliveryPartnerId) {
+        io.to(rooms.delivery(order.dispatch.deliveryPartnerId)).emit("order_status_update", payload);
+      }
+    }
+  } catch (err) {
+    logger.warn(`updateOrderInstructions socket emit failed: ${err?.message || err}`);
+  }
+
   return order;
 }
 
@@ -1659,6 +1709,12 @@ export async function listOrdersRestaurant(restaurantId, query) {
       { "payment.status": { $in: ["paid", "authorized", "captured", "settled", "refunded"] } },
     ],
   };
+  // The Feedback/Reviews screen asks for delivered orders only. The filter used
+  // to be ignored, so its pages were mostly filled with open/cancelled orders.
+  // Only this value is honoured: other callers pass UI-side status names.
+  if (String(query?.status || "").trim().toLowerCase() === "delivered") {
+    filter.orderStatus = "delivered";
+  }
   const [docs, total] = await Promise.all([
     FoodOrder.find(filter)
       .populate("userId", "name phone email profileImage")
@@ -1796,7 +1852,7 @@ export async function updateOrderStatusRestaurant(
   }
 
   // Custom messages / titles for status updates
-  let title = `Order ${order._id.toString()} updated`;
+  let title = `Order #${order.order_id || order._id.toString()} updated`;
   let body = `Status changed to ${String(orderStatus).replace(/_/g, " ")}`;
 
   // Fetch restaurant name for rich notifications
@@ -1873,9 +1929,10 @@ export async function updateOrderStatusRestaurant(
       const restRoom = rooms.restaurant(restaurantId);
       const userRoom = rooms.user(order.userId);
       
-      console.log(`[DEBUG] Emitting order_status_update to rooms: ${restRoom}, ${userRoom}`);
+      console.log(`[DEBUG] Emitting order_status_update to rooms: ${restRoom}, ${userRoom}, admins`);
       io.to(restRoom).emit("order_status_update", payload);
       io.to(userRoom).emit("order_status_update", payload);
+      io.to(rooms.admins()).emit("order_status_update", payload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -2813,6 +2870,7 @@ export async function completeTakeawayOrderRestaurant(orderId, restaurantId, otp
       };
       io.to(rooms.restaurant(restaurantId)).emit("order_status_update", payload);
       io.to(rooms.user(order.userId)).emit("order_status_update", payload);
+      io.to(rooms.admins()).emit("order_status_update", payload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -2919,6 +2977,7 @@ export async function acceptOrderAdmin(orderId, adminId) {
       };
       io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", restaurantPayload);
       io.to(rooms.user(order.userId)).emit("order_status_update", userPayload);
+      io.to(rooms.admins()).emit("order_status_update", userPayload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -3008,6 +3067,7 @@ export async function rejectOrderAdmin(orderId, reason, adminId) {
       };
       io.to(rooms.restaurant(order.restaurantId)).emit("order_status_update", restaurantPayload);
       io.to(rooms.user(order.userId)).emit("order_status_update", userPayload);
+      io.to(rooms.admins()).emit("order_status_update", userPayload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -3253,6 +3313,7 @@ export async function updateOrderStatusesAdmin(
       if (order.userId) {
         io.to(rooms.user(order.userId)).emit("order_status_update", payload);
       }
+      io.to(rooms.admins()).emit("order_status_update", payload);
       const trackingIds = [
         order._id?.toString?.(),
         order.order_id ? String(order.order_id) : '',
@@ -3266,5 +3327,115 @@ export async function updateOrderStatusesAdmin(
   } catch (_) {}
 
   return normalizeOrderForClient(order);
+}
+
+/**
+ * Admin: list orders eligible for refund or refund requests.
+ * Includes:
+ * 1. Explicit refund requested or processed (payment.refund.status in ['pending', 'failed', 'processed'] or payment.status === 'refunded')
+ * 2. Cancelled orders where payment was non-cash (online or wallet).
+ */
+export async function getRefundRequestsAdmin(query = {}) {
+  const { page, limit, skip } = buildPaginationOptions(query);
+
+  const refundMatch = {
+    $or: [
+      { 'payment.refund.status': { $in: ['pending', 'failed', 'processed'] } },
+      { 'payment.status': 'refunded' },
+      {
+        orderStatus: {
+          $in: [
+            'cancelled_by_user',
+            'cancelled_by_restaurant',
+            'cancelled_by_admin',
+          ],
+        },
+        $or: [
+          { 'payment.status': { $in: ['paid', 'refunded'] } },
+          { 'payment.method': { $in: ['razorpay', 'razorpay_qr', 'wallet'] } },
+        ],
+      },
+    ],
+  };
+
+  const [docs, total] = await Promise.all([
+    FoodOrder.find(refundMatch)
+      .populate('userId', 'name phone email')
+      .populate('restaurantId', 'restaurantName area city ownerPhone')
+      .populate('dispatch.deliveryPartnerId', 'name phone')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    FoodOrder.countDocuments(refundMatch),
+  ]);
+
+  const orders = docs.map((doc) => {
+    const normalized = normalizeOrderForClient(doc);
+    const createdAt = doc.createdAt ? new Date(doc.createdAt) : new Date();
+    const dateStr = createdAt.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).toUpperCase();
+    const timeStr = createdAt.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).toUpperCase();
+
+    const isProcessed =
+      doc.payment?.refund?.status === 'processed' ||
+      doc.payment?.status === 'refunded';
+
+    const customerName =
+      doc.userId?.name || doc.customerName || doc.deliveryAddress?.name || 'N/A';
+    const customerPhone =
+      doc.userId?.phone || doc.customerPhone || doc.deliveryAddress?.phone || 'N/A';
+    const restaurantName =
+      doc.restaurantId?.restaurantName || doc.restaurantName || 'N/A';
+
+    let cancellationReason = doc.cancellationReason || '';
+    if (!cancellationReason) {
+      if (doc.orderStatus === 'cancelled_by_restaurant') {
+        cancellationReason = 'Rejected by restaurant';
+      } else if (doc.orderStatus === 'cancelled_by_user') {
+        cancellationReason = 'Cancelled by customer';
+      } else if (doc.orderStatus === 'cancelled_by_admin') {
+        cancellationReason = 'Cancelled by admin';
+      } else {
+        cancellationReason = 'Order Cancelled';
+      }
+    }
+
+    return {
+      ...normalized,
+      id: doc._id.toString(),
+      _id: doc._id.toString(),
+      orderId: doc.order_id || doc.orderId || doc._id.toString(),
+      date: dateStr,
+      time: timeStr,
+      createdAt: doc.createdAt,
+      customerName,
+      customerPhone,
+      restaurant: restaurantName,
+      totalAmount: Number(doc.pricing?.total ?? doc.totalAmount ?? doc.payment?.amountDue ?? 0),
+      paymentStatus: doc.payment?.status === 'refunded' ? 'Refunded' : (doc.payment?.status === 'paid' ? 'Paid' : (doc.payment?.status || 'Pending')),
+      paymentMethod: doc.payment?.method || 'N/A',
+      cancellationReason,
+      refundStatus: isProcessed ? 'processed' : 'pending',
+      originalOrder: doc,
+    };
+  });
+
+  return {
+    orders,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    },
+  };
 }
 

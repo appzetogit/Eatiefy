@@ -19,6 +19,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@food/components/ui/dialog"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -45,6 +46,7 @@ const COMPLAINT_TYPE_OPTIONS = [
 ]
 
 export default function RestaurantComplaints() {
+  const { canEdit } = useAdminPermissions()
   const [complaints, setComplaints] = useState([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -264,9 +266,11 @@ export default function RestaurantComplaints() {
                       </div>
                     </div>
                   </div>
+                  {canEdit && (
                   <button onClick={() => handleOpenModal(complaint)} className="p-2 rounded-md hover:bg-gray-200">
                     <Edit className="w-4 h-4 text-gray-600" />
                   </button>
+                  )}
                 </div>
                 <p className="text-sm text-gray-700 mb-3">{complaint.description}</p>
                 {complaint.restaurantResponse && (

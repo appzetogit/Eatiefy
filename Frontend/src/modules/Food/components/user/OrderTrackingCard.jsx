@@ -36,6 +36,7 @@ import { useOrders } from "@food/context/OrdersContext";
 import { useProfile } from "@food/context/ProfileContext";
 import { orderAPI } from "@food/api";
 import { isModuleAuthenticated } from "@food/utils/auth";
+import { getOrderRestaurantInfo } from "@food/hooks/useActiveOrderTracking";
 
 const getOrderKey = (order) => order?.id || order?._id || order?.orderId || null;
 
@@ -480,6 +481,7 @@ const TrackingCardContent = memo(({
   setDismissedKey,
   navigate
 }) => {
+  const restaurantInfo = getOrderRestaurantInfo(activeOrder);
   const [isPresent] = usePresence();
   const [animationCompleted, setAnimationCompleted] = useState(false);
 
@@ -522,7 +524,7 @@ const TrackingCardContent = memo(({
         </button>
 
         <div className="flex items-center gap-4 relative z-10 w-full">
-          <CookingAnimation />
+          {restaurantInfo.image ? <img src={restaurantInfo.image} alt={restaurantName} className="w-12 h-12 rounded-xl object-cover border border-orange-100 shadow-sm shrink-0 bg-orange-50" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <CookingAnimation />}
 
           <div className="flex-1 min-w-0 pr-4">
             <p className="text-gray-900 font-bold text-base md:text-lg truncate tracking-tight">{restaurantName}</p>

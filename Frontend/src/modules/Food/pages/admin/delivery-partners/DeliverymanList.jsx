@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { exportDeliverymenToExcel, exportDeliverymenToPDF } from "@food/components/admin/deliveryman/deliverymanExportUtils"
 import { toast } from "sonner"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugError = () => {}
 
 
@@ -76,6 +77,7 @@ const describeLoadError = (err) => {
 }
 
 export default function DeliverymanList() {
+  const { canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [deliverymen, setDeliverymen] = useState([])
@@ -939,7 +941,7 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                                     <X className="w-4 h-4" />
                                   </button>
                                 </>
-                              ) : (
+                              ) : canEdit ? (
                                 <button
                                   onClick={() => startEditingWallet(dm)}
                                   className="p-1.5 rounded bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
@@ -947,7 +949,7 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                                 >
                                   <Pencil className="w-4 h-4" />
                                 </button>
-                              )}
+                              ) : null}
                               <button 
                                 onClick={() => handleView(dm)}
                                 className="p-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors" 
@@ -955,18 +957,20 @@ availableCashLimit: deliveryman.availableCashLimit || 0,
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={() => handleDelete(dm)}
-                                disabled={Boolean(deletingDeliveryId)}
-                                className="p-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
-                                title="Delete Delivery Partner"
-                              >
-                                {deletingDeliveryId === String(dm._id) ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-4 h-4" />
-                                )}
-                              </button>
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(dm)}
+                                  disabled={Boolean(deletingDeliveryId)}
+                                  className="p-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                                  title="Delete Delivery Partner"
+                                >
+                                  {deletingDeliveryId === String(dm._id) ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                              )}
                             </div>
                           </td>
                         )}

@@ -44,7 +44,8 @@ import eatiefyLogo from "@food/assets/logo.png";
 import { adminAPI } from "@food/api";
 import { clearModuleAuth } from "@food/utils/auth";
 import { getCachedSettings, loadBusinessSettings } from "@food/utils/businessSettings";
-import useAdminNotifications from "@food/hooks/useAdminNotifications";
+import useAdminNotifications, { dispatchAdminNotificationsUpdated } from "@food/hooks/useAdminNotifications";
+import useAdminRealtimeAlerts from "@food/hooks/useAdminRealtimeAlerts";
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -66,6 +67,12 @@ export default function AdminNavbar({ onMenuClick }) {
     unreadCount: notificationCount,
     markAsRead,
   } = useAdminNotifications();
+
+  // Live alerts (e.g. new delivery partner awaiting approval): toast + refresh the bell now.
+  useAdminRealtimeAlerts({
+    onAlert: dispatchAdminNotificationsUpdated,
+    onNavigate: (path) => navigate(path),
+  });
 
   // Load business settings
   useEffect(() => {

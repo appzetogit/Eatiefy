@@ -32,6 +32,7 @@ import { invalidateRestaurantCommissionRulesCache } from '../../orders/services/
 import { FeedbackExperience } from '../models/feedbackExperience.model.js';
 import { FoodUser } from '../../../../core/users/user.model.js';
 import { getUserWallet, creditWalletBalance, deductWalletBalance } from '../../user/services/userWallet.service.js';
+import { FoodUserWallet } from '../../user/models/userWallet.model.js';
 import { FoodRefreshToken } from '../../../../core/refreshTokens/refreshToken.model.js';
 import { FoodDeliveryCashLimit } from '../models/deliveryCashLimit.model.js';
 import { FoodTopRestaurant } from '../models/topRestaurant.model.js';
@@ -949,8 +950,8 @@ export async function getDashboardStats(query = {}) {
         zoneId
             ? FoodOrder.find(orderMatch).distinct('userId').then((ids) => ids.filter(Boolean).length)
             : periodRange
-                ? FoodUser.countDocuments({ createdAt: { $gte: periodRange.start, $lte: periodRange.end } })
-                : FoodUser.countDocuments({}),
+                ? FoodUser.countDocuments({ role: 'USER', createdAt: { $gte: periodRange.start, $lte: periodRange.end } })
+                : FoodUser.countDocuments({ role: 'USER' }),
         FoodRestaurant.find({ ...restaurantMatch, status: 'pending' }).sort({ createdAt: -1 }).limit(5).select('restaurantName createdAt').lean(),
         FoodDeliveryPartner.find({ status: 'pending', ...deliveryFilter }).sort({ createdAt: -1 }).limit(5).select('name createdAt').lean(),
         FoodOrder.find({ 
@@ -1038,7 +1039,11 @@ export async function getDashboardStats(query = {}) {
 
     const onboardedByStatus = new Map((restaurantsOnboardedAgg || []).map((row) => [String(row._id || ''), Number(row.count || 0)]));
     const restaurantsOnboarded = {
-        total: Array.from(onboardedByStatus.values()).reduce((sum, n) => sum + n, 0),
+        // "Onboarded" = completed signup AND approved, i.e. live on the platform
+        // (same rule as the "Total restaurants" card). It used to add up every
+        // status - in review, payment pending, rejected, banned - which showed 41
+        // when only 30 restaurants were actually onboarded.
+        total: onboardedByStatus.get('approved') || 0,
         live: onboardedByStatus.get('approved') || 0,
         inReview: onboardedByStatus.get('pending') || 0,
         paymentPending: onboardedByStatus.get('payment_pending') || 0,
@@ -1411,6 +1416,7 @@ export async function getTransactionReport(query = {}) {
         const tax = toNum(pricing.tax);
         const discount = toNum(pricing.discount);
         const total = toNum(pricing.total);
+        const restaurantCommission = toNum(pricing.restaurantCommission ?? tx?.amounts?.restaurantCommission);
         const platformFeeStored = pricing.platformFee;
         const platformFee =
             platformFeeStored !== undefined && platformFeeStored !== null
@@ -1426,6 +1432,9 @@ export async function getTransactionReport(query = {}) {
             totalItemAmount: subtotal,
             restaurantBaseAmount: toNum(pricing.baseSubtotal ?? Math.max(0, subtotal - toNum(pricing.markupTotal))),
             adminMarkup: toNum(pricing.markupTotal),
+            packagingCharge: packagingFee,
+            packagingFee,
+            restaurantCommission,
             itemDiscount: discount,
             couponDiscount: discount,
             couponCode: pricing.couponCode || order.couponCode || null,
@@ -1853,6 +1862,8 @@ export async function getTaxReport(query = {}) {
         sl: skip + index + 1,
         id: item._id,
         incomeSource: item.incomeSource,
+        totalIncomeRaw: Number(item.totalIncome || 0),
+        totalTaxRaw: Number(item.totalTax || 0),
         totalIncome: `\u20B9${Number(item.totalIncome || 0).toFixed(2)}`,
         totalTax: `\u20B9${Number(item.totalTax || 0).toFixed(2)}`,
         orderCount: item.orderCount
@@ -1987,6 +1998,14 @@ export async function getCustomers(query = {}) {
         ])
     );
 
+    // Current wallet balance per customer (one query for the whole page).
+    const walletDocs = userIds.length > 0
+        ? await FoodUserWallet.find({ userId: { $in: userIds } }).select('userId balance').lean()
+        : [];
+    const walletBalanceMap = new Map(
+        walletDocs.map((w) => [String(w.userId), Number(w.balance) || 0])
+    );
+
     let customers = docs.map((u) => {
         const stats = orderStatsMap.get(String(u._id)) || { totalOrder: 0, totalOrderAmount: 0 };
         return ({
@@ -2003,6 +2022,7 @@ export async function getCustomers(query = {}) {
         isCodBlocked: u.isCodBlocked === true,
         totalOrder: stats.totalOrder,
         totalOrderAmount: stats.totalOrderAmount,
+        walletBalance: walletBalanceMap.get(String(u._id)) || 0,
         joiningDate: u.createdAt,
         createdAt: u.createdAt
         });
@@ -2105,7 +2125,7 @@ export async function adjustCustomerWallet(id, { type, amount, reason } = {}, ad
 
     const metadata = {
         source: 'admin_adjustment',
-        adminId: adminUser?.id || adminUser?._id || null,
+        adminId: adminUser?.userId || adminUser?.id || adminUser?._id || null,
         adminName: adminUser?.name || adminUser?.email || null,
         reason: reason ? String(reason).trim() : ''
     };
@@ -2417,6 +2437,84 @@ export async function getSupportTickets(query = {}) {
     return { tickets, total, page, limit };
 }
 
+/**
+ * Tell the person who raised a support ticket that the admin answered it:
+ * inbox row (survives refresh / re-login) + live nudge to an open app + push.
+ * Best effort - never fails the admin's save.
+ *
+ * @param {{ownerType: 'USER'|'RESTAURANT'|'DELIVERY_PARTNER', ownerId: any, ticketId: any,
+ *          reply?: string, status?: string, link: string}} args
+ */
+async function notifyTicketOwnerOfAdminUpdate({ ownerType, ownerId, ticketId, reply = '', status = '', link }) {
+    try {
+        if (!ownerId || !ticketId) return;
+        const replied = Boolean(String(reply || '').trim());
+        const title = replied ? 'Support replied to your ticket' : 'Your support ticket was updated';
+        const preview = replied
+            ? String(reply).trim().slice(0, 140)
+            : `Status: ${String(status || '').replace(/[-_]/g, ' ')}`;
+        const message = replied ? preview : `Your ticket is now ${String(status || '').replace(/[-_]/g, ' ')}.`;
+
+        // One id per reply, shared by the live socket event and the push, so the
+        // app collapses them into a single notification.
+        const eventRef = `${String(ticketId)}-${Date.now()}`;
+
+        let inboxRow = null;
+        try {
+            const { FoodNotification } = await import('../../../../core/notifications/models/notification.model.js');
+            inboxRow = await FoodNotification.findOneAndUpdate(
+                { ownerType, ownerId, source: 'SUPPORT_TICKET_REPLY', 'metadata.ticketId': String(ticketId) },
+                {
+                    $set: {
+                        title,
+                        message,
+                        link,
+                        category: 'support',
+                        isRead: false,
+                        readAt: null,
+                        dismissedAt: null,
+                        metadata: { ticketId: String(ticketId), status: String(status || ''), repliedAt: new Date().toISOString() }
+                    }
+                },
+                { new: true, upsert: true, setDefaultsOnInsert: true }
+            ).lean();
+        } catch (e) {
+            logger.warn(`[TICKET-REPLY] inbox write failed: ${e?.message || e}`);
+        }
+
+        try {
+            const io = getIO();
+            const room = ownerType === 'USER' ? rooms.user(ownerId)
+                : ownerType === 'RESTAURANT' ? rooms.restaurant(ownerId)
+                    : rooms.delivery(ownerId);
+            io?.to(room).emit('admin_notification', {
+                id: eventRef,
+                title,
+                message,
+                link,
+                createdAt: inboxRow?.createdAt || new Date().toISOString()
+            });
+        } catch (e) {
+            logger.warn(`[TICKET-REPLY] socket emit failed: ${e?.message || e}`);
+        }
+
+        const { notifyOwnerSafely } = await import('../../../../core/notifications/firebase.service.js');
+        await notifyOwnerSafely(
+            { ownerType, ownerId: String(ownerId) },
+            {
+                title,
+                body: message,
+                link,
+                // Must equal `broadcast:<socket payload id>` - see useUserNotifications.
+                idempotencyKey: `broadcast:${eventRef}`,
+                data: { type: 'support_ticket_reply', ticketId: String(ticketId), link }
+            }
+        );
+    } catch (err) {
+        logger.warn(`[TICKET-REPLY] notify failed: ${err?.message || err}`);
+    }
+}
+
 export async function updateSupportTicket(id, body = {}) {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
     const source = String(body.source || 'user').toLowerCase();
@@ -2424,7 +2522,7 @@ export async function updateSupportTicket(id, body = {}) {
 
     // Read the stored status first: a transition can only be judged against
     // what is actually persisted, not against what the client believes.
-    const current = await model.findById(id).select('status').lean();
+    const current = await model.findById(id).select('status adminResponse userId restaurantId').lean();
     if (!current) return null;
 
     const set = {};
@@ -2439,6 +2537,24 @@ export async function updateSupportTicket(id, body = {}) {
 
     const updated = await model.findByIdAndUpdate(id, { $set: set }, { new: true }).lean();
     if (!updated) return null;
+
+    // Notify only when something the customer cares about actually changed:
+    // a new/edited reply, or a status change.
+    const newReply = typeof set.adminResponse === 'string' ? set.adminResponse.trim() : '';
+    const replyChanged = Boolean(newReply) && newReply !== String(current.adminResponse || '').trim();
+    const statusChanged = set.status !== undefined && set.status !== current.status;
+    if (replyChanged || statusChanged) {
+        const isRestaurantTicket = source === 'restaurant';
+        void notifyTicketOwnerOfAdminUpdate({
+            ownerType: isRestaurantTicket ? 'RESTAURANT' : 'USER',
+            ownerId: isRestaurantTicket ? updated.restaurantId : updated.userId,
+            ticketId: updated._id,
+            reply: replyChanged ? newReply : '',
+            status: updated.status,
+            link: isRestaurantTicket ? '/food/restaurant/help-centre/support' : '/food/user/profile/support'
+        });
+    }
+
     return {
         ...updated,
         source: source === 'restaurant' ? 'restaurant' : 'user',
@@ -4523,7 +4639,7 @@ export async function createFood(body) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) throw new ValidationError('Food name is required');
     const foodType = normalizeDishFoodType(body.foodType);
-    const restaurantFoodType = restaurant.foodType || (restaurant.pureVegRestaurant ? 'Veg' : 'Mixed');
+    const restaurantFoodType = restaurant.pureVegRestaurant ? 'Veg' : (restaurant.foodType || 'Mixed');
     if (restaurantFoodType === 'Veg' && foodType !== 'Veg') {
         throw new ValidationError('Veg restaurants can only add veg foods');
     }
@@ -4594,7 +4710,7 @@ export async function updateFood(id, body) {
 
     if (body.name !== undefined) doc.name = String(body.name || '').trim();
     if (body.description !== undefined) doc.description = String(body.description || '').trim();
-    const restaurantFoodType = restaurant.foodType || (restaurant.pureVegRestaurant ? 'Veg' : 'Mixed');
+    const restaurantFoodType = restaurant.pureVegRestaurant ? 'Veg' : (restaurant.foodType || 'Mixed');
     const targetFoodType = body.foodType !== undefined
         ? normalizeDishFoodType(body.foodType)
         : normalizeDishFoodType(doc.foodType);
@@ -4755,15 +4871,28 @@ export async function createRestaurantByAdmin(body) {
     const normalizedClosingTime = normalizeRestaurantTime(body.closingTime) || '';
     validateOpeningClosingTimes(normalizedOpeningTime, normalizedClosingTime);
 
+    let foodType = 'Mixed';
+    let pureVegRestaurant = false;
+    if (body.foodType !== undefined) {
+        const ft = String(body.foodType).trim();
+        if (!['Veg', 'Non-Veg', 'Mixed'].includes(ft)) {
+            throw new ValidationError('foodType must be Veg, Non-Veg, or Mixed');
+        }
+        foodType = ft;
+        pureVegRestaurant = ft === 'Veg';
+    } else if (body.pureVegRestaurant !== undefined) {
+        pureVegRestaurant = parseBooleanLike(body.pureVegRestaurant, 'pureVegRestaurant');
+        foodType = pureVegRestaurant ? 'Veg' : 'Mixed';
+    }
+
     const doc = {
         restaurantName: toStr(body.restaurantName) || toStr(body.name),
         ownerName: toStr(body.ownerName),
         ownerEmail: toStr(body.ownerEmail),
         ownerPhone: toStr(body.ownerPhone),
         primaryContactNumber: toStr(body.primaryContactNumber) || toStr(body.ownerPhone),
-        pureVegRestaurant: body.pureVegRestaurant !== undefined
-            ? parseBooleanLike(body.pureVegRestaurant, 'pureVegRestaurant')
-            : false,
+        foodType,
+        pureVegRestaurant,
         // DISABLED: "Pure Vegan" cannot be set on create any more.
         pureVeganRestaurant: body.pureVeganRestaurant !== undefined
             ? (parseBooleanLike(body.pureVeganRestaurant, 'pureVeganRestaurant') && false)
@@ -4930,6 +5059,7 @@ export async function createRestaurantByAdmin(body) {
 async function sendRestaurantApprovalNotifications(restaurant, existing = {}, isChangesApproval = false) {
     const restaurantId = String(restaurant._id);
     const recipientEmail = String(restaurant.ownerEmail || existing.ownerEmail || '').trim();
+    const recipientPhone = String(restaurant.ownerPhone || restaurant.ownerPhoneDigits || existing.ownerPhone || existing.ownerPhoneDigits || '').trim();
     const restaurantName = restaurant.restaurantName || existing.restaurantName || 'your restaurant';
 
     const pushTitle = isChangesApproval
@@ -4942,7 +5072,7 @@ async function sendRestaurantApprovalNotifications(restaurant, existing = {}, is
         ? '/food/restaurant'
         : '/food/restaurant/pending-verification';
 
-    logger.info(`[APPROVE-EMAIL] Restaurant ${restaurantId} — ownerEmail=${recipientEmail || 'MISSING'}`);
+    logger.info(`[APPROVE-EMAIL] Restaurant ${restaurantId} — ownerEmail=${recipientEmail || 'MISSING'}, phone=${recipientPhone || 'MISSING'}`);
 
     // Persist an inbox row first: push/email are best-effort, but the partner panel
     // reads this collection, so it must survive refresh and re-login.
@@ -4981,13 +5111,21 @@ async function sendRestaurantApprovalNotifications(restaurant, existing = {}, is
         try {
             const io = getIO();
             if (io) {
-                io.to(rooms.restaurant(restaurantId)).emit('admin_notification', {
+                const approvalPayload = {
                     id: String(inboxRow?._id || ''),
+                    restaurantId,
                     title: inboxRow?.title,
                     message: inboxRow?.message,
                     link: targetUrl,
                     type: isChangesApproval ? 'restaurant_changes_approved' : 'restaurant_approved',
                     createdAt: inboxRow?.createdAt || new Date().toISOString()
+                };
+                io.to(rooms.restaurant(restaurantId)).emit('admin_notification', approvalPayload);
+                io.emit('restaurant_approval_status', {
+                    restaurantId,
+                    phone: restaurant.ownerPhone || existing.ownerPhone,
+                    status: 'approved',
+                    type: isChangesApproval ? 'restaurant_changes_approved' : 'restaurant_approved'
                 });
             }
         } catch (socketError) {
@@ -5043,16 +5181,31 @@ async function sendRestaurantApprovalNotifications(restaurant, existing = {}, is
         } else {
             logger.warn(`[APPROVE-EMAIL] Restaurant ${restaurantId} — email FAILED for ${recipientEmail}`);
         }
-        return emailSent;
     } catch (e) {
         logger.error(`[APPROVE-EMAIL] Restaurant ${restaurantId} — email error: ${e?.message || e}`);
-        return false;
     }
+
+    if (recipientPhone) {
+        try {
+            const { sendAccountApprovalSms } = await import('../../../../core/otp/otp.service.js');
+            await sendAccountApprovalSms({
+                phone: recipientPhone,
+                name: restaurantName,
+                role: 'RESTAURANT',
+                isChangesApproval
+            });
+        } catch (smsErr) {
+            logger.warn(`[APPROVE-SMS] Restaurant ${restaurantId} — SMS error: ${smsErr?.message || smsErr}`);
+        }
+    }
+
+    return true;
 }
 
 async function sendDeliveryApprovalNotifications(partner, existing = {}, isChangesApproval = false) {
     const partnerId = String(partner._id);
     let recipientEmail = String(partner.email || existing.email || '').trim().toLowerCase();
+    let recipientPhone = String(partner.phone || existing.phone || '').trim();
     const partnerName = partner.name || existing.name || 'Partner';
 
     const pushTitle = isChangesApproval
@@ -5065,12 +5218,13 @@ async function sendDeliveryApprovalNotifications(partner, existing = {}, isChang
         ? '/food/delivery'
         : '/food/delivery/pending-verification';
 
-    if (!recipientEmail && mongoose.Types.ObjectId.isValid(partnerId)) {
-        const fresh = await FoodDeliveryPartner.findById(partnerId).select('email name').lean();
-        recipientEmail = String(fresh?.email || '').trim().toLowerCase();
+    if ((!recipientEmail || !recipientPhone) && mongoose.Types.ObjectId.isValid(partnerId)) {
+        const fresh = await FoodDeliveryPartner.findById(partnerId).select('email name phone').lean();
+        if (!recipientEmail) recipientEmail = String(fresh?.email || '').trim().toLowerCase();
+        if (!recipientPhone) recipientPhone = String(fresh?.phone || '').trim();
     }
 
-    logger.info(`[APPROVE-EMAIL] Delivery ${partnerId} — email=${recipientEmail || 'MISSING'}`);
+    logger.info(`[APPROVE-EMAIL] Delivery ${partnerId} — email=${recipientEmail || 'MISSING'}, phone=${recipientPhone || 'MISSING'}`);
 
     // Persist an inbox row first: push/email are best-effort, but the partner app
     // reads this collection, so it must survive refresh and re-login.
@@ -5172,11 +5326,25 @@ async function sendDeliveryApprovalNotifications(partner, existing = {}, isChang
         } else {
             logger.warn(`[APPROVE-EMAIL] Delivery ${partnerId} — email FAILED for ${recipientEmail}`);
         }
-        return emailSent;
     } catch (e) {
         logger.error(`[APPROVE-EMAIL] Delivery ${partnerId} — email error: ${e?.message || e}`);
-        return false;
     }
+
+    if (recipientPhone) {
+        try {
+            const { sendAccountApprovalSms } = await import('../../../../core/otp/otp.service.js');
+            await sendAccountApprovalSms({
+                phone: recipientPhone,
+                name: partnerName,
+                role: 'DELIVERY_PARTNER',
+                isChangesApproval
+            });
+        } catch (smsErr) {
+            logger.warn(`[APPROVE-SMS] Delivery ${partnerId} — SMS error: ${smsErr?.message || smsErr}`);
+        }
+    }
+
+    return true;
 }
 
 export async function approveRestaurant(id) {
@@ -5184,7 +5352,7 @@ export async function approveRestaurant(id) {
 
     logger.info(`[ADMIN-APPROVE] approveRestaurant service called id=${id}`);
 
-    const existing = await FoodRestaurant.findById(id).select('status ownerEmail restaurantName pendingApprovalType').lean();
+    const existing = await FoodRestaurant.findById(id).select('status ownerEmail ownerPhone ownerPhoneDigits restaurantName profileImage pendingApprovalType').lean();
     if (!existing) return null;
     const isChangesApproval = existing.pendingApprovalType === 'changes';
 
@@ -5600,13 +5768,14 @@ export async function getDeliveryJoinRequests(query) {
     const skip = Math.max(0, (Number(page) || 1) - 1) * Math.max(1, Math.min(1000, Number(limit) || 100));
     const limitNum = Math.max(1, Math.min(1000, Number(limit) || 100));
 
-    const [list, zoneDocs] = await Promise.all([
+    const [list, zoneDocs, total] = await Promise.all([
         FoodDeliveryPartner.find(filter)
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limitNum)
             .lean(),
-        FoodZone.find({}).select('_id name zoneName serviceLocation').lean()
+        FoodZone.find({}).select('_id name zoneName serviceLocation').lean(),
+        FoodDeliveryPartner.countDocuments(filter)
     ]);
 
     const zoneMap = new Map((zoneDocs || []).map((z) => [String(z._id), z.name || z.zoneName || z.serviceLocation || '']));
@@ -5630,7 +5799,17 @@ export async function getDeliveryJoinRequests(query) {
         };
     });
 
-    return { requests };
+    // The page reads pagination.total to know how many pages exist. Without it
+    // the UI assumed "total = rows on this page" and never offered page 2.
+    return {
+        requests,
+        pagination: {
+            page: Math.max(1, Number(page) || 1),
+            limit: limitNum,
+            total,
+            pages: Math.max(1, Math.ceil(total / limitNum))
+        }
+    };
 }
 
 export function getDeliveryWalletsStub() {
@@ -5728,6 +5907,8 @@ export async function updateDeliverySupportTicket(id, body = {}) {
     const ticket = await DeliverySupportTicket.findById(id);
     if (!ticket) return null;
     const { status, adminResponse } = body || {};
+    const previousStatus = ticket.status;
+    const previousReply = String(ticket.adminResponse || '').trim();
     if (status !== undefined && status !== null && String(status) !== '') {
         // Judged against the persisted status, and rejected outright when the
         // move is not part of the lifecycle — silently ignoring it used to let
@@ -5740,6 +5921,20 @@ export async function updateDeliverySupportTicket(id, body = {}) {
         if (ticket.adminResponse) ticket.respondedAt = new Date();
     }
     await ticket.save();
+
+    const newReply = String(ticket.adminResponse || '').trim();
+    const replyChanged = Boolean(newReply) && newReply !== previousReply;
+    if (replyChanged || ticket.status !== previousStatus) {
+        void notifyTicketOwnerOfAdminUpdate({
+            ownerType: 'DELIVERY_PARTNER',
+            ownerId: ticket.deliveryPartnerId,
+            ticketId: ticket._id,
+            reply: replyChanged ? newReply : '',
+            status: ticket.status,
+            link: `/food/delivery/help/tickets/${ticket._id}`
+        });
+    }
+
     return {
         ...ticket.toObject(),
         allowedStatusTransitions: getAllowedTicketTransitions('delivery', ticket.status)
@@ -6236,16 +6431,15 @@ export async function getRestaurantEarnings(query = {}) {
         filter.restaurantId = { $in: existingRestaurantIds };
     }
 
-    // Zone filter
+    // Zone filter - strictly scope to restaurants located in this zone
     if (query.zoneId && query.zoneId !== 'all') {
         const zoneOid = parseZoneFilter(query.zoneId);
         if (zoneOid) {
             const restaurantIds = await getRestaurantIdsInZone(zoneOid);
-            const zoneOr = [{ zoneId: zoneOid }];
-            if (restaurantIds.length > 0) {
-                zoneOr.push({ restaurantId: { $in: restaurantIds } });
-            }
-            filter.$and = [...(Array.isArray(filter.$and) ? filter.$and : []), { $or: zoneOr }];
+            filter.$and = [
+                ...(Array.isArray(filter.$and) ? filter.$and : []),
+                { restaurantId: { $in: restaurantIds } }
+            ];
         }
     }
 
@@ -6340,8 +6534,8 @@ export async function getRestaurantEarnings(query = {}) {
         const packagingFee = Number(pricing.packagingFee ?? 0) || 0;
         const commission = Number(pricing.restaurantCommission ?? 0) || 0;
         const amount = Math.max(0, Math.round((baseSubtotal + packagingFee - commission) * 100) / 100);
-        const zoneName = order?.zoneId?.name || order?.zoneId?.zoneName || restaurant?.zoneId?.name || restaurant?.zoneId?.zoneName || 'N/A';
-        const zoneId = order?.zoneId?._id || restaurant?.zoneId?._id || null;
+        const zoneName = restaurant?.zoneId?.name || restaurant?.zoneId?.zoneName || order?.zoneId?.name || order?.zoneId?.zoneName || 'N/A';
+        const zoneId = restaurant?.zoneId?._id || order?.zoneId?._id || null;
         const restaurantPhone = restaurant?.phone || restaurant?.ownerPhone || restaurant?.primaryContactNumber || 'N/A';
 
         return {
@@ -6381,6 +6575,217 @@ export async function getRestaurantEarnings(query = {}) {
             limit,
             total,
             pages: Math.ceil(total / limit) || 1
+        }
+    };
+}
+
+// ----- Admin (platform) earnings -----
+
+/** {start, end} for ?fromDate&toDate, else ?period=today|week|month, else null (all time). */
+const resolveEarningsDateRange = (query = {}) => {
+    const from = query.fromDate ? new Date(query.fromDate) : null;
+    const to = query.toDate ? new Date(query.toDate) : null;
+    const validFrom = from && !Number.isNaN(from.getTime()) ? from : null;
+    const validTo = to && !Number.isNaN(to.getTime()) ? to : null;
+    if (validFrom || validTo) {
+        const start = validFrom ? new Date(validFrom) : new Date(0);
+        start.setHours(0, 0, 0, 0);
+        const end = validTo ? new Date(validTo) : new Date();
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+    }
+
+    const now = new Date();
+    const period = String(query.period || 'all').trim().toLowerCase();
+    if (period === 'today') {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(now);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+    }
+    if (period === 'week') {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        start.setDate(start.getDate() - start.getDay());
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+    }
+    if (period === 'month') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { start, end };
+    }
+    return null;
+};
+
+/**
+ * What the platform itself earns, and what it pays out of that.
+ *
+ * Income (delivered orders): restaurant commission + platform fee + admin markup on items
+ * + delivery fee collected + taxes collected, plus restaurant onboarding ("subscription")
+ * fees. These are the same components the dashboard's "Platform Total" adds up.
+ *
+ * Deductions: what the platform pays out of it - rider payouts (base earning + Eatiefy
+ * incentive), coupon discounts, delivery partner bonuses, credited earning-addon rewards
+ * and referral rewards. Net = income - deductions.
+ *
+ * Restaurant payouts (food value) are not the admin's money and appear in neither side.
+ */
+export async function getAdminEarnings(query = {}) {
+    const r2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+    const limit = Math.max(1, Math.min(100, parseInt(query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const range = resolveEarningsDateRange(query);
+    const zoneOid = parseZoneFilter(query.zoneId);
+    const [zoneRestaurantIds, zonePartnerIds] = zoneOid
+        ? await Promise.all([getRestaurantIdsInZone(zoneOid), getDeliveryPartnerIdsInZone(zoneOid)])
+        : [null, null];
+
+    const orderFilter = { orderStatus: 'delivered' };
+    if (range) orderFilter.createdAt = { $gte: range.start, $lte: range.end };
+    if (zoneRestaurantIds) orderFilter.restaurantId = { $in: zoneRestaurantIds };
+
+    const dateMatch = (field) => (range ? { [field]: { $gte: range.start, $lte: range.end } } : {});
+    const partnerMatch = zonePartnerIds ? { deliveryPartnerId: { $in: zonePartnerIds } } : {};
+    const sum = (path) => ({ $sum: { $ifNull: [path, 0] } });
+
+    const [orderAgg, orders, totalOrders, bonusAgg, addonAgg, referralAgg, onboardingAgg] = await Promise.all([
+        FoodOrder.aggregate([
+            { $match: orderFilter },
+            {
+                $group: {
+                    _id: null,
+                    orders: { $sum: 1 },
+                    orderValue: sum('$pricing.total'),
+                    foodSales: { $sum: { $ifNull: ['$pricing.baseSubtotal', { $ifNull: ['$pricing.subtotal', 0] }] } },
+                    commission: sum('$pricing.restaurantCommission'),
+                    platformFee: sum('$pricing.platformFee'),
+                    markup: sum('$pricing.markupTotal'),
+                    deliveryFee: sum('$pricing.deliveryFee'),
+                    tax: sum('$pricing.tax'),
+                    discount: sum('$pricing.discount'),
+                    riderPayout: sum('$riderEarning'),
+                    riderIncentive: sum('$eatiefyIncentive.amount')
+                }
+            }
+        ]),
+        FoodOrder.find(orderFilter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .select('orderId createdAt pricing riderEarning eatiefyIncentive restaurantId')
+            .populate('restaurantId', 'restaurantName name')
+            .lean(),
+        FoodOrder.countDocuments(orderFilter),
+        DeliveryBonusTransaction.aggregate([
+            { $match: { ...dateMatch('createdAt'), ...partnerMatch } },
+            { $group: { _id: null, total: sum('$amount'), count: { $sum: 1 } } }
+        ]),
+        FoodEarningAddonHistory.aggregate([
+            { $match: { status: 'credited', ...dateMatch('creditedAt'), ...partnerMatch } },
+            { $group: { _id: null, total: sum('$earningAmount'), count: { $sum: 1 } } }
+        ]),
+        // Referral rewards belong to users, who have no zone, so they can't be zone-filtered.
+        zoneOid
+            ? Promise.resolve([])
+            : FoodReferralLog.aggregate([
+                { $match: { status: 'credited', ...dateMatch('updatedAt') } },
+                { $group: { _id: null, total: sum('$rewardAmount'), count: { $sum: 1 } } }
+            ]),
+        // Restaurant onboarding ("subscription") fees actually collected.
+        FoodOnboardingPayment.aggregate([
+            {
+                $match: {
+                    status: 'paid',
+                    ...dateMatch('paidAt'),
+                    ...(zoneOid ? { $or: [{ zoneId: zoneOid }, { restaurantId: { $in: zoneRestaurantIds || [] } }] } : {})
+                }
+            },
+            { $group: { _id: null, totalPaise: sum('$amountPaise'), count: { $sum: 1 } } }
+        ])
+    ]);
+
+    const o = orderAgg?.[0] || {};
+    const subscription = r2(Number(onboardingAgg?.[0]?.totalPaise || 0) / 100);
+
+    const income = {
+        commission: r2(o.commission),
+        platformFee: r2(o.platformFee),
+        adminMarkup: r2(o.markup),
+        deliveryFee: r2(o.deliveryFee),
+        taxes: r2(o.tax),
+        subscription
+    };
+    income.total = r2(Object.values(income).reduce((a, b) => a + b, 0));
+
+    const deductions = {
+        riderPayouts: r2(o.riderPayout),
+        couponDiscounts: r2(o.discount),
+        deliveryBonuses: r2(bonusAgg?.[0]?.total),
+        earningAddonRewards: r2(addonAgg?.[0]?.total),
+        referralRewards: r2(referralAgg?.[0]?.total)
+    };
+    deductions.total = r2(Object.values(deductions).reduce((a, b) => a + b, 0));
+
+    const rows = orders.map((order) => {
+        const p = order.pricing || {};
+        const n = (v) => Number(v) || 0;
+        const commission = n(p.restaurantCommission);
+        const platformFee = n(p.platformFee);
+        const markup = n(p.markupTotal);
+        const deliveryFee = n(p.deliveryFee);
+        const tax = n(p.tax);
+        const rider = n(order.riderEarning);
+        const discount = n(p.discount);
+        return {
+            id: String(order._id),
+            orderId: order.orderId || 'N/A',
+            restaurant: order.restaurantId?.restaurantName || order.restaurantId?.name || 'N/A',
+            createdAt: order.createdAt || null,
+            orderValue: r2(p.total),
+            commission: r2(commission),
+            platformFee: r2(platformFee),
+            adminMarkup: r2(markup),
+            deliveryFee: r2(deliveryFee),
+            taxes: r2(tax),
+            riderPayout: r2(rider),
+            couponDiscount: r2(discount),
+            net: r2(commission + platformFee + markup + deliveryFee + tax - rider - discount)
+        };
+    });
+
+    return {
+        summary: {
+            income,
+            deductions,
+            netEarning: r2(income.total - deductions.total),
+            orders: {
+                delivered: Number(o.orders || 0),
+                orderValue: r2(o.orderValue),
+                foodSales: r2(o.foodSales)
+            },
+            // Of the rider payouts above, how much was the Eatiefy incentive.
+            riderIncentive: r2(o.riderIncentive),
+            subscriptionPayments: Number(onboardingAgg?.[0]?.count || 0),
+            counts: {
+                deliveryBonuses: Number(bonusAgg?.[0]?.count || 0),
+                earningAddonRewards: Number(addonAgg?.[0]?.count || 0),
+                referralRewards: Number(referralAgg?.[0]?.count || 0)
+            }
+        },
+        orders: rows,
+        pagination: { page, limit, total: totalOrders, pages: Math.ceil(totalOrders / limit) || 1 },
+        filters: {
+            zoneId: zoneOid ? String(zoneOid) : null,
+            from: range?.start || null,
+            to: range?.end || null,
+            // Not narrowed by zone when a zone is selected.
+            notZoneFiltered: zoneOid ? ['referralRewards'] : []
         }
     };
 }
@@ -6664,7 +7069,25 @@ export async function cancelEarningAddonHistory(historyId, reason) {
     return doc.toObject();
 }
 
-export async function checkEarningAddonCompletions(deliveryPartnerId, _force = false) {
+// Checks for one rider run one after another. Two deliveries landing together would
+// otherwise both see "no history yet" and each create a row for the same offer.
+const earningAddonCheckChains = new Map();
+
+export function checkEarningAddonCompletions(deliveryPartnerId, force = false) {
+    const key = String(deliveryPartnerId || '');
+    if (!key || key === 'all') return runEarningAddonCompletionCheck(deliveryPartnerId, force);
+
+    const previous = earningAddonCheckChains.get(key) || Promise.resolve();
+    const next = previous.catch(() => {}).then(() => runEarningAddonCompletionCheck(deliveryPartnerId, force));
+    earningAddonCheckChains.set(key, next);
+    const cleanup = () => {
+        if (earningAddonCheckChains.get(key) === next) earningAddonCheckChains.delete(key);
+    };
+    next.then(cleanup, cleanup);
+    return next;
+}
+
+async function runEarningAddonCompletionCheck(deliveryPartnerId, _force = false) {
     const now = new Date();
     
     // Only search for active offers that are currently running.
@@ -6862,7 +7285,10 @@ export async function getDeliverymanReviews(query = {}) {
         sl: skip + index + 1,
         orderId: doc.orderId,
         deliveryman: doc.dispatch?.deliveryPartnerId?.name || 'Unknown',
+        // Raw Mongo id (used for links) plus the "DP-XXXXXXXX" display id every other
+        // admin screen and the partner's own app shows.
         deliverymanId: doc.dispatch?.deliveryPartnerId?._id || 'N/A',
+        deliveryId: toDeliveryPartnerDisplayId(doc.dispatch?.deliveryPartnerId) || 'N/A',
         deliverymanPhone: doc.dispatch?.deliveryPartnerId?.phone || 'N/A',
         customer: doc.userId?.name || 'Unknown',
         customerId: doc.userId?._id || 'N/A',
@@ -6882,7 +7308,7 @@ export async function approveDeliveryPartner(id, body = {}) {
     logger.info(`[ADMIN-APPROVE] approveDeliveryPartner service called id=${id}`);
 
     const existing = await FoodDeliveryPartner.findById(id)
-        .select('status email name pendingApprovalType zoneId city state address')
+        .select('status email name phone pendingApprovalType zoneId city state address')
         .lean();
     if (!existing) return null;
     const isChangesApproval = existing.pendingApprovalType === 'changes';
@@ -7194,6 +7620,158 @@ export async function deleteZone(id) {
     return { id: String(zoneOid), name: zone.name };
 }
 
+// ----- Restaurant wallets (admin) -----
+
+/**
+ * Money figures per restaurant, keyed by id. "Available balance" follows the same
+ * rule as getRestaurantFinance (the restaurant app): unsettled shares of delivered
+ * orders, minus withdrawals that are pending or approved.
+ */
+async function computeRestaurantWalletTotals(restaurantIds) {
+    if (!restaurantIds.length) return { earnings: new Map(), withdrawals: new Map() };
+
+    const [earningRows, withdrawalRows] = await Promise.all([
+        FoodTransaction.aggregate([
+            { $match: { restaurantId: { $in: restaurantIds }, status: { $in: ['captured', 'authorized'] } } },
+            {
+                $lookup: {
+                    from: FoodOrder.collection.name,
+                    localField: 'orderId',
+                    foreignField: '_id',
+                    as: 'order'
+                }
+            },
+            { $match: { 'order.orderStatus': { $in: ['delivered', 'completed'] } } },
+            {
+                $group: {
+                    _id: '$restaurantId',
+                    deliveredOrders: { $sum: 1 },
+                    totalEarning: { $sum: { $ifNull: ['$amounts.restaurantShare', 0] } },
+                    commission: { $sum: { $ifNull: ['$amounts.restaurantCommission', 0] } },
+                    unsettledEarning: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$settlement.isRestaurantSettled', true] },
+                                0,
+                                { $ifNull: ['$amounts.restaurantShare', 0] }
+                            ]
+                        }
+                    }
+                }
+            }
+        ]),
+        FoodRestaurantWithdrawal.aggregate([
+            { $match: { restaurantId: { $in: restaurantIds } } },
+            {
+                $group: {
+                    _id: { restaurantId: '$restaurantId', status: { $toLower: { $trim: { input: '$status' } } } },
+                    total: { $sum: '$amount' }
+                }
+            }
+        ])
+    ]);
+
+    const earnings = new Map(earningRows.map((row) => [String(row._id), row]));
+    const withdrawals = new Map();
+    for (const row of withdrawalRows) {
+        const key = String(row._id.restaurantId);
+        const entry = withdrawals.get(key) || {};
+        entry[row._id.status] = row.total;
+        withdrawals.set(key, entry);
+    }
+    return { earnings, withdrawals };
+}
+
+/**
+ * Restaurant wallets with totals over every matching restaurant (not only the
+ * returned page). Lists approved restaurants plus any other restaurant that has
+ * money history, so a balance does not disappear while a profile change is
+ * waiting for approval.
+ */
+export async function getRestaurantWallets(query = {}) {
+    const limit = Math.min(Math.max(parseInt(query.limit, 10) || 20, 1), 500);
+    const page = Math.max(parseInt(query.page, 10) || 1, 1);
+
+    const [idsWithOrders, idsWithWithdrawals] = await Promise.all([
+        FoodTransaction.distinct('restaurantId', { status: { $in: ['captured', 'authorized'] } }),
+        FoodRestaurantWithdrawal.distinct('restaurantId')
+    ]);
+
+    const conditions = [{
+        $or: [
+            { status: 'approved' },
+            { _id: { $in: [...idsWithOrders, ...idsWithWithdrawals] } }
+        ]
+    }];
+
+    const zoneOid = parseZoneFilter(query.zoneId);
+    if (zoneOid) conditions.push({ zoneId: zoneOid });
+
+    const search = String(query.search || '').trim().slice(0, 80);
+    if (search) {
+        const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        conditions.push({
+            $or: [
+                { restaurantName: regex },
+                { ownerName: regex },
+                { ownerPhone: regex },
+                { primaryContactNumber: regex }
+            ]
+        });
+    }
+
+    const restaurants = await FoodRestaurant.find({ $and: conditions })
+        .select('restaurantName ownerName ownerPhone primaryContactNumber status')
+        .lean();
+
+    const { earnings, withdrawals } = await computeRestaurantWalletTotals(restaurants.map((r) => r._id));
+
+    const rows = restaurants.map((r) => {
+        const key = String(r._id);
+        const earned = earnings.get(key);
+        const withdrawn = withdrawals.get(key);
+        const totalWithdrawn = roundMoney(withdrawn?.approved);
+        const pendingWithdrawal = roundMoney(withdrawn?.pending);
+        return {
+            restaurantId: key,
+            name: r.restaurantName || '',
+            ownerName: r.ownerName || '',
+            phone: r.ownerPhone || r.primaryContactNumber || '',
+            status: r.status,
+            deliveredOrders: earned?.deliveredOrders || 0,
+            totalEarning: roundMoney(earned?.totalEarning),
+            commission: roundMoney(earned?.commission),
+            totalWithdrawn,
+            pendingWithdrawal,
+            availableBalance: roundMoney(
+                Math.max(0, (Number(earned?.unsettledEarning) || 0) - totalWithdrawn - pendingWithdrawal)
+            )
+        };
+    });
+
+    // Money owed first, then the busiest, then by name.
+    rows.sort((a, b) =>
+        b.availableBalance - a.availableBalance ||
+        b.totalEarning - a.totalEarning ||
+        a.name.localeCompare(b.name)
+    );
+
+    const sum = (field) => roundMoney(rows.reduce((total, row) => total + row[field], 0));
+
+    return {
+        wallets: rows.slice((page - 1) * limit, page * limit),
+        summary: {
+            availableBalance: sum('availableBalance'),
+            totalEarning: sum('totalEarning'),
+            commission: sum('commission'),
+            totalWithdrawn: sum('totalWithdrawn'),
+            pendingWithdrawal: sum('pendingWithdrawal'),
+            deliveredOrders: rows.reduce((total, row) => total + row.deliveredOrders, 0)
+        },
+        pagination: { total: rows.length, page, limit, pages: Math.ceil(rows.length / limit) || 1 }
+    };
+}
+
 // ----- Withdrawals (admin) -----
 export async function getWithdrawals(query = {}) {
     const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 500);
@@ -7223,7 +7801,7 @@ export async function getWithdrawals(query = {}) {
 
     const [withdrawals, total] = await Promise.all([
         FoodRestaurantWithdrawal.find(filter)
-            .populate('restaurantId', 'restaurantName profileImage ownerName phone ownerPhone accountHolderName accountNumber ifscCode accountType upiId upiQrImage')
+            .populate('restaurantId', 'restaurantName profileImage ownerName phone ownerPhone accountHolderName accountNumber ifscCode accountType upiId upiQrImage addressLine1 addressLine2 area city state pincode landmark location')
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
@@ -7231,11 +7809,27 @@ export async function getWithdrawals(query = {}) {
         FoodRestaurantWithdrawal.countDocuments(filter)
     ]);
 
+    // One readable line from whichever address fields the restaurant has filled in.
+    const formatRestaurantAddress = (r) => {
+        if (!r) return '';
+        const loc = r.location || {};
+        const parts = [
+            r.addressLine1 || loc.addressLine1,
+            r.addressLine2 || loc.addressLine2,
+            r.area || loc.area,
+            r.city || loc.city,
+            r.state || loc.state,
+            r.pincode || loc.pincode
+        ].map((p) => String(p || '').trim()).filter(Boolean);
+        return parts.length ? [...new Set(parts)].join(', ') : String(loc.formattedAddress || loc.address || '').trim();
+    };
+
     // UI expects status with first letter capitalized, and data in 'requests' key
     const requests = withdrawals.map((w) => ({
         ...w,
         id: w._id,
         restaurantName: w.restaurantId?.restaurantName || 'N/A',
+        restaurantAddress: formatRestaurantAddress(w.restaurantId),
         restaurantIdString: w.restaurantId ? `REST${w.restaurantId._id.toString().slice(-6).padStart(6, '0')}` : 'N/A',
         restaurantBankDetails: {
             accountHolderName: w.restaurantId?.accountHolderName || '',
@@ -7378,15 +7972,45 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
         throw new ValidationError('Status must be Approved or Rejected');
     }
 
+
+    // "processed" is the legacy name for approved.
+    const rawStatus = String(status || '').trim().toLowerCase();
+    const nextStatus = rawStatus === 'processed' ? 'approved' : rawStatus;
+    if (!['approved', 'rejected'].includes(nextStatus)) {
+        throw new ValidationError('Invalid withdrawal status');
+    }
+
     const update = {
         status: nextStatus,
+        status: nextStatus,
         adminNote,
-        rejectionReason,
-        transactionId,
         processedAt: new Date()
     };
 
     // Atomic pending → decided transition: two concurrent clicks cannot both apply.
+    const updated = await FoodDeliveryWithdrawal.findOneAndUpdate(
+        { _id: id, status: 'pending' },
+    if (nextStatus === 'approved') {
+        // The bank / UPI reference of the payout the admin just made. It is the only
+        // proof of payment if the partner later disputes a withdrawal, so approval
+        // without it is refused, and one reference can't be reused for another payout.
+        const txnId = String(transactionId || '').trim();
+        if (!txnId) throw new ValidationError('Transaction ID is required to approve a withdrawal');
+        if (txnId.length < 4 || txnId.length > 64) {
+            throw new ValidationError('Transaction ID must be between 4 and 64 characters');
+        }
+        const duplicate = await FoodDeliveryWithdrawal.findOne({
+            transactionId: new RegExp(`^${txnId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+            _id: { $ne: id }
+        }).select('_id').lean();
+        if (duplicate) throw new ValidationError('This transaction ID is already used for another withdrawal');
+        update.transactionId = txnId;
+    } else {
+        update.rejectionReason = String(rejectionReason || '').trim();
+    }
+
+    // Only a pending request can be decided, and only once. Previously any status could
+    // be written over any other, so approving twice deducted the wallet twice.
     const updated = await FoodDeliveryWithdrawal.findOneAndUpdate(
         { _id: id, status: 'pending' },
         { $set: update },
@@ -7398,8 +8022,14 @@ export async function updateDeliveryWithdrawalStatus(id, { status, adminNote, re
         if (!existing) throw new ValidationError('Withdrawal request not found');
         throw new ValidationError(`Withdrawal request is already ${existing.status}`);
     }
+    if (!updated) {
+        const existing = await FoodDeliveryWithdrawal.findById(id).select('status').lean();
+        if (!existing) throw new ValidationError('Withdrawal request not found');
+        throw new ValidationError(`This withdrawal was already ${existing.status}`);
+    }
 
     // If approved, deduct from wallet balance
+    if (nextStatus === 'approved') {
     if (nextStatus === 'approved') {
         const amount = Number(updated.amount || 0);
         if (amount > 0) {
@@ -7545,6 +8175,10 @@ async function computeDeliveryWalletRows(partners) {
             phone: p.phone || '',
             deliveryIdString: partnerIdstr,
             pocketBalance,
+            // Unclamped figures: an admin correction has to be measured from
+            // these, or a balance floored at 0 would be adjusted by the wrong amount.
+            rawPocketBalance: (totalEarned + totalBonus) - (totalWithdrawn + pendingWithdrawals),
+            rawCashInHand: grossCashCollected - totalDepositedCash,
             totalCashLimit: cashLimitFor(p),
             remainingCashLimit: Math.max(0, cashLimitFor(p) - cashInHand),
             cashCollected: grossCashCollected,
@@ -7557,6 +8191,97 @@ async function computeDeliveryWalletRows(partners) {
     });
 
     return wallets;
+}
+
+/**
+ * Admin sets a delivery partner's pocket balance and/or cash in hand.
+ *
+ * Both figures are DERIVED (earnings + bonuses - withdrawals, and COD collected -
+ * completed deposits), not stored fields, so there is nothing to overwrite. The
+ * correction is booked as a ledger entry that every wallet screen already counts:
+ *  - pocket balance up   -> a bonus transaction
+ *  - pocket balance down -> an approved withdrawal ("admin adjustment")
+ *  - cash in hand down   -> a completed deposit
+ *  - cash in hand up     -> a completed deposit with a negative amount
+ */
+export async function updateDeliveryPartnerWallet(deliveryId, { pocketBalance, cashInHand } = {}, adminUser = null) {
+    if (!deliveryId || !mongoose.Types.ObjectId.isValid(String(deliveryId))) {
+        throw new ValidationError('Invalid delivery partner id');
+    }
+    const wantsPocket = pocketBalance !== undefined && pocketBalance !== null && pocketBalance !== '';
+    const wantsCash = cashInHand !== undefined && cashInHand !== null && cashInHand !== '';
+    if (!wantsPocket && !wantsCash) {
+        throw new ValidationError('Provide pocketBalance and/or cashInHand');
+    }
+    const targetPocket = wantsPocket ? roundMoney(pocketBalance) : null;
+    const targetCash = wantsCash ? roundMoney(cashInHand) : null;
+    if ((wantsPocket && (!Number.isFinite(targetPocket) || targetPocket < 0)) ||
+        (wantsCash && (!Number.isFinite(targetCash) || targetCash < 0))) {
+        throw new ValidationError('Pocket balance and cash in hand must be non-negative numbers');
+    }
+
+    const partnerId = new mongoose.Types.ObjectId(String(deliveryId));
+    const partner = await FoodDeliveryPartner.findById(partnerId).lean();
+    if (!partner) throw new NotFoundError('Delivery partner not found');
+
+    const [before] = await computeDeliveryWalletRows([partner]);
+    const adminId = adminUser?.userId || adminUser?._id || adminUser?.id || undefined;
+    const note = 'Admin wallet adjustment';
+
+    if (wantsPocket) {
+        const delta = roundMoney(targetPocket - roundMoney(before.rawPocketBalance));
+        if (delta > 0) {
+            let transactionId = generateBonusTransactionId();
+            while (await DeliveryBonusTransaction.exists({ transactionId })) {
+                transactionId = generateBonusTransactionId();
+            }
+            await DeliveryBonusTransaction.create({
+                deliveryPartnerId: partnerId,
+                transactionId,
+                amount: delta,
+                reference: note,
+                createdByAdminId: adminId
+            });
+        } else if (delta < 0) {
+            if (Math.abs(delta) < 1) {
+                throw new ValidationError('Pocket balance can only be reduced by Rs 1 or more at a time');
+            }
+            await FoodDeliveryWithdrawal.create({
+                deliveryPartnerId: partnerId,
+                amount: Math.abs(delta),
+                status: 'approved',
+                paymentMethod: 'admin_adjustment',
+                adminNote: note,
+                transactionId: 'ADJ-' + Date.now(),
+                processedAt: new Date()
+            });
+        }
+    }
+
+    if (wantsCash) {
+        const delta = roundMoney(targetCash - roundMoney(before.rawCashInHand));
+        if (delta !== 0) {
+            // A positive deposit lowers cash in hand; a negative one raises it.
+            await FoodDeliveryCashDeposit.create({
+                deliveryPartnerId: partnerId,
+                amount: -delta,
+                paymentMethod: 'bank_transfer',
+                status: 'Completed',
+                adminId,
+                adminNote: note
+            });
+        }
+    }
+
+    const [after] = await computeDeliveryWalletRows([partner]);
+    return {
+        walletId: after.walletId,
+        deliveryId: String(partnerId),
+        pocketBalance: after.pocketBalance,
+        cashInHand: after.cashInHand,
+        remainingCashLimit: after.remainingCashLimit,
+        totalCashLimit: after.totalCashLimit
+    };
 }
 
 /**
@@ -8012,6 +8737,7 @@ export async function getSidebarBadges() {
             pendingRestaurantComplaints,
             pendingCashConfirmations,
             pendingRestaurantOffers,
+            pendingCategories,
         ] = await Promise.all([
             FoodRestaurant.countDocuments({ status: 'pending' }),
             FoodDeliveryPartner.countDocuments({ status: 'pending' }),
@@ -8036,13 +8762,16 @@ export async function getSidebarBadges() {
             countPendingCashConfirmations(),
             // Offers saved before approval existed have no status yet: they await review too.
             FoodRestaurantOffer.countDocuments({ approvalStatus: { $in: ['pending', null] } }),
+            // Restaurant-created categories wait for admin approval.
+            FoodCategory.countDocuments({ approvalStatus: 'pending' }),
         ]);
 
         return {
             restaurants: pendingRestaurants,
             deliveryPartners: pendingDeliveryPartners,
             foods: pendingFoods + pendingAddons,
-            foodApprovals: pendingFoods,
+            // The Food Approval page lists food items AND add-ons waiting for review.
+            foodApprovals: pendingFoods + pendingAddons,
             orders: pendingOrders,
             offlinePayments: pendingOfflinePayments,
             restaurantWithdrawals: pendingRestaurantWithdrawals,
@@ -8054,7 +8783,8 @@ export async function getSidebarBadges() {
             safetyReports: pendingSafetyReports,
             emergencyHelp: pendingEmergencyHelp,
             restaurantComplaints: pendingRestaurantComplaints,
-            restaurantOffers: pendingRestaurantOffers
+            restaurantOffers: pendingRestaurantOffers,
+            categories: pendingCategories
         };
     } catch (error) {
         console.error('Error fetching sidebar badges:', error);
@@ -8063,15 +8793,17 @@ export async function getSidebarBadges() {
 }
 
 /**
- * Admin-triggered Razorpay refund for a paid online order.
- * Status correction + gateway refund — does not re-run cancel automations.
+ * Admin-triggered refund for an order (online Razorpay or customer Wallet).
+ * Status correction + gateway/wallet refund — does not re-run cancel automations.
  */
-export async function processRefund(orderId, refundAmount) {
-    if (!mongoose.Types.ObjectId.isValid(orderId)) {
-        throw new ValidationError('Invalid order id');
+export async function processRefund(orderId, refundAmount, options = {}) {
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(orderId)) {
+        order = await FoodOrder.findById(orderId);
     }
-
-    const order = await FoodOrder.findById(orderId);
+    if (!order) {
+        order = await FoodOrder.findOne({ $or: [{ orderId }, { order_id: orderId }] });
+    }
     if (!order) throw new NotFoundError('Order not found');
 
     const method = String(order.payment?.method || '').toLowerCase();
@@ -8080,17 +8812,8 @@ export async function processRefund(orderId, refundAmount) {
     const alreadyProcessed =
         String(order.payment?.refund?.status || '').toLowerCase() === 'processed';
 
-    if (!['razorpay', 'razorpay_qr'].includes(method)) {
-        throw new ValidationError('Refund via Razorpay is only for online payments');
-    }
-    if (status !== 'paid' && status !== 'refunded') {
-        throw new ValidationError('Order payment is not in a refundable paid state');
-    }
     if (alreadyProcessed || status === 'refunded') {
         return order;
-    }
-    if (!paymentId) {
-        throw new ValidationError('Razorpay payment id missing on this order');
     }
 
     const amount = Number(
@@ -8102,37 +8825,72 @@ export async function processRefund(orderId, refundAmount) {
         throw new ValidationError('Invalid refund amount');
     }
 
-    const { initiateRazorpayRefund, isRazorpayConfigured } = await import(
-        '../../orders/helpers/razorpay.helper.js'
-    );
-    if (!isRazorpayConfigured()) {
-        throw new ValidationError('Razorpay is not configured on this server');
-    }
+    const requestedDestination = String(options.destination || '').toLowerCase();
+    const shouldRefundToWallet =
+        requestedDestination === 'wallet' ||
+        method === 'wallet' ||
+        (!['razorpay', 'razorpay_qr'].includes(method));
 
-    const refundResult = await initiateRazorpayRefund(paymentId, amount);
-    if (!refundResult.success) {
+    if (shouldRefundToWallet) {
+        const userWalletService = await import('../../user/services/userWallet.service.js');
+        if (order.userId) {
+            await userWalletService.refundWalletBalance(
+                order.userId,
+                amount,
+                `Refund for order #${order.order_id || order.orderId || order._id}`,
+                {
+                    orderId: order._id,
+                    source: 'order_refund_wallet',
+                    idempotencyKey: `order_refund:${order._id}`,
+                }
+            );
+        }
+        order.payment.status = 'refunded';
         order.payment.refund = {
-            status: 'failed',
-            destination: 'source',
+            status: 'processed',
+            destination: 'wallet',
             amount,
             refundId: '',
-            processedAt: null,
+            processedAt: new Date(),
         };
         order.markModified('payment');
         await order.save();
-        throw new ValidationError(refundResult.error || 'Razorpay refund failed');
-    }
+    } else {
+        const { initiateRazorpayRefund, isRazorpayConfigured } = await import(
+            '../../orders/helpers/razorpay.helper.js'
+        );
+        if (!isRazorpayConfigured()) {
+            throw new ValidationError('Razorpay is not configured on this server');
+        }
+        if (!paymentId) {
+            throw new ValidationError('Razorpay payment id missing on this order');
+        }
 
-    order.payment.status = 'refunded';
-    order.payment.refund = {
-        status: 'processed',
-        destination: 'source',
-        amount,
-        refundId: refundResult.refundId || '',
-        processedAt: new Date(),
-    };
-    order.markModified('payment');
-    await order.save();
+        const refundResult = await initiateRazorpayRefund(paymentId, amount);
+        if (!refundResult.success) {
+            order.payment.refund = {
+                status: 'failed',
+                destination: 'source',
+                amount,
+                refundId: '',
+                processedAt: null,
+            };
+            order.markModified('payment');
+            await order.save();
+            throw new ValidationError(refundResult.error || 'Razorpay refund failed');
+        }
+
+        order.payment.status = 'refunded';
+        order.payment.refund = {
+            status: 'processed',
+            destination: 'source',
+            amount,
+            refundId: refundResult.refundId || '',
+            processedAt: new Date(),
+        };
+        order.markModified('payment');
+        await order.save();
+    }
 
     try {
         await FoodTransaction.updateOne(
@@ -8144,7 +8902,7 @@ export async function processRefund(orderId, refundAmount) {
                         kind: 'refunded',
                         amount,
                         at: new Date(),
-                        note: `Admin Razorpay refund ${refundResult.refundId || ''}`.trim(),
+                        note: `Admin refund (${order.payment?.refund?.destination || 'source'}) ${order.payment?.refund?.refundId || ''}`.trim(),
                         recordedBy: { role: 'ADMIN' },
                     },
                 },

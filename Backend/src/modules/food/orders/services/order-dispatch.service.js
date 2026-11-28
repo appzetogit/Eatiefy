@@ -617,6 +617,8 @@ export async function tryAutoAssign(orderId, options = {}) {
               body: `You have ${offerSeconds} seconds to accept Order #${order.order_id || order._id}.`,
               sound: getNewOrderAlertSound(),
               urgent: true,
+              orderAlarm: true,
+              sendToAllDevices: true,
               // iPhones registered for VoIP ring as a call for as long as the offer lives.
               voipCall: {
                 orderKey: order._id.toString(),

@@ -11,6 +11,7 @@ import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
 import { zoneAPI } from '@food/api';
 import { CUSTOMER_PIN_SVG } from '@/modules/DeliveryV2/components/map/map.icons';
 import { LOCATION_CONFIG } from '@/modules/DeliveryV2/utils/locationConfig';
+import { DELIVERY_MAPS_LOADER_OPTIONS } from '@/modules/DeliveryV2/utils/mapsLoaderOptions';
 
 const mapContainerStyle = {
   width: '100%',
@@ -39,7 +40,6 @@ const mapOptions = {
     { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#78909c" }] }
   ]
 };
-const LIBRARIES = ['places', 'geometry'];
 const MARKER_OVERLAP_HIDE_METERS = 40;
 const DESTINATION_MARKER_Z_INDEX = 20;
 
@@ -171,10 +171,7 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
   const activeOrder = useDeliveryStore((state) => state.getFocusedOrder());
   const tripStatus = useDeliveryStore((state) => state.getFocusedTripStatus());
   
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES
-  });
+  const { isLoaded, loadError } = useJsApiLoader(DELIVERY_MAPS_LOADER_OPTIONS);
 
   const [directions, setDirections] = useState(null);
   const [map, setMapInternal] = useState(null);
@@ -238,8 +235,9 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
   }, [activeOrder?.restaurantLocation, activeOrder?.restaurantId, activeOrder?.restaurant, parsePoint]);
 
   const customerPoint = useMemo(() => {
+    // The saved delivery address, the same point the Google Maps buttons and the
+    // arrival geofence use. The customer's phone position is not the drop point.
     return parsePoint(
-      activeOrder?.customerLiveLocation ||
       activeOrder?.customerLocation ||
       activeOrder?.deliveryAddress?.location ||
       activeOrder?.address?.location ||
@@ -247,7 +245,6 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
       activeOrder?.address
     );
   }, [
-    activeOrder?.customerLiveLocation,
     activeOrder?.customerLocation,
     activeOrder?.deliveryAddress,
     activeOrder?.address,
@@ -260,7 +257,7 @@ export const LiveMap = ({ onMapClick, onMapLoad, onPathReceived, onPolylineRecei
     if (tripStatus === 'PICKING_UP' || tripStatus === 'REACHED_PICKUP') {
       rawLoc = activeOrder.restaurantLocation || activeOrder.restaurantId?.location || activeOrder.restaurant?.location;
     } else if (tripStatus === 'PICKED_UP' || tripStatus === 'REACHED_DROP') {
-      rawLoc = activeOrder.customerLiveLocation || activeOrder.customerLocation || activeOrder.deliveryAddress?.location || activeOrder.address?.location || activeOrder.deliveryAddress || activeOrder.address;
+      rawLoc = activeOrder.customerLocation ||activeOrder.deliveryAddress?.location || activeOrder.address?.location || activeOrder.deliveryAddress || activeOrder.address;
     }
     if (!rawLoc) return null;
     return parsePoint(rawLoc);

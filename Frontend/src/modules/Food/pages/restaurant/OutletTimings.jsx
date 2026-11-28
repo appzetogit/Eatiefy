@@ -39,6 +39,10 @@ export default function OutletTimings() {
   // Times a day had before it was switched off, so switching it back on restores them.
   const lastTimesRef = useRef({})
   const saveTimerRef = useRef(null)
+  // Latest edits that have not reached the backend yet (flushed on leave).
+  const daysRef = useRef(days)
+  daysRef.current = days
+  const hasPendingSaveRef = useRef(false)
   // Skip the first post-load render so we don't overwrite DB with synthetic defaults.
   const allowAutosaveRef = useRef(false)
 
@@ -73,27 +77,50 @@ export default function OutletTimings() {
     }
   }, [reloadKey])
 
+  const persistDays = async (snapshot) => {
+    hasPendingSaveRef.current = false
+    try {
+      await restaurantAPI.saveOutletTimings(snapshot)
+      window.dispatchEvent(new Event("outletTimingsUpdated"))
+      // Closing (or reopening) a day can flip the outlet online/offline, so
+      // re-resolve the authoritative status and broadcast it to Home.
+      await fetchAuthoritativeOnlineStatus().catch(() => {})
+    } catch (error) {
+      hasPendingSaveRef.current = true
+      debugError("Error saving outlet timings to backend:", error)
+    }
+  }
+
   // Save to backend whenever days change (debounced) — only after user edits.
   useEffect(() => {
     if (loading || loadFailed || !allowAutosaveRef.current) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     // Hold the save while any open day is incomplete or invalid (shown inline).
     if (Object.values(days).some((d) => getDayIssue(d))) return
-    saveTimerRef.current = setTimeout(async () => {
-      try {
-        await restaurantAPI.saveOutletTimings(days)
-        window.dispatchEvent(new Event("outletTimingsUpdated"))
-        // Closing (or reopening) a day can flip the outlet online/offline, so
-        // re-resolve the authoritative status and broadcast it to Home.
-        await fetchAuthoritativeOnlineStatus().catch(() => {})
-      } catch (error) {
-        debugError("Error saving outlet timings to backend:", error)
-      }
+    hasPendingSaveRef.current = true
+    saveTimerRef.current = setTimeout(() => {
+      void persistDays(days)
     }, 500)
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
   }, [days, loading, loadFailed])
+
+  // Leaving the page inside the 500ms debounce window used to cancel the timer
+  // and silently drop the change, so Home kept showing the old status. Flush it.
+  useEffect(() => {
+    const flushPendingSave = () => {
+      if (!hasPendingSaveRef.current || loadFailed) return
+      const snapshot = daysRef.current
+      if (Object.values(snapshot).some((d) => getDayIssue(d))) return
+      void persistDays(snapshot)
+    }
+    window.addEventListener("pagehide", flushPendingSave)
+    return () => {
+      window.removeEventListener("pagehide", flushPendingSave)
+      flushPendingSave()
+    }
+  }, [loadFailed])
 
   // Lenis smooth scrolling
   useEffect(() => {

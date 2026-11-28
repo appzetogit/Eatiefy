@@ -240,6 +240,29 @@ export const requestDeliveryWithdrawal = async (deliveryPartnerId, payload) => {
         throw new ValidationError('Insufficient balance for this withdrawal');
     }
 
+    try {
+        const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
+        const partnerName = partner?.name || 'Delivery partner';
+        const formattedAmount = Number(amount).toLocaleString('en-IN');
+        void notifyAdminsSafely({
+            title: 'New Withdrawal Request',
+            body: `${partnerName} requested a withdrawal of ₹${formattedAmount}.`,
+            link: '/admin/food/delivery-withdrawal',
+            idempotencyKey: `delivery_withdrawal:${String(withdrawal._id)}`,
+            data: {
+                type: 'delivery_withdrawal',
+                subType: 'delivery',
+                id: String(withdrawal._id),
+                deliveryPartnerId: String(deliveryPartnerId),
+                amount: String(amount),
+                link: '/admin/food/delivery-withdrawal'
+            }
+        });
+    } catch (notifErr) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to notify admins of delivery withdrawal request:', notifErr?.message || notifErr);
+    }
+
     return withdrawal;
 };
 
@@ -356,11 +379,51 @@ export const verifyDeliveryCashDepositPayment = async (deliveryPartnerId, payloa
             razorpayPaymentId: paymentId
         });
 
+    // Online deposit completed (the early return above skips already-completed ones,
+    // so this fires once per deposit).
+    void notifyAdminsOfCashDeposit(deliveryPartnerId, deposit, 'online');
+
     return {
         deposit,
         wallet: await getDeliveryPartnerWalletEnhanced(deliveryPartnerId)
     };
 };
+
+/**
+ * Tell admins a delivery partner has submitted cash. `mode` is 'cash' (handed over
+ * by hand, awaiting admin confirmation) or 'online' (paid through the gateway,
+ * already completed). Never throws: a notification failure must not fail the deposit.
+ */
+async function notifyAdminsOfCashDeposit(deliveryPartnerId, deposit, mode) {
+    try {
+        const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
+        const partner = await FoodDeliveryPartner.findById(deliveryPartnerId).select('name').lean();
+        const partnerName = partner?.name || 'A delivery partner';
+        const amount = Number(deposit?.amount) || 0;
+        const formattedAmount = amount.toLocaleString('en-IN');
+        const isOnline = mode === 'online';
+        const link = '/admin/food/cash-limit-settlement';
+        void notifyAdminsSafely({
+            title: isOnline ? 'Cash Deposited Online' : 'Cash Deposit Submitted',
+            body: isOnline
+                ? `${partnerName} deposited ₹${formattedAmount} online.`
+                : `${partnerName} submitted ₹${formattedAmount} in cash. Please confirm once received.`,
+            link,
+            idempotencyKey: `delivery_cash_deposit:${String(deposit?._id)}`,
+            data: {
+                type: 'delivery_cash_deposit',
+                subType: isOnline ? 'online' : 'cash',
+                id: String(deposit?._id || ''),
+                deliveryPartnerId: String(deliveryPartnerId),
+                amount: String(amount),
+                link
+            }
+        });
+    } catch (notifErr) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to notify admins of cash deposit:', notifErr?.message || notifErr);
+    }
+}
 
 async function getPendingCashSubmissionTotal(deliveryPartnerId) {
     const partnerId = new mongoose.Types.ObjectId(deliveryPartnerId);
@@ -407,6 +470,9 @@ export const submitCashDepositByHand = async (deliveryPartnerId, amountInr) => {
         paymentMethod: 'cash',
         status: 'Pending',
     });
+
+    // Cash handed over by hand: admin must confirm receipt, so tell them now.
+    void notifyAdminsOfCashDeposit(deliveryPartnerId, deposit, 'cash');
 
     const capacityAfter = await getDepositCapacity(deliveryPartnerId);
 

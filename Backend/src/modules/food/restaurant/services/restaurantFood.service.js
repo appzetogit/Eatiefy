@@ -108,7 +108,7 @@ const getRestaurantContext = async (restaurantId) => {
         throw new ValidationError('Restaurant not found');
     }
 
-    const foodType = restaurant.foodType || (restaurant.pureVegRestaurant ? 'Veg' : 'Mixed');
+    const foodType = restaurant.pureVegRestaurant ? 'Veg' : (restaurant.foodType || 'Mixed');
     return {
         restaurantId: new mongoose.Types.ObjectId(String(restaurantId)),
         foodType,
@@ -142,10 +142,10 @@ const resolveCategoryForRestaurant = async (context, body = {}) => {
         ...getAccessibleCategoryFilter(context),
         isActive: { $ne: false }
     };
-    if (context.foodType === 'Veg') {
-        baseFilter.foodTypeScope = 'Veg';
+    if (context.foodType === 'Veg' || context.pureVegRestaurant) {
+        baseFilter.foodTypeScope = { $nin: ['Non-Veg', 'non-veg'] };
     } else if (context.foodType === 'Non-Veg') {
-        baseFilter.foodTypeScope = 'Non-Veg';
+        baseFilter.foodTypeScope = { $nin: ['Veg', 'veg'] };
     }
 
     let category = null;
@@ -179,7 +179,10 @@ const resolveCategoryForRestaurant = async (context, body = {}) => {
 
     await backfillLegacyCategoryWorkflow([category]);
 
-    if (String(category.approvalStatus || '') !== 'approved') {
+    const isOwnPrivateCategory = Boolean(
+        category?.restaurantId && String(category.restaurantId) === String(context.restaurantId)
+    );
+    if (!isOwnPrivateCategory && String(category.approvalStatus || '') !== 'approved') {
         throw new ValidationError('This category is awaiting admin approval');
     }
     if (context.foodType === 'Veg' && String(category.foodTypeScope || '') === 'Non-Veg') {

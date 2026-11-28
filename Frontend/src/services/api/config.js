@@ -51,7 +51,7 @@ export const API_ENDPOINTS = {
     SUPPORT_USER_PUBLIC: "/food/pages/support_user",
     SUPPORT_RESTAURANT_PUBLIC: "/food/pages/support_restaurant",
     SUPPORT_DELIVERY_PUBLIC: "/food/pages/support_delivery",
-    FEEDBACK_CREATE: "", FEEDBACK_EXPERIENCE: "/food/admin/feedback-experiences", FEEDBACK_EXPERIENCE_CREATE: "/food/restaurant/feedback-experience", FEEDBACK_EXPERIENCE_BY_ID: "",
+    FEEDBACK_CREATE: "", FEEDBACK_EXPERIENCE: "/food/admin/feedback-experiences", FEEDBACK_EXPERIENCE_CREATE: "/food/restaurant/feedback-experience", FEEDBACK_EXPERIENCE_USER_CREATE: "/food/user/feedback-experience", FEEDBACK_EXPERIENCE_DELIVERY_CREATE: "/food/delivery/feedback-experience", FEEDBACK_EXPERIENCE_BY_ID: "",
     SAFETY_EMERGENCY: "/food/admin/safety-emergency-reports",
     // User creates reports via USER context; kept for legacy imports.
     SAFETY_EMERGENCY_CREATE: "/food/user/safety-emergency-reports",

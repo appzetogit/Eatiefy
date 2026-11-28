@@ -7,10 +7,15 @@ const foodDeliveryCashDepositSchema = new mongoose.Schema({
         required: true,
         index: true
     },
+    // Negative only for an admin correction that RAISES a rider's cash in hand
+    // (see updateDeliveryPartnerWallet); riders can only submit positive amounts.
     amount: {
         type: Number,
         required: true,
-        min: 0
+        validate: {
+            validator: (v) => Number.isFinite(v) && v !== 0,
+            message: 'Amount must be a non-zero number'
+        }
     },
     paymentMethod: {
         type: String,

@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import useRestaurantBackNavigation from "@food/hooks/useRestaurantBackNavigation"
 import Lenis from "lenis"
-import { ArrowLeft, Settings, ChevronRight } from "lucide-react"
+import { ArrowLeft, Settings, ChevronRight, Clock } from "lucide-react"
+import { toast } from "sonner"
 import { Switch } from "@food/components/ui/switch"
 import { Card, CardContent } from "@food/components/ui/card"
 import { restaurantAPI } from "@food/api"
@@ -15,8 +16,14 @@ import {
   DialogTitle,
 } from "@food/components/ui/dialog"
 import { Button } from "@food/components/ui/button"
-import { publishOnlineStatus } from "@food/utils/restaurantOnlineStatus"
-import { getOperatingStatus } from "@food/utils/operatingHours"
+import { publishOnlineStatus, fetchAuthoritativeOnlineStatus } from "@food/utils/restaurantOnlineStatus"
+import {
+  DAY_NAMES,
+  getBusinessClock,
+  getOperatingStatus,
+  timeToMinutes,
+  isOvernightWindow,
+} from "@food/utils/operatingHours"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -24,7 +31,12 @@ const debugError = (...args) => {}
 const RESTAURANT_ONLINE_STATUS_KEY = "restaurant_online_status"
 
 // Writes the mirror and notifies every mounted listener (Home navbar included).
-const persistRestaurantOnlineStatus = (isOnline) => publishOnlineStatus(isOnline)
+// The toggle alone is not the outlet's effective state (outlet timings also gate it),
+// so publish immediately for instant feedback, then reconcile with the backend.
+const persistRestaurantOnlineStatus = (isOnline) => {
+  publishOnlineStatus(isOnline)
+  void fetchAuthoritativeOnlineStatus().catch(() => {})
+}
 
 
 export default function RestaurantStatus() {
@@ -41,6 +53,7 @@ export default function RestaurantStatus() {
   const [showOutsideTimingsDialog, setShowOutsideTimingsDialog] = useState(false)
   const [isDayClosed, setIsDayClosed] = useState(false)
   const [outletTimings, setOutletTimings] = useState(null)
+  const hasPromptedClosedDialogRef = useRef(false)
 
   // Update current date/time every minute
   useEffect(() => {
@@ -60,8 +73,10 @@ export default function RestaurantStatus() {
         const data = response?.data?.data?.restaurant || response?.data?.restaurant
         if (data) {
           setRestaurantData(data)
-          if (data.takeawaySettings) {
-            setTakeawayStatus(data.takeawaySettings.isEnabled)
+          if (data.takeawaySettings?.isEnabled !== undefined) {
+            setTakeawayStatus(Boolean(data.takeawaySettings.isEnabled))
+          } else if (data.isTakeawayEnabled !== undefined) {
+            setTakeawayStatus(Boolean(data.isTakeawayEnabled))
           }
         }
       } catch (error) {
@@ -113,16 +128,19 @@ export default function RestaurantStatus() {
       }
 
       // Handles overnight shifts carried over from yesterday (e.g. Mon 3 PM -> Tue 3 AM), in IST.
-      const status = getOperatingStatus({ timings: outletTimings }, new Date())
-      if (status.reason === "day-closed") {
-        setIsDayClosed(true)
-        setIsWithinTimings(false)
-        setShowOutletClosedDialog(true)
-        return
-      }
+      const status = getOperatingStatus({ timings: outletTimings, restaurant: restaurantData }, new Date())
+      const isClosed = !status.isOpen
+      const dayIsClosed = status.reason === "day-closed"
 
-      setIsDayClosed(false)
+      setIsDayClosed(dayIsClosed)
       setIsWithinTimings(status.isOpen)
+
+      if (isClosed) {
+        if (!hasPromptedClosedDialogRef.current && dayIsClosed) {
+          hasPromptedClosedDialogRef.current = true
+          setShowOutletClosedDialog(true)
+        }
+      }
     }
 
     checkIfOpen()
@@ -141,23 +159,23 @@ export default function RestaurantStatus() {
     }
   }, [currentDateTime, outletTimings])
 
-  // Note: Delivery status is now manually controlled by user via toggle
-  // We don't automatically set it based on timings anymore
-  // The isWithinTimings is only used to show warning messages
-
   // Load delivery status from backend
   useEffect(() => {
     const loadDeliveryStatus = async () => {
       try {
         const response = await restaurantAPI.getCurrentRestaurant()
         const restaurant = response?.data?.data?.restaurant || response?.data?.restaurant
-        if (restaurant?.isAcceptingOrders !== undefined) {
-          setDeliveryStatus(restaurant.isAcceptingOrders)
-          if (restaurant.takeawaySettings) {
-            setTakeawayStatus(restaurant.takeawaySettings.isEnabled)
+        if (restaurant) {
+          if (restaurant.isAcceptingOrders !== undefined) {
+            setDeliveryStatus(restaurant.isAcceptingOrders)
+          } else {
+            setDeliveryStatus(false)
           }
-        } else {
-          setDeliveryStatus(false)
+          if (restaurant.takeawaySettings?.isEnabled !== undefined) {
+            setTakeawayStatus(Boolean(restaurant.takeawaySettings.isEnabled))
+          } else if (restaurant.isTakeawayEnabled !== undefined) {
+            setTakeawayStatus(Boolean(restaurant.isTakeawayEnabled))
+          }
         }
       } catch (error) {
         // Only log error if it's not a network/timeout error (backend might be down/slow)
@@ -169,51 +187,135 @@ export default function RestaurantStatus() {
     }
 
     loadDeliveryStatus()
-  }, [])
+  }, [outletTimings])
+
+  // Issue 33: Bring restaurant online (open outlet schedule + enable delivery / takeaway)
+  const turnRestaurantOnline = async ({ enableDelivery = true, enableTakeaway = null } = {}) => {
+    try {
+      const { dayIndex, minutes: nowMinutes } = getBusinessClock(new Date())
+      const currentDay = DAY_NAMES[dayIndex]
+      const currentSchedule = outletTimings?.[currentDay] || {}
+
+      let newOpen = currentSchedule.openingTime || "00:00"
+      let newClose = currentSchedule.closingTime || "23:59"
+
+      const openMin = timeToMinutes(newOpen)
+      const closeMin = timeToMinutes(newClose)
+
+      if (openMin === null || openMin > nowMinutes) {
+        newOpen = "00:00"
+      }
+      if (closeMin === null || (closeMin <= nowMinutes && !isOvernightWindow(newOpen, newClose))) {
+        newClose = "23:59"
+      }
+      if (newOpen === newClose) {
+        newOpen = "00:00"
+        newClose = "23:59"
+      }
+
+      const updatedTimings = {
+        ...(outletTimings || {}),
+        [currentDay]: {
+          isOpen: true,
+          openingTime: newOpen,
+          closingTime: newClose,
+        },
+      }
+
+      // 1. Save outlet timings so the day and hours are open covering now
+      await restaurantAPI.saveOutletTimings(updatedTimings)
+      setOutletTimings(updatedTimings)
+      window.dispatchEvent(new Event("outletTimingsUpdated"))
+
+      // 2. Turn on delivery if requested
+      if (enableDelivery) {
+        await restaurantAPI.updateAcceptingOrders(true)
+        setDeliveryStatus(true)
+        persistRestaurantOnlineStatus(true)
+      }
+
+      // 3. Turn on takeaway if requested
+      if (enableTakeaway !== null) {
+        await restaurantAPI.updateTakeawaySettings({ isEnabled: enableTakeaway })
+        setTakeawayStatus(enableTakeaway)
+      }
+
+      setIsDayClosed(false)
+      setIsWithinTimings(true)
+      setShowOutletClosedDialog(false)
+      setShowOutsideTimingsDialog(false)
+      toast.success("Restaurant is now online and receiving orders!")
+    } catch (error) {
+      debugError("Error turning restaurant online:", error)
+      toast.error("Failed to turn restaurant online. Please check outlet timings.")
+    }
+  }
 
   // Handle delivery status change
   const handleDeliveryStatusChange = async (checked) => {
-    // If day is closed in outlet timings, don't allow turning on
-    if (checked && isDayClosed) {
-      setShowOutletClosedDialog(true)
-      return
-    }
-    
-    // If outside scheduled delivery timings, show popup
-    if (checked && isWithinTimings === false && !isDayClosed) {
-      setShowOutsideTimingsDialog(true)
-      return
-    }
-    
-    setDeliveryStatus(checked)
-    try {
-      // Update backend
+    if (!checked) {
+      setDeliveryStatus(false)
       try {
-        await restaurantAPI.updateAcceptingOrders(checked)
-        debugLog('? Delivery status updated in backend:', checked)
-        persistRestaurantOnlineStatus(checked)
+        await restaurantAPI.updateAcceptingOrders(false)
+        persistRestaurantOnlineStatus(false)
+        toast.info("Delivery status turned off")
       } catch (apiError) {
         debugError('Error updating delivery status in backend:', apiError)
         // Revert local toggle if backend fails.
-        setDeliveryStatus((prev) => !prev)
-        persistRestaurantOnlineStatus(!checked)
-        return
+        setDeliveryStatus(true)
+        persistRestaurantOnlineStatus(true)
+        toast.error("Failed to update delivery status")
       }
-      
-    } catch (error) {
-      debugError("Error saving delivery status:", error)
+      return
+    }
+
+    // Checked === true: Turning delivery ON
+    setDeliveryStatus(true)
+    try {
+      await restaurantAPI.updateAcceptingOrders(true)
+      persistRestaurantOnlineStatus(true)
+      if (isDayClosed || isWithinTimings === false) {
+        toast.info("Receiving orders enabled (outside scheduled hours)")
+        setShowOutsideTimingsDialog(true)
+      } else {
+        toast.success("Receiving orders enabled")
+      }
+    } catch (apiError) {
+      debugError('Error updating delivery status in backend:', apiError)
+      setDeliveryStatus(false)
+      persistRestaurantOnlineStatus(false)
+      toast.error("Failed to update delivery status")
     }
   }
 
   // Handle takeaway status change
   const handleTakeawayStatusChange = async (checked) => {
-    setTakeawayStatus(checked)
+    if (!checked) {
+      setTakeawayStatus(false)
+      try {
+        await restaurantAPI.updateTakeawaySettings({ isEnabled: false })
+        toast.info("Takeaway status turned off")
+      } catch (error) {
+        debugError("Error saving takeaway status:", error)
+        setTakeawayStatus(true)
+        toast.error("Failed to update takeaway status")
+      }
+      return
+    }
+
+    // Checked === true: Turning takeaway ON
+    setTakeawayStatus(true)
     try {
-      await restaurantAPI.updateTakeawaySettings({ isEnabled: checked })
-      debugLog('? Takeaway status updated in backend:', checked)
+      await restaurantAPI.updateTakeawaySettings({ isEnabled: true })
+      if (isDayClosed || isWithinTimings === false) {
+        toast.info("Pickup orders enabled (outside scheduled hours)")
+      } else {
+        toast.success("Pickup orders enabled")
+      }
     } catch (error) {
       debugError("Error saving takeaway status:", error)
-      setTakeawayStatus((prev) => !prev)
+      setTakeawayStatus(false)
+      toast.error("Failed to update takeaway status")
     }
   }
 
@@ -426,11 +528,14 @@ export default function RestaurantStatus() {
         <DialogContent className="sm:max-w-md p-4 w-[90%] gap-2 flex flex-col">
           <DialogHeader className="text-center">
             <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
-              <span className="text-[#2E7D52]xl">??</span>
+              <Clock className="w-8 h-8 text-amber-600" />
             </div>
             <DialogTitle className="text-lg font-semibold text-gray-900 text-center">
               Outlet Timings Closed
             </DialogTitle>
+            <DialogDescription className="mt-2 text-sm text-gray-600 text-center">
+              Your outlet is currently closed according to outlet timings. You can turn online now to start receiving orders, or customize outlet timings.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-row">
             <Button
@@ -442,9 +547,16 @@ export default function RestaurantStatus() {
             </Button>
             <Button
               onClick={handleGoToOutletTimings}
-              className="w-full sm:w-auto bg-gradient-to-br from-[#2E7D52] to-[#1B5E3F] hover:bg-blue-700 text-white"
+              variant="outline"
+              className="w-full sm:w-auto"
             >
               Go to Outlet Timings
+            </Button>
+            <Button
+              onClick={() => turnRestaurantOnline({ enableDelivery: true, enableTakeaway: true })}
+              className="w-full sm:w-auto bg-gradient-to-br from-[#2E7D52] to-[#1B5E3F] hover:bg-emerald-700 text-white"
+            >
+              Turn Online
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -455,13 +567,13 @@ export default function RestaurantStatus() {
         <DialogContent className="sm:max-w-md p-4 w-[90%] gap-2 flex flex-col">
           <DialogHeader className="text-center">
             <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
-              <span className="text-[#2E7D52]xl">??</span>
+              <Clock className="w-8 h-8 text-amber-600" />
             </div>
             <DialogTitle className="text-lg font-semibold text-gray-900 text-center">
               Outside Delivery Timings
             </DialogTitle>
-            <DialogDescription className="mt-2 text-sm text-gray-600">
-              You are currently outside your scheduled delivery timings. Please change outlet timings to enable delivery status.
+            <DialogDescription className="mt-2 text-sm text-gray-600 text-center">
+              You are currently outside your scheduled delivery timings. Turn online now to start receiving orders, or change outlet timings.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-row">
@@ -477,9 +589,16 @@ export default function RestaurantStatus() {
                 setShowOutsideTimingsDialog(false)
                 navigate("/food/restaurant/outlet-timings", { state: { from: location.pathname } })
               }}
-              className="w-full sm:w-auto bg-gradient-to-br from-[#2E7D52] to-[#1B5E3F] hover:bg-blue-700 text-white"
+              variant="outline"
+              className="w-full sm:w-auto"
             >
               Change Outlet Timings
+            </Button>
+            <Button
+              onClick={() => turnRestaurantOnline({ enableDelivery: true, enableTakeaway: true })}
+              className="w-full sm:w-auto bg-gradient-to-br from-[#2E7D52] to-[#1B5E3F] hover:bg-emerald-700 text-white"
+            >
+              Turn Online
             </Button>
           </DialogFooter>
         </DialogContent>

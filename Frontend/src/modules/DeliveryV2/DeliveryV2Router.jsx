@@ -28,6 +28,7 @@ import { SupportTicketsV2 } from './pages/help/SupportTicketsV2';
 import { CreateSupportTicketV2 } from './pages/help/CreateSupportTicketV2';
 import { ViewSupportTicketV2 } from './pages/help/ViewSupportTicketV2';
 import ShowIdCardV2 from './pages/help/ShowIdCardV2';
+import DeliveryFeedbackV2 from './pages/help/DeliveryFeedbackV2';
 import { PocketDetailsV2 } from './pages/pocket/PocketDetailsV2';
 import { ProfileDetailsV2 } from './pages/profile/ProfileDetailsV2';
 import { MyReviewsV2 } from './pages/profile/MyReviewsV2';
@@ -104,6 +105,8 @@ const DeliveryV2Router = () => {
           <Route path="help/tickets/create" element={<CreateSupportTicketV2 />} />
           <Route path="help/tickets/:ticketId" element={<ViewSupportTicketV2 />} />
           <Route path="help/id-card" element={<ShowIdCardV2 />} />
+          <Route path="help/feedback" element={<DeliveryFeedbackV2 />} />
+          <Route path="profile/feedback" element={<DeliveryFeedbackV2 />} />
           {/* Financial Deep-Pages */}
           <Route path="pocket/payout" element={<PayoutV2 />} />
           <Route path="pocket/statement" element={<PocketStatementV2 />} />

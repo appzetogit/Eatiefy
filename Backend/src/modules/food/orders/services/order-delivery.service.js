@@ -244,6 +244,7 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
         payload,
       );
       io.to(rooms.user(order.userId)).emit('order_status_update', payload);
+      io.to(rooms.admins()).emit('order_status_update', payload);
 
       const trackingIds = [
         order._id?.toString?.(),
@@ -289,16 +290,16 @@ function emitOrderUpdate(order, deliveryPartnerId, options = {}) {
 
     if (status === 'picked_up') {
       userTitle = 'Order on the way!';
-      userBody = `Partner has picked up your order #${orderId} and is heading your way.`;
+      userBody = `Partner has picked up your order #${displayOrderId} and is heading your way.`;
       riderTitle = 'Order picked up!';
       riderBody = `You have picked up order #${displayOrderId}. Proceed to the customer location.`;
     } else if (status === 'reached_drop') {
       userTitle = 'Partner nearby!';
-      userBody = `Your delivery partner has reached your location for order #${orderId}.`;
+      userBody = `Your delivery partner has reached your location for order #${displayOrderId}.`;
       riderTitle = 'Arrived at drop!';
       riderBody = `You have reached the customer location for order #${displayOrderId}.`;
     } else if (status === 'delivered') {
-      userTitle = `Order #${orderId} delivered!`;
+      userTitle = `Order #${displayOrderId} delivered!`;
       userBody = 'Hope you enjoyed your meal! Don\'t forget to rate your experience.';
       riderTitle = 'Delivery successful!';
       riderBody = `Order #${displayOrderId} has been successfully delivered.`;
@@ -931,6 +932,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
       io.to(rooms.delivery(deliveryPartnerId)).emit('order_status_update', payload);
       io.to(rooms.restaurant(order.restaurantId)).emit('order_status_update', payload);
       io.to(rooms.user(order.userId)).emit('order_status_update', payload);
+      io.to(rooms.admins()).emit('order_status_update', payload);
     }
   } catch (error) {
     logger.error(`Error emitting order_claimed on accept: ${error?.message || error}`);
@@ -997,7 +999,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
         { ownerType: 'USER', ownerId: order.userId },
         {
           title: `Delivery partner assigned`,
-          body: `A delivery partner has accepted Order #${order._id.toString()}.`,
+          body: `A delivery partner has accepted Order #${order.order_id || order._id.toString()}.`,
           idempotencyKey: `delivery_accepted_user_${order._id}`,
           eventId: `delivery_accepted_user_${order._id}`,
           tag: `delivery_accepted_${order._id}`,
@@ -1017,7 +1019,7 @@ export async function acceptOrderDelivery(orderId, deliveryPartnerId) {
         { ownerType: 'RESTAURANT', ownerId: order.restaurantId },
         {
           title: `Rider assigned`,
-          body: `Order #${order._id.toString()} is now assigned to a delivery partner.`,
+          body: `Order #${order.order_id || order._id.toString()} is now assigned to a delivery partner.`,
           idempotencyKey: `delivery_accepted_restaurant_${order._id}`,
           eventId: `delivery_accepted_restaurant_${order._id}`,
           tag: `delivery_accepted_${order._id}`,
@@ -1117,7 +1119,7 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
     try {
       const io = getIO();
       if (io && order.userId) {
-        io.to(rooms.user(order.userId)).emit('order_status_update', {
+        const payload = {
           orderMongoId: order._id.toString(),
           orderId: order._id.toString(),
           displayOrderId: order.order_id || order._id.toString(),
@@ -1126,7 +1128,9 @@ export async function rejectOrderDelivery(orderId, deliveryPartnerId) {
           deliveryPartnerId: null,
           deliveryState: order.deliveryState,
           updatedAt: new Date().toISOString(),
-        });
+        };
+        io.to(rooms.user(order.userId)).emit('order_status_update', payload);
+        io.to(rooms.admins()).emit('order_status_update', payload);
       }
     } catch (err) {
       logger.warn(`reject user emit failed: ${err?.message || err}`);
@@ -1199,7 +1203,7 @@ export async function confirmReachedPickupDelivery(orderId, deliveryPartnerId) {
         title: 'Rider arrived!',
         body: `${partner?.name || 'The delivery partner'} has arrived at ${
           restaurant?.restaurantName || 'your restaurant'
-        } to pick up Order #${order._id.toString()}.`,
+        } to pick up Order #${order.order_id || order._id.toString()}.`,
         idempotencyKey: eventKey,
         eventId: eventKey,
         tag: notificationTag,
@@ -1577,7 +1581,7 @@ export async function completeDelivery(orderId, deliveryPartnerId, body = {}) {
 
   // Create inbox notifications for user and restaurant
   try {
-    const orderId = order.orderId || order._id.toString();
+    const orderId = order.order_id || order.orderId || order._id.toString();
     const notifs = [];
     if (order.userId) {
       notifs.push({

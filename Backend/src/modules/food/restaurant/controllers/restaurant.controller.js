@@ -13,7 +13,8 @@ import {
     uploadRestaurantMenuImages,
     listPublicOffers,
     getRestaurantComplaints,
-    listRestaurantsUnderPriceLimit
+    listRestaurantsUnderPriceLimit,
+    getRestaurantVerificationStatus
 } from '../services/restaurant.service.js';
 import {
     createDiningRequest,
@@ -228,6 +229,21 @@ export const createRestaurantDiningCategoryController = async (req, res, next) =
     try {
         const category = await createDiningCategory(req.body || {});
         return sendResponse(res, 201, 'Dining category created successfully', category);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getRestaurantVerificationStatusController = async (req, res, next) => {
+    try {
+        const token = req.headers.authorization?.startsWith('Bearer ')
+            ? req.headers.authorization.slice(7).trim()
+            : null;
+        const registrationToken = req.headers['x-registration-token'] || req.query.registrationToken || null;
+        const phone = req.query.phone || req.query.ownerPhone || null;
+
+        const result = await getRestaurantVerificationStatus({ token, registrationToken, phone });
+        return sendResponse(res, 200, result.message || 'Status fetched successfully', result);
     } catch (error) {
         next(error);
     }

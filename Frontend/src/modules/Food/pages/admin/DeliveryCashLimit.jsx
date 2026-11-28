@@ -6,6 +6,7 @@ import { ZoneDefaultHint, ZoneSettingBadge } from "@food/components/admin/zones/
 import { getZoneId, getZoneLabel } from "@food/hooks/useAdminZoneFilter"
 import { useZoneScopedSettings } from "@food/hooks/useZoneScopedSettings"
 import { toast } from "sonner"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const FIELDS = ["deliveryCashLimit", "deliveryWithdrawalLimit"]
 const formatRupees = (value) => `₹${Number(value).toLocaleString("en-IN")}`
@@ -48,6 +49,7 @@ const CARDS = [
 ]
 
 export default function DeliveryCashLimit() {
+  const { canEdit } = useAdminPermissions()
   const s = useZoneScopedSettings({
     fields: FIELDS,
     fetchSettings,
@@ -156,6 +158,7 @@ export default function DeliveryCashLimit() {
                           />
                         </div>
                         <div className="flex gap-2">
+                          {canEdit && (
                           <button
                             onClick={() => handleSave(card)}
                             disabled={!canSave}
@@ -164,7 +167,9 @@ export default function DeliveryCashLimit() {
                             {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
                             Save
                           </button>
+                          )}
                           {overridden && (
+                            canEdit && (
                             <button
                               type="button"
                               onClick={() => handleUseDefault(card)}
@@ -174,6 +179,7 @@ export default function DeliveryCashLimit() {
                               <RotateCcw className="w-4 h-4" />
                               Use default
                             </button>
+                            )
                           )}
                         </div>
                       </div>

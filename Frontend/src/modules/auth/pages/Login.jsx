@@ -33,6 +33,8 @@ export default function UnifiedOTPFastLogin() {
   const [showNameModal, setShowNameModal] = useState(false)
   const [newName, setNewName] = useState("")
   const [isUpdatingName, setIsUpdatingName] = useState(false)
+  const [referralError, setReferralError] = useState("")
+  const [isCheckingReferral, setIsCheckingReferral] = useState(false)
   const [tempAuth, setTempAuth] = useState(null)
   const [pendingVerify, setPendingVerify] = useState(null)
   const [showRestorePopup, setShowRestorePopup] = useState(false)
@@ -113,6 +115,7 @@ export default function UnifiedOTPFastLogin() {
   // Combined cleanup helper
   const clearSessionData = () => {
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem("user_login_name_pending");
   };
   // --- PERSISTENCE LOGIC END ---
 
@@ -309,10 +312,14 @@ export default function UnifiedOTPFastLogin() {
         throw new Error("Invalid parameters from server")
       }
 
+      const nameMissing = !user.name || user.name.trim() === ""
+      try {
+        if (nameMissing) sessionStorage.setItem("user_login_name_pending", "1")
+      } catch { /* ignore */ }
       setAuthData("user", accessToken, user, refreshToken)
 
       // If user has no name, show name modal instead of immediate navigation
-      if (!user.name || user.name.trim() === "") {
+      if (nameMissing) {
         setTempAuth({ accessToken, user, refreshToken })
         setShowNameModal(true)
       } else {
@@ -371,10 +378,35 @@ export default function UnifiedOTPFastLogin() {
     }
   }
 
+  // Returns true when the referral code is empty or valid; otherwise shows the
+  // error under the field. A network failure is not treated as "invalid": the
+  // server re-checks the code on submit and rejects it too.
+  const checkReferralCode = async (code) => {
+    const value = String(code || "").trim()
+    if (!value) {
+      setReferralError("")
+      return true
+    }
+    setIsCheckingReferral(true)
+    try {
+      const ok = await authAPI.validateReferralCode(value)
+      setReferralError(ok ? "" : "Invalid referral code. Please check and try again.")
+      return ok
+    } catch {
+      return true
+    } finally {
+      setIsCheckingReferral(false)
+    }
+  }
+
   const handleNameSubmit = async (e) => {
     e.preventDefault()
     if (!newName.trim()) {
       toast.error("Please enter your name")
+      return
+    }
+
+    if (pendingVerify?.referralCode && !(await checkReferralCode(pendingVerify.referralCode))) {
       return
     }
 
@@ -419,7 +451,14 @@ export default function UnifiedOTPFastLogin() {
       setShowNameModal(false)
       navigate("/food/user", { replace: true })
     } catch (err) {
-      toast.error("Failed to update name. You can skip this for now or try again.")
+      const serverMessage = err?.response?.data?.message || err?.response?.data?.error || ""
+      if (/referral/i.test(String(serverMessage))) {
+        setReferralError(serverMessage)
+      } else if (pendingVerify && serverMessage) {
+        toast.error(serverMessage)
+      } else {
+        toast.error("Failed to update name. You can skip this for now or try again.")
+      }
       console.error(err)
     } finally {
       setIsUpdatingName(false)
@@ -541,7 +580,7 @@ export default function UnifiedOTPFastLogin() {
           <path fill="url(#topRedGrad)" d="M -50,-50 L -50,280 C 200,100 800,100 1490,100 L 1490,-50 Z" filter="drop-shadow(0px 5px 15px rgba(0,0,0,0.15))" />
         </svg>
         <img
-          src="/assets/images/food_dish.png"
+          src="/assets/images/food_dish.webp"
           alt="Delicious food"
           className="absolute top-[8%] left-[5%] w-[14vh] h-[14vh] md:w-[120px] md:h-[120px] object-contain animate-float-dish-1 drop-shadow-xl"
         />
@@ -559,7 +598,7 @@ export default function UnifiedOTPFastLogin() {
           <path fill="url(#botRedGrad)" d="M -50,370 L -50,220 C 640,220 1240,220 1490,40 L 1490,370 Z" filter="drop-shadow(0px -5px 15px rgba(0,0,0,0.15))" />
         </svg>
         <img
-          src="/assets/images/food_dish_2.png"
+          src="/assets/images/food_dish_2.webp"
           alt="Delicious food"
           className="absolute bottom-[8%] right-[5%] w-[18vh] h-[18vh] md:w-[150px] md:h-[150px] object-contain animate-float-dish-2 drop-shadow-2xl"
         />
@@ -584,7 +623,7 @@ export default function UnifiedOTPFastLogin() {
           {/* Main Title (Design Reference: Log In text) */}
           <div className="mb-8 mt-6 text-center flex flex-col items-center">
             <img
-              src="/assets/images/eatiefy_logo.png"
+              src="/assets/images/eatiefy_logo.webp"
               alt="Eatiefy Logo"
               className="h-28 sm:h-32 object-contain drop-shadow-md rounded-2xl"
             />
@@ -837,8 +876,9 @@ export default function UnifiedOTPFastLogin() {
                 <Input
                   id="name"
                   value={newName}
+                  maxLength={40}
                   onChange={(e) => {
-                    const filteredValue = e.target.value.replace(/[^a-zA-Z\s]/g, "");
+                    const filteredValue = e.target.value.replace(/[^a-zA-Z\s]/g, "").replace(/\s{2,}/g, " ").slice(0, 40);
                     setNewName(filteredValue);
                   }}
                   placeholder="Enter your name"
@@ -859,19 +899,25 @@ export default function UnifiedOTPFastLogin() {
                     value={pendingVerify.referralCode || ""}
                     onChange={(e) => {
                       const v = e.target.value.trim()
+                      setReferralError("")
                       setPendingVerify((prev) => (prev ? { ...prev, referralCode: v || null } : prev))
                     }}
+                    onBlur={(e) => checkReferralCode(e.target.value)}
+                    aria-invalid={referralError ? "true" : "false"}
                     placeholder="Enter code if a friend referred you"
-                    className="pl-4 h-14 bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-[#1F6B45] transition-all group-hover:border-[#1F6B45]/30"
+                    className={`pl-4 h-14 bg-gray-50 dark:bg-gray-800 rounded-2xl focus:ring-2 focus:ring-[#1F6B45] transition-all group-hover:border-[#1F6B45]/30 ${referralError ? "border-red-500 dark:border-red-500" : "border-gray-100 dark:border-gray-700"}`}
                   />
                 </div>
+                {referralError && (
+                  <p className="text-xs font-medium text-red-600 dark:text-red-500 ml-1" role="alert">{referralError}</p>
+                )}
               </div>
             )}
 
             <div className="flex flex-col gap-3">
               <Button
                 type="submit"
-                disabled={isUpdatingName}
+                disabled={isUpdatingName || isCheckingReferral}
                 className="w-full h-14 bg-gradient-to-r from-[#1F6B45] to-[#66001D] hover:from-[#90082E] hover:to-[#4A0014] text-white rounded-2xl font-bold text-lg shadow-lg shadow-[#1F6B45]/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 {isUpdatingName ? (
@@ -885,6 +931,7 @@ export default function UnifiedOTPFastLogin() {
                   type="button"
                   onClick={() => {
                     setShowNameModal(false)
+                    clearSessionData()
                     navigate("/food/user", { replace: true })
                   }}
                   className="text-sm text-gray-400 hover:text-gray-600 transition-colors py-2"

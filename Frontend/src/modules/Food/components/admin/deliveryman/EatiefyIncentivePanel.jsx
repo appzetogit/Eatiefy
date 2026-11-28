@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Award, Calculator, Loader2 } from "lucide-react"
 import { adminAPI } from "@food/api"
 import { toast } from "sonner"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const ORDER_VALUE_BASIS_OPTIONS = [
   { value: "subtotal", label: "Item subtotal (food value)" },
@@ -61,6 +62,7 @@ function computeUserDeliveryFee(feeSettings, subtotal, distanceKm) {
 }
 
 export default function EatiefyIncentivePanel({ zoneId, zoneName, rules }) {
+  const { canEdit } = useAdminPermissions()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [isEnabled, setIsEnabled] = useState(false)
@@ -182,7 +184,7 @@ export default function EatiefyIncentivePanel({ zoneId, zoneName, rules }) {
           <button
             type="button"
             onClick={() => setIsEnabled((v) => !v)}
-            disabled={disabled}
+            disabled={disabled || !canEdit}
             aria-label="Toggle Eatiefy incentive"
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
               isEnabled ? "bg-emerald-600" : "bg-slate-300"
@@ -236,6 +238,7 @@ export default function EatiefyIncentivePanel({ zoneId, zoneName, rules }) {
           <span className={`text-xs font-medium ${isEnabled ? "text-emerald-700" : "text-slate-500"}`}>
             {isEnabled ? "Enabled for this zone" : "Disabled — delivery boy gets payout rules only"}
           </span>
+          {canEdit && (
           <button
             onClick={handleSave}
             disabled={disabled}
@@ -244,6 +247,7 @@ export default function EatiefyIncentivePanel({ zoneId, zoneName, rules }) {
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Save Incentive
           </button>
+          )}
         </div>
       </div>
 

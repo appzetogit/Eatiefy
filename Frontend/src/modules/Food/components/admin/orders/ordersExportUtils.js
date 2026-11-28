@@ -11,6 +11,7 @@ export const exportToCSV = (orders, filename = "orders") => {
   // Detect order structure
   const firstOrder = orders[0]
   const isSubscription = firstOrder?.subscriptionId
+  const isOrderDetectDelivery = firstOrder?.userName && firstOrder?.orderDate
   const isDispatch = firstOrder?.id && !firstOrder?.orderId
   
   let headers, rows
@@ -29,6 +30,40 @@ export const exportToCSV = (orders, filename = "orders") => {
       order.totalOrders,
       order.delivered
     ])
+  } else if (isOrderDetectDelivery) {
+    headers = ["SI", "Order ID", "Order Date", "Order Time", "Customer Name", "Customer Phone", "Restaurant Name", "Delivery Boy Name", "Delivery Boy Phone", "Status", "Packaging Charge", "Delivery Fee", "Platform Charge", "Total Amount", "Payment Status"]
+    rows = orders.map((order, index) => {
+      const originalOrder = order.originalOrder || {}
+      const pricing = originalOrder.pricing || {}
+      const packagingFee = Number(pricing.packagingFee ?? originalOrder.packagingFee ?? order.packagingFee ?? 0)
+      const deliveryFee = Number(pricing.deliveryFee ?? originalOrder.deliveryCharge ?? originalOrder.deliveryFee ?? 0)
+      const platformFee = Number(pricing.platformFee ?? originalOrder.platformFee ?? order.platformFee ?? 0)
+      const totalAmount = pricing.total || originalOrder.totalAmount || originalOrder.total || 0
+      const s = String(originalOrder.payment?.status || "").toLowerCase()
+      let paymentStatus = originalOrder.paymentStatus || 'N/A'
+      if (s === "paid" || s === "captured" || s === "settled") paymentStatus = "Paid"
+      else if (s === "cod_pending") paymentStatus = "COD Pending"
+      else if (s === "refunded") paymentStatus = "Refunded"
+      else if (s === "failed") paymentStatus = "Failed"
+
+      return [
+        order.sl || index + 1,
+        order.orderId || 'N/A',
+        order.orderDate || 'N/A',
+        order.orderTime || 'N/A',
+        order.userName || 'N/A',
+        order.userNumber || 'N/A',
+        order.restaurantName || 'N/A',
+        order.deliveryBoyName || 'N/A',
+        order.deliveryBoyNumber || 'N/A',
+        order.status || 'N/A',
+        formatMoney(packagingFee),
+        formatMoney(deliveryFee),
+        formatMoney(platformFee),
+        totalAmount > 0 ? formatMoney(totalAmount) : 'N/A',
+        paymentStatus
+      ]
+    })
   } else {
     headers = ["SI", "Order ID", "Order Date", "Customer Name", "Customer Phone", "Restaurant", "Total Amount", "Payment Status", "Order Status", "Delivery Type"]
     rows = orders.map((order, index) => [
@@ -94,10 +129,14 @@ export const exportToExcel = (orders, filename = "orders") => {
     ])
   } else if (isOrderDetectDelivery) {
     // OrderDetectDelivery format - includes delivery boy info and payment details
-    headers = ["SI", "Order ID", "Order Date", "Order Time", "Customer Name", "Customer Phone", "Restaurant Name", "Delivery Boy Name", "Delivery Boy Phone", "Status", "Total Amount", "Payment Status"]
+    headers = ["SI", "Order ID", "Order Date", "Order Time", "Customer Name", "Customer Phone", "Restaurant Name", "Delivery Boy Name", "Delivery Boy Phone", "Status", "Packaging Charge", "Delivery Fee", "Platform Charge", "Total Amount", "Payment Status"]
     rows = orders.map((order, index) => {
       const originalOrder = order.originalOrder || {}
-      const totalAmount = originalOrder.pricing?.total || originalOrder.totalAmount || originalOrder.total || 0
+      const pricing = originalOrder.pricing || {}
+      const packagingFee = Number(pricing.packagingFee ?? originalOrder.packagingFee ?? order.packagingFee ?? 0)
+      const deliveryFee = Number(pricing.deliveryFee ?? originalOrder.deliveryCharge ?? originalOrder.deliveryFee ?? 0)
+      const platformFee = Number(pricing.platformFee ?? originalOrder.platformFee ?? order.platformFee ?? 0)
+      const totalAmount = pricing.total || originalOrder.totalAmount || originalOrder.total || 0
       const s = String(originalOrder.payment?.status || "").toLowerCase()
       let paymentStatus = originalOrder.paymentStatus || 'N/A'
       if (s === "paid" || s === "captured" || s === "settled") paymentStatus = "Paid"
@@ -116,6 +155,9 @@ export const exportToExcel = (orders, filename = "orders") => {
         order.deliveryBoyName || 'N/A',
         order.deliveryBoyNumber || 'N/A',
         order.status || 'N/A',
+        formatMoney(packagingFee),
+        formatMoney(deliveryFee),
+        formatMoney(platformFee),
         totalAmount > 0 ? formatMoney(totalAmount) : 'N/A',
         paymentStatus
       ]
@@ -271,10 +313,14 @@ export const exportToPDF = async (orders, filename = "orders") => {
       ])
     } else if (isOrderDetectDelivery) {
       // OrderDetectDelivery format - includes delivery boy info and payment details
-      headers = [["SI", "Order ID", "Order Date", "Order Time", "Customer Name", "Customer Phone", "Restaurant Name", "Delivery Boy Name", "Delivery Boy Phone", "Status", "Total Amount", "Payment Status"]]
+      headers = [["SI", "Order ID", "Order Date", "Customer Name", "Restaurant Name", "Delivery Boy", "Status", "Packaging", "Delivery", "Platform", "Total", "Payment"]]
       tableData = orders.map((order, index) => {
         const originalOrder = order.originalOrder || {}
-        const totalAmount = originalOrder.pricing?.total || originalOrder.totalAmount || originalOrder.total || 0
+        const pricing = originalOrder.pricing || {}
+        const packagingFee = Number(pricing.packagingFee ?? originalOrder.packagingFee ?? order.packagingFee ?? 0)
+        const deliveryFee = Number(pricing.deliveryFee ?? originalOrder.deliveryCharge ?? originalOrder.deliveryFee ?? 0)
+        const platformFee = Number(pricing.platformFee ?? originalOrder.platformFee ?? order.platformFee ?? 0)
+        const totalAmount = pricing.total || originalOrder.totalAmount || originalOrder.total || 0
         const s = String(originalOrder.payment?.status || "").toLowerCase()
         let paymentStatus = originalOrder.paymentStatus || 'N/A'
         if (s === "paid" || s === "captured" || s === "settled") paymentStatus = "Paid"
@@ -285,14 +331,14 @@ export const exportToPDF = async (orders, filename = "orders") => {
         return [
           order.sl || index + 1,
           order.orderId || 'N/A',
-          order.orderDate || 'N/A',
-          order.orderTime || 'N/A',
+          `${order.orderDate || ''}${order.orderTime ? ` ${order.orderTime}` : ''}`,
           order.userName || 'N/A',
-          order.userNumber || 'N/A',
           order.restaurantName || 'N/A',
           order.deliveryBoyName || 'N/A',
-          order.deliveryBoyNumber || 'N/A',
           order.status || 'N/A',
+          formatMoney(packagingFee),
+          formatMoney(deliveryFee),
+          formatMoney(platformFee),
           totalAmount > 0 ? formatMoney(totalAmount) : 'N/A',
           paymentStatus
         ]

@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
+import RequireAdminAction from "./RequireAdminAction";
 import PermissionRoute from "./PermissionRoute";
 import AdminLayout from "./AdminLayout";
 import AuthRedirect from "@food/components/AuthRedirect";
@@ -43,7 +44,6 @@ const Coupons = lazy(() => import("@food/pages/admin/Coupons"));
 const PromotionalBanner = lazy(() => import("@food/pages/admin/PromotionalBanner"));
 
 // Help & Support
-const ContactMessages = lazy(() => import("@food/pages/admin/ContactMessages"));
 const SafetyEmergencyReports = lazy(() => import("@food/pages/admin/SafetyEmergencyReports"));
 // Customer Management
 const Customers = lazy(() => import("@food/pages/admin/Customers"));
@@ -56,6 +56,7 @@ const CashLimitSettlement = lazy(() => import("@food/pages/admin/CashLimitSettle
 const CashConfirmations = lazy(() => import("@food/pages/admin/CashConfirmations"));
 const DeliveryWithdrawal = lazy(() => import("@food/pages/admin/DeliveryWithdrawal"));
 const DeliveryBoyWallet = lazy(() => import("@food/pages/admin/DeliveryBoyWallet"));
+const RestaurantWallet = lazy(() => import("@food/pages/admin/RestaurantWallet"));
 const DeliveryEmergencyHelp = lazy(() => import("@food/pages/admin/DeliveryEmergencyHelp"));
 const DeliverySupportTickets = lazy(() => import("@food/pages/admin/DeliverySupportTickets"));
 const JoinRequest = lazy(() => import("@food/pages/admin/delivery-partners/JoinRequest"));
@@ -99,6 +100,7 @@ const CustomizationSettings = lazy(() => import("@food/pages/admin/system/Custom
 const ArchivedAccounts = lazy(() => import("@food/pages/admin/system/ArchivedAccounts"));
 const RestaurantSettings = lazy(() => import("@food/pages/admin/restaurant/RestaurantSettings"));
 const RestaurantEarnings = lazy(() => import("@food/pages/admin/restaurant/RestaurantEarnings"));
+const AdminEarning = lazy(() => import("@food/pages/admin/reports/AdminEarning"));
 const EditRestaurant = lazy(() => import("@food/pages/admin/restaurant/EditRestaurant"));
 const AdminLogin = lazy(() => import("@food/pages/admin/auth/AdminLogin"));
 const AdminSignup = lazy(() => import("@food/pages/admin/auth/AdminSignup"));
@@ -210,13 +212,13 @@ export default function AdminRouter() {
             <Route path="zone-setup" element={<ZoneSetup />} />
             <Route path="zone-setup/map" element={<AllZonesMap />} />
             <Route path="zone-setup/delivery-boy-view" element={<DeliveryBoyViewMap />} />
-            <Route path="zone-setup/add" element={<AddZone />} />
-            <Route path="zone-setup/edit/:id" element={<AddZone />} />
+            <Route path="zone-setup/add" element={<RequireAdminAction action="create" backTo="/admin/food/zone-setup"><AddZone /></RequireAdminAction>} />
+            <Route path="zone-setup/edit/:id" element={<RequireAdminAction action="edit" backTo="/admin/food/zone-setup"><AddZone /></RequireAdminAction>} />
             <Route path="zone-setup/view/:id" element={<ViewZone />} />
             <Route path="food-approval" element={<FoodApproval />} />
             <Route path="restaurants" element={<RestaurantsList />} />
-            <Route path="restaurants/add" element={<AddRestaurant />} />
-            <Route path="restaurants/edit/:id" element={<EditRestaurant />} />
+            <Route path="restaurants/add" element={<RequireAdminAction action="create" backTo="/admin/food/restaurants"><AddRestaurant /></RequireAdminAction>} />
+            <Route path="restaurants/edit/:id" element={<RequireAdminAction action="edit" backTo="/admin/food/restaurants"><EditRestaurant /></RequireAdminAction>} />
             <Route path="restaurants/joining-request" element={<JoiningRequest />} />
             <Route path="restaurants/top-restaurants" element={<TopRestaurants />} />
             <Route path="restaurants/commission" element={<RestaurantCommission />} />
@@ -224,7 +226,7 @@ export default function AdminRouter() {
             <Route path="restaurants/reviews" element={<RestaurantReviews />} />
             <Route path="restaurants/settings" element={<RestaurantSettings />} />
             <Route path="restaurants/earnings" element={<RestaurantEarnings />} />
-            <Route path="restaurant-earnings" element={<RestaurantEarnings />} />
+            <Route path="restaurant-earnings" element={<Navigate to="/admin/food/restaurants/earnings" replace />} />
 
             {/* FOOD & CATEGORY MANAGEMENT */}
             <Route path="categories" element={<Category />} />
@@ -240,7 +242,7 @@ export default function AdminRouter() {
             <Route path="coupons" element={<Coupons />} />
             <Route path="promotional-banner" element={<PromotionalBanner />} />
             
-            <Route path="contact-messages" element={<ContactMessages />} />
+            <Route path="contact-messages" element={<Navigate to="/admin/food/customer-report/feedback-experience" replace />} />
             <Route path="safety-emergency-reports" element={<SafetyEmergencyReports />} />
             
             <Route path="customers" element={<Customers />} />
@@ -268,10 +270,12 @@ export default function AdminRouter() {
             <Route path="transaction-report" element={<TransactionReport />} />
             <Route path="order-report/regular" element={<RegularOrderReport />} />
             <Route path="restaurant-report" element={<RestaurantReport />} />
+            <Route path="admin-earning" element={<AdminEarning />} />
             <Route path="customer-report/feedback-experience" element={<FeedbackExperienceReport />} />
             <Route path="tax-report" element={<TaxReport />} />
             
             <Route path="restaurant-withdraws" element={<RestaurantWithdraws />} />
+            <Route path="restaurant-wallet" element={<RestaurantWallet />} />
             
 
             {/* SUB ADMIN MANAGEMENT (full ADMIN only) */}

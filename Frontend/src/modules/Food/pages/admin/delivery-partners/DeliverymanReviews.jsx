@@ -341,7 +341,7 @@ export default function DeliverymanReviews() {
                       {visibleColumns.deliverymanId && (
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-mono text-slate-600">
-                            {review.deliverymanId ? (typeof review.deliverymanId === "object" ? review.deliverymanId.toString() : review.deliverymanId.toString()) : "N/A"}
+                            {review.deliveryId || (review.deliverymanId ? String(review.deliverymanId) : "N/A")}
                           </span>
                         </td>
                       )}
@@ -483,7 +483,7 @@ export default function DeliverymanReviews() {
                 <div className="bg-slate-50 rounded-lg p-4">
                   <p className="text-xs text-slate-500 mb-1">Delivery Boy ID</p>
                   <p className="text-sm font-semibold text-slate-900 font-mono">
-                    {selectedReview.deliverymanId ? (typeof selectedReview.deliverymanId === "object" ? selectedReview.deliverymanId.toString() : selectedReview.deliverymanId.toString()) : "N/A"}
+                    {selectedReview.deliveryId || (selectedReview.deliverymanId ? String(selectedReview.deliverymanId) : "N/A")}
                   </p>
                 </div>
               </div>

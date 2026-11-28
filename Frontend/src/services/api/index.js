@@ -128,6 +128,8 @@ export const authAPI = {
       confirmAction,
     );
   },
+  /** Resolves true/false; rejects on network errors. */
+  validateReferralCode: (code) => authService.validateUserReferralCode(code),
   getCurrentUser: () => getUserMeOnce(),
   refreshToken: (token) => authService.refreshToken(token),
   logout: (refreshToken, fcmToken = null, platform = "web") => {
@@ -172,6 +174,8 @@ export const notificationAPI = {
     }),
   markAsRead: (id, config = {}) =>
     apiClient.patch(`/food/notifications/${String(id)}/read`, {}, config),
+  markAllAsRead: (config = {}) =>
+    apiClient.patch("/food/notifications/inbox/read-all", {}, config),
   dismiss: (id, config = {}) =>
     apiClient.delete(`/food/notifications/${String(id)}`, config),
   dismissAll: (config = {}) =>
@@ -223,6 +227,16 @@ export const adminAPI = {
       { currentPassword, newPassword },
       { contextModule: "admin" },
     ),
+  saveFcmToken: (token, platform = "web") => {
+    if (!token) return Promise.reject(new Error("FCM token is required"));
+    const path =
+      platform === "mobile" ? "/fcm-tokens/mobile/save" : "/fcm-tokens/save";
+    return apiClient.post(
+      path,
+      { token: String(token), platform },
+      { contextModule: "admin" },
+    );
+  },
   logout: (refreshToken) => {
     const token =
       refreshToken ||
@@ -274,6 +288,13 @@ export const adminAPI = {
       params,
       contextModule: "admin",
     }, { ttlMs: 10000, staleOn429Ms: 90000 }),
+  /** Admin: set a delivery partner's pocket balance / cash in hand. */
+  updateDeliveryBoyWallet: ({ deliveryId, pocketBalance, cashInHand } = {}) =>
+    apiClient.patch(
+      `/food/admin/delivery/partners/${String(deliveryId)}/wallet`,
+      { pocketBalance, cashInHand },
+      { contextModule: "admin" },
+    ),
   /** List approved delivery partners (Deliveryman List page) */
   getDeliveryPartners: (params) =>
     apiClient.get("/food/admin/delivery/partners", {
@@ -330,6 +351,12 @@ export const adminAPI = {
   getWithdrawalRequests: (params) => adminAPI.getWithdrawals(params),
   approveWithdrawalRequest: (id) => adminAPI.updateWithdrawalStatus(id, { status: "approved" }),
   rejectWithdrawalRequest: (id, reason) => adminAPI.updateWithdrawalStatus(id, { status: "rejected", rejectionReason: reason }),
+  /** Restaurant wallets: per-restaurant earnings, withdrawals and balance. */
+  getRestaurantWallets: (params) =>
+    apiClient.get("/food/admin/restaurant-wallet", {
+      params,
+      contextModule: "admin",
+    }),
   /** Delivery boy wallets (stub until backend implements - returns empty so list still loads) */
   getDeliveryBoyWallets: (params) =>
     apiClient.get("/food/admin/delivery/wallets", {
@@ -383,6 +410,15 @@ export const adminAPI = {
     apiClient.get("/food/admin/customization-settings", { contextModule: "admin" }),
   updateCustomizationSettings: (data) =>
     apiClient.patch("/food/admin/customization-settings", data, { contextModule: "admin" }),
+  /** Zone scope of Customization Settings: effective values, defaults and which switches the zone overrides. */
+  getZoneCustomizationSettings: (zoneId) =>
+    apiClient.get("/food/admin/customization-settings/zones", {
+      params: { zoneId: zoneId || undefined },
+      contextModule: "admin",
+    }),
+  /** Body: { zoneId, [switch]: true | false | null } - null makes the zone follow the platform default again. */
+  updateZoneCustomizationSettings: (data) =>
+    apiClient.patch("/food/admin/customization-settings/zones", data, { contextModule: "admin" }),
   getTakeawayCodStatus: () =>
     apiClient.get("/food/admin/customization-settings/takeaway-cod", { contextModule: "admin" }),
   /** Query: zoneId (omit for the platform default). */
@@ -703,6 +739,17 @@ export const adminAPI = {
     apiClient.patch(`/food/admin/orders/${String(orderId)}/statuses`, body, {
       contextModule: "admin",
     }),
+  /** Refund requests (admin) */
+  getRefundRequests: (params = {}) =>
+    apiClient.get("/food/admin/refund-requests", {
+      params,
+      contextModule: "admin",
+    }),
+  /** Process refund (admin) */
+  processRefund: (orderId, body = {}) =>
+    apiClient.post(`/food/admin/orders/${String(orderId)}/refund`, body, {
+      contextModule: "admin",
+    }),
   /** Dispatch settings – auto vs manual assign (global) */
   /** Check for duplicate email, owner phone, or primary contact */
   checkRestaurantDuplicate: (params = {}) =>
@@ -757,16 +804,25 @@ export const adminAPI = {
   getZoneById: (id) =>
     apiClient.get(`/food/admin/zones/${id}`, { contextModule: "admin" }),
   /** Create zone. Body: name, zoneName?, country?, unit?, coordinates, isActive? */
+  // getZones is cached (30s). Every zone mutation must drop that cache, otherwise
+  // the zone list shows stale data until a manual refresh. Invalidated in
+  // `finally` so a failed/partial request can't leave stale data behind either.
   createZone: (body) =>
-    apiClient.post("/food/admin/zones", body ?? {}, { contextModule: "admin" }),
+    apiClient
+      .post("/food/admin/zones", body ?? {}, { contextModule: "admin" })
+      .finally(() => invalidateAdminReadCache("/food/admin/zones")),
   /** Update zone. Body: name?, zoneName?, country?, unit?, coordinates?, isActive? */
   updateZone: (id, body) =>
-    apiClient.patch(`/food/admin/zones/${id}`, body ?? {}, {
-      contextModule: "admin",
-    }),
+    apiClient
+      .patch(`/food/admin/zones/${id}`, body ?? {}, {
+        contextModule: "admin",
+      })
+      .finally(() => invalidateAdminReadCache("/food/admin/zones")),
   /** Delete zone */
   deleteZone: (id) =>
-    apiClient.delete(`/food/admin/zones/${id}`, { contextModule: "admin" }),
+    apiClient
+      .delete(`/food/admin/zones/${id}`, { contextModule: "admin" })
+      .finally(() => invalidateAdminReadCache("/food/admin/zones")),
 
   /** Feedback Experience (admin) */
   getFeedbackExperiences: (params = {}) =>
@@ -843,6 +899,12 @@ export const adminAPI = {
   /** Delivery Earnings (admin) */
   getDeliveryEarnings: (params = {}) =>
     apiClient.get("/food/admin/delivery/earnings", {
+      params,
+      contextModule: "admin",
+    }),
+  /** What the platform itself earns (commission, fees, taxes, subscriptions) minus what it pays out. */
+  getAdminEarnings: (params = {}) =>
+    apiClient.get("/food/admin/admin-earnings", {
       params,
       contextModule: "admin",
     }),
@@ -1254,6 +1316,23 @@ export const restaurantAPI = {
     return authService.reapplyRestaurant(phone);
   },
   getMe: () => authService.getMe("restaurant"),
+  /** Verification status check for pending restaurant onboarding/approval. */
+  getVerificationStatus: (params = {}, registrationToken = null) => {
+    const headers = {};
+    const regToken =
+      registrationToken ||
+      (typeof localStorage !== "undefined"
+        ? localStorage.getItem("restaurant_registrationToken")
+        : null);
+    if (regToken) {
+      headers["x-registration-token"] = regToken;
+    }
+    return apiClient.get("/food/restaurant/verification-status", {
+      contextModule: "restaurant",
+      params: params || {},
+      headers,
+    });
+  },
   /** Restaurant dashboard: fetch current restaurant profile (deduped + short-cached). */
   getCurrentRestaurant: () => getRestaurantCurrentOnce(),
   /** Force-refresh current restaurant profile bypassing the short-lived cache. */
@@ -1835,6 +1914,13 @@ export const restaurantAPI = {
     apiClient.delete("/food/restaurant/onboarding/uploads", {
       headers: { "X-Registration-Token": registrationToken },
       data: { field, url },
+      contextModule: "restaurant",
+      _retry: true,
+    }),
+  clearAllOnboardingUploads: (registrationToken) =>
+    apiClient.delete("/food/restaurant/onboarding/uploads", {
+      headers: { "X-Registration-Token": registrationToken },
+      data: { clearAll: true },
       contextModule: "restaurant",
       _retry: true,
     }),
@@ -2456,6 +2542,17 @@ export const deliveryAPI = {
    * registration token from OTP verification. `_retry` keeps a rejected token
    * away from the access-token refresh/logout flow.
    */
+  /**
+   * Approval status for the pending-verification screen. Public and keyed by
+   * phone: returns { status } only, no tokens. `_retry` keeps a 401 away from the
+   * access-token refresh/logout flow (a pending partner has no session).
+   */
+  getVerificationStatus: (phone) =>
+    apiClient.get("/food/delivery/verification-status", {
+      params: { phone },
+      contextModule: "delivery",
+      _retry: true,
+    }),
   getOnboardingUploads: (registrationToken) =>
     apiClient.get("/food/delivery/onboarding/uploads", {
       headers: { "X-Registration-Token": registrationToken },
@@ -2614,8 +2711,8 @@ export const deliveryAPI = {
     const isProbablyOrderIdentity = (value) => {
       const raw = String(value || "").trim();
       if (!raw) return false;
-      // Mongo ObjectId
-      return /^[a-f0-9]{24}$/i.test(raw);
+      // Mongo ObjectId or readable Order ID (e.g. FOD-123456, ORD-123456)
+      return /^[a-f0-9]{24}$/i.test(raw) || /^FOD-[a-zA-Z0-9_-]+$/i.test(raw) || /^ORD-[a-zA-Z0-9_-]+$/i.test(raw) || raw.length >= 3;
     };
 
     return (orderId) => {
@@ -2844,11 +2941,19 @@ export const deliveryAPI = {
   /** DELETE /food/delivery/account - permanently delete delivery partner account */
   deleteAccount: () =>
     apiClient.delete("/food/delivery/account", { contextModule: "delivery" }),
+  /** POST /food/delivery/feedback-experience - submit delivery app experience feedback */
+  submitFeedbackExperience: (body) =>
+    apiClient.post("/food/delivery/feedback-experience", body ?? {}, {
+      contextModule: "delivery",
+    }),
 };
 
 export const userAPI = {
-  getCustomizationSettings: () =>
-    apiClient.get("/food/public/customization-settings"),
+  /** Pass a zone id to get that zone's payment switches (COD / wallet / online). */
+  getCustomizationSettings: (zoneId) =>
+    apiClient.get("/food/public/customization-settings", {
+      params: zoneId ? { zoneId: String(zoneId) } : undefined,
+    }),
   /** Get current user profile (Bearer USER). */
   getProfile: () =>
     getUserMeOnce().then((res) => {
@@ -3014,6 +3119,11 @@ export const userAPI = {
   /** DELETE /food/user/account - permanently delete user account */
   deleteAccount: () =>
     apiClient.delete("/food/user/account", { contextModule: "user" }),
+  /** POST /food/user/feedback-experience - submit user app experience feedback */
+  submitFeedbackExperience: (body) =>
+    apiClient.post("/food/user/feedback-experience", body ?? {}, {
+      contextModule: "user",
+    }),
 };
 export const locationAPI = createStubAPI();
 export const zoneAPI = {

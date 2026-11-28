@@ -1316,11 +1316,28 @@ export const sendNotificationToOwners = async (targets = [], payload = {}) => {
  * from the notification channel the app registered for `channelId`.
  */
 export const getNewOrderAlertSound = () => ({
-    android: sanitizeString(process.env.PUSH_NEW_ORDER_SOUND_ANDROID) || 'default',
-    ios: sanitizeString(process.env.PUSH_NEW_ORDER_SOUND_IOS) || 'default',
+    android: sanitizeString(process.env.PUSH_NEW_ORDER_SOUND_ANDROID) || 'restaurant_alert',
+    ios: sanitizeString(process.env.PUSH_NEW_ORDER_SOUND_IOS) || 'restaurant_alert.mp3',
 });
 
 export const notifyAdminsSafely = async (payload = {}) => {
+    // Live copy for admin panels that are open right now. Sent first and
+    // independent of FCM, so it still arrives with no push token / no Firebase.
+    try {
+        const data = payload?.data || {};
+        const { emitToAdmins } = await import('../../config/socket.js');
+        emitToAdmins('admin_live_notification', {
+            id: sanitizeString(payload.idempotencyKey || payload.eventId || data.eventId || data.id) || `${Date.now()}`,
+            title: stripOwnerTitlePrefix(payload.title || payload.notification?.title || '') || 'New notification',
+            body: sanitizeString(payload.body || payload.notification?.body || ''),
+            link: resolveClickLink(payload, data) !== '/' ? resolveClickLink(payload, data) : '',
+            type: sanitizeString(data.type || ''),
+            createdAt: new Date().toISOString()
+        });
+    } catch (e) {
+        logger.warn(`Live admin notification emit failed: ${e.message}`);
+    }
+
     try {
         const admins = await FoodAdmin.find({ isActive: true }).select('_id').lean();
         if (!admins.length) return [];

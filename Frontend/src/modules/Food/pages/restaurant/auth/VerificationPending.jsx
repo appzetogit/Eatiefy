@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { Clock3, ShieldCheck, XCircle, AlertTriangle, X, Loader2 } from "lucide-react"
 import { toast } from "sonner"
@@ -10,6 +10,8 @@ import {
   getRestaurantPendingPhone,
   clearModuleAuth,
   clearRestaurantRegistrationToken,
+  getRestaurantRegistrationToken,
+  setAuthData,
 } from "@food/utils/auth"
 import { clearOnboardingFromLocalStorage, clearAllFilesFromDB } from "@food/utils/onboardingUtils"
 import {
@@ -18,6 +20,7 @@ import {
   isNativeAppWebView,
   persistModuleFcmToken,
   setupPendingVerificationPushListeners,
+  startPendingPushAutoSync,
   syncNativeAppPushToken,
   syncPendingPartnerFcmQuick,
 } from "@food/utils/firebaseMessaging"
@@ -153,8 +156,15 @@ export default function VerificationPending() {
 
     void syncPushToken()
 
+    // Keep retrying until the token is saved, so the approval push can reach this device.
+    const stopAutoSync = startPendingPushAutoSync(
+      "restaurant",
+      pendingPhone || getRestaurantPendingPhone() || ""
+    )
+
     return () => {
       cancelled = true
+      stopAutoSync()
     }
   }, [pendingPhone])
 
@@ -175,48 +185,110 @@ export default function VerificationPending() {
     }
   }
 
+  const isTransitioningRef = useRef(false)
+
   useEffect(() => {
     let cancelled = false
+    let pollInterval = null
 
     const checkApprovalStatus = async () => {
+      if (isTransitioningRef.current || cancelled) return
+
       const token = getModuleToken("restaurant")
-      if (!token) {
+      const regToken = getRestaurantRegistrationToken()
+      const phone = pendingPhone || getRestaurantPendingPhone() || ""
+
+      // If we have neither a token, registration token, nor phone, we can't check
+      if (!token && !regToken && !phone) {
         if (!cancelled) setCheckingStatus(false)
         return
       }
 
       try {
-        const response = await restaurantAPI.getCurrentRestaurant()
-        const restaurant =
-          response?.data?.data?.restaurant ||
-          response?.data?.restaurant ||
-          response?.data?.data?.user ||
-          response?.data?.user
+        let status = null
+        let restaurant = null
+        let rejectionReason = null
+        let accessToken = null
+        let refreshToken = null
+        let user = null
+        let needsLogin = false
 
-        if (cancelled) return
+        // Primary: use the dedicated verification-status endpoint
+        try {
+          const res = await restaurantAPI.getVerificationStatus({ phone }, regToken)
+          const data = res?.data?.data || res?.data || {}
+          status = String(data.status || "").toLowerCase()
+          rejectionReason = data.rejectionReason || null
+          accessToken = data.accessToken || data.token || null
+          refreshToken = data.refreshToken || null
+          user = data.user || null
+          needsLogin = Boolean(data.needsLogin)
+        } catch (statusErr) {
+          // If verification-status endpoint failed and we have an existing bearer token, fallback
+          if (token) {
+            const response = await restaurantAPI.getCurrentRestaurant()
+            restaurant =
+              response?.data?.data?.restaurant ||
+              response?.data?.restaurant ||
+              response?.data?.data?.user ||
+              response?.data?.user
+            status = String(restaurant?.status || "").toLowerCase()
+            rejectionReason = restaurant?.rejectionReason || null
+          } else {
+            throw statusErr
+          }
+        }
 
-        const status = String(restaurant?.status || "").toLowerCase()
+        if (cancelled || isTransitioningRef.current) return
+
+        if (status === "approved") {
+          isTransitioningRef.current = true
+          if (pollInterval) clearInterval(pollInterval)
+
+          if (accessToken && user) {
+            setAuthData("restaurant", accessToken, user, refreshToken)
+          } else {
+            // Update local stored user if present
+            const storedUser = localStorage.getItem("restaurant_user")
+            if (storedUser) {
+              try {
+                const parsed = JSON.parse(storedUser)
+                parsed.status = "approved"
+                localStorage.setItem("restaurant_user", JSON.stringify(parsed))
+              } catch (e) {}
+            }
+          }
+
+          clearRestaurantPendingPhone()
+          clearRestaurantRegistrationToken()
+          localStorage.removeItem("restaurant_pendingStatus")
+          localStorage.removeItem("restaurant_pendingMessage")
+          window.dispatchEvent(new Event("restaurantAuthChanged"))
+
+          if (needsLogin && !accessToken) {
+            toast.success("Your restaurant has been approved! Please sign in to open your dashboard.")
+            navigate("/food/restaurant/login", { replace: true, state: { phone } })
+          } else {
+            toast.success("Congratulations! Your restaurant has been approved.")
+            navigate("/food/restaurant", { replace: true })
+          }
+          return
+        }
 
         // Sync back to stored user status to keep ProtectedRoute up-to-date
         const storedUser = localStorage.getItem("restaurant_user")
-        if (storedUser) {
+        if (storedUser && status) {
           try {
             const parsed = JSON.parse(storedUser)
             parsed.status = status
-            if (restaurant?.rejectionReason) {
-              parsed.rejectionReason = restaurant.rejectionReason
+            if (rejectionReason) {
+              parsed.rejectionReason = rejectionReason
             }
             localStorage.setItem("restaurant_user", JSON.stringify(parsed))
           } catch (e) {}
         }
 
-        if (status === "approved") {
-          clearRestaurantPendingPhone()
-          localStorage.removeItem("restaurant_pendingStatus")
-          localStorage.removeItem("restaurant_pendingMessage")
-          navigate("/food/restaurant", { replace: true })
-          return
-        } else if (status === "banned") {
+        if (status === "banned") {
           setLocalStatus("banned")
           const msg = "Your restaurant has been disabled. Reason: Disabled by admin"
           setLocalMessage(msg)
@@ -224,8 +296,8 @@ export default function VerificationPending() {
           localStorage.setItem("restaurant_pendingMessage", msg)
         } else if (status === "rejected") {
           setLocalStatus("rejected")
-          const msg = restaurant.rejectionReason
-            ? `Your restaurant registration has been rejected. Reason: ${restaurant.rejectionReason}`
+          const msg = rejectionReason
+            ? `Your restaurant registration has been rejected. Reason: ${rejectionReason}`
             : "Your restaurant registration has been rejected. Please contact support."
           setLocalMessage(msg)
           localStorage.setItem("restaurant_pendingStatus", "rejected")
@@ -241,23 +313,36 @@ export default function VerificationPending() {
       }
     }
 
-    checkApprovalStatus()
+    // Run check immediately on mount
+    void checkApprovalStatus()
+
+    // Poll every 4 seconds while on pending verification screen
+    pollInterval = setInterval(() => {
+      void checkApprovalStatus()
+    }, 4000)
 
     const handleVisibilityOrFocus = () => {
       if (document.visibilityState === "visible") {
-        checkApprovalStatus()
+        void checkApprovalStatus()
       }
+    }
+
+    const handleApprovalPushEvent = () => {
+      void checkApprovalStatus()
     }
 
     window.addEventListener("focus", handleVisibilityOrFocus)
     document.addEventListener("visibilitychange", handleVisibilityOrFocus)
+    window.addEventListener("restaurantApprovalStatusChanged", handleApprovalPushEvent)
 
     return () => {
       cancelled = true
+      if (pollInterval) clearInterval(pollInterval)
       window.removeEventListener("focus", handleVisibilityOrFocus)
       document.removeEventListener("visibilitychange", handleVisibilityOrFocus)
+      window.removeEventListener("restaurantApprovalStatusChanged", handleApprovalPushEvent)
     }
-  }, [navigate])
+  }, [navigate, pendingPhone])
 
   return (
     <div className={`min-h-[100dvh] overflow-y-auto overscroll-contain px-4 py-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-10 transition-all duration-300 ${isDisabledByAdmin
@@ -449,7 +534,7 @@ export default function VerificationPending() {
                         Enabling...
                       </span>
                     ) : (
-                      "Allow Mail Notifications"
+                      "Enable Notifications"
                     )}
                   </Button>
                 ) : null}

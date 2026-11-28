@@ -51,7 +51,7 @@ export default function Notifications() {
     dismiss: dismissBroadcastNotification,
     dismissAll: dismissAllBroadcastNotifications,
     loading: isLoadingInbox,
-  } = useNotificationInbox("user", { limit: 100 })
+  } = useNotificationInbox("user", { limit: 100, markSeen: true })
 
   // One-time purge of legacy mock seeds stuck in localStorage
   useEffect(() => {
@@ -166,6 +166,12 @@ export default function Notifications() {
         new Date(a.timestamp || a.createdAt || 0).getTime(),
     )
   }, [broadcastNotifications, notificationsList])
+
+  // Device-local alerts (order updates, OTP) are seen as soon as this page shows them.
+  useEffect(() => {
+    if (!notificationsList.some((item) => !item.read)) return
+    setNotificationsList((prev) => prev.map((item) => (item.read ? item : { ...item, read: true })))
+  }, [notificationsList])
 
   const unreadCount =
     notificationsList.filter((n) => !n.read && !isLegacyMockNotification(n)).length +

@@ -7,11 +7,14 @@ import { adminAPI, restaurantAPI } from "@food/api"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
+import { formatRestaurantId } from "@food/utils/formatRestaurantId"
 import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
 import { getRestaurantDisplayAddress } from "@food/utils/restaurantLocation"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
+import { getRestaurantDietType } from "./RestaurantsList"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -27,6 +30,7 @@ const formatTime12Hour = (timeStr) => {
 
 
 export default function JoiningRequest() {
+  const { canEdit } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -112,7 +116,7 @@ export default function JoiningRequest() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearch, zoneId])
+  }, [debouncedSearch, zoneId, filters.dateFrom, filters.dateTo])
 
   useAdminBadgeListRefresh("restaurants", fetchRequests, [debouncedSearch, currentPage, pageSize, zoneId])
 
@@ -375,10 +379,10 @@ export default function JoiningRequest() {
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
-              <div className="relative flex-1 sm:flex-initial min-w-[250px]">
+              <div className="relative flex-1 sm:flex-initial sm:w-80">
                 <input
                   type="text"
-                  placeholder="Ex: Search by restaurant na"
+                  placeholder="Search by restaurant, owner or phone"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2.5 w-full text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -546,7 +550,7 @@ export default function JoiningRequest() {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
-                          {String(request.status || "").toLowerCase() === "pending" && (
+                          {canEdit && String(request.status || "").toLowerCase() === "pending" && (
                             <>
                               <button
                                 onClick={() => handleApprove(request)}
@@ -617,24 +621,7 @@ export default function JoiningRequest() {
               </div>
 
               <div className="space-y-4">
-                {/* Zone Filter */}
-                {filterOptions.zones.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Zone
-                    </label>
-                    <select
-                      value={filters.zone}
-                      onChange={(e) => setFilters({ ...filters, zone: e.target.value })}
-                      className="w-full px-4 py-2.5 text-sm rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">All Zones</option>
-                      {filterOptions.zones.map((zone) => (
-                        <option key={zone} value={zone}>{zone}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                {/* Zone is filtered with the zone dropdown above the table. */}
 
                 {/* Date Range Filters */}
                 <div className="grid grid-cols-2 gap-3">
@@ -864,7 +851,7 @@ export default function JoiningRequest() {
                         )}
                         <div className="flex items-center gap-1 text-slate-600">
                           <Building2 className="w-4 h-4" />
-                          <span className="text-sm">{r?.restaurantId || r?._id || "N/A"}</span>
+                          <span className="text-sm" title={String(r?.restaurantId || r?._id || "")}>{r?.restaurantId || r?._id ? formatRestaurantId(r?.restaurantId || r?._id) : "N/A"}</span>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           approvalStatus === "approved" ? "bg-green-100 text-green-700" : approvalStatus === "rejected" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
@@ -1005,23 +992,17 @@ export default function JoiningRequest() {
                             </div>
                           ) : null
                         })()}
-                        {r?.pureVegRestaurant != null && (
-                          <div className="flex items-center gap-3">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              r.pureVeganRestaurant
-                                ? "bg-emerald-100 text-emerald-800"
-                                : r.pureVegRestaurant
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-orange-100 text-orange-700"
-                            }`}>
-                              {r.pureVeganRestaurant
-                                ? "Pure Vegan"
-                                : r.pureVegRestaurant
-                                  ? "Pure Veg"
-                                  : "Mixed Menu"}
-                            </span>
-                          </div>
-                        )}
+                        {(() => {
+                          const diet = getRestaurantDietType(r)
+                          return (
+                            <div className="flex items-center gap-3">
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${diet.badgeClass}`}>
+                                <span className={`w-2 h-2 rounded-full ${diet.dotClass}`} />
+                                {diet.label}
+                              </span>
+                            </div>
+                          )
+                        })()}
                         {(r?.primaryContactNumber || r?.phone) && (
                           <div className="flex items-center gap-3">
                             <Phone className="w-5 h-5 text-slate-400" />
@@ -1342,7 +1323,7 @@ export default function JoiningRequest() {
                         {r.restaurantId && (
                           <div>
                             <p className="text-xs text-slate-500 mb-1">Restaurant ID</p>
-                            <p className="font-medium text-slate-900">{r.restaurantId}</p>
+                            <p className="font-medium text-slate-900" title={String(r.restaurantId)}>{formatRestaurantId(r.restaurantId)}</p>
                           </div>
                         )}
                         {r.approvedAt != null && (

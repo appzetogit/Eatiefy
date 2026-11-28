@@ -1102,8 +1102,8 @@ export const useRestaurantNotifications = () => {
    * popup or the ringtone.
    */
   const handleIncomingOrderAlert = useCallback((orderData, source = 'unknown') => {
-    if (source !== 'socket' && source !== 'poll') {
-      logRefusedRing(source, 'rings start only from a new-order arrival (socket event or poll)', describeOrderForLog(orderData));
+    if (source !== 'socket' && source !== 'poll' && source !== 'push') {
+      logRefusedRing(source, 'rings start only from a new-order arrival (socket event, poll, or push)', describeOrderForLog(orderData));
       return;
     }
 
@@ -1663,6 +1663,34 @@ export const useRestaurantNotifications = () => {
   useEffect(() => {
     attachAlertAudioUnlock();
   }, []);
+
+  // Handle push notification order alerts (FCM / Service Worker push)
+  useEffect(() => {
+    if (!restaurantId || typeof window === 'undefined') return;
+
+    const handlePushOrder = (event) => {
+      const raw = event?.detail?.data || event?.detail || {};
+      const orderPayload = raw?.orderData || raw?.order || raw;
+      const orderMongoId = orderPayload?.orderMongoId || orderPayload?._id || orderPayload?.orderId || raw?.orderId;
+      if (!orderMongoId) return;
+
+      const normalizedOrder = normalizeRestaurantOrderView({
+        ...orderPayload,
+        orderMongoId,
+        orderId: orderPayload?.orderId || orderPayload?.order_id || orderMongoId,
+        restaurantId: orderPayload?.restaurantId || raw?.restaurantId || restaurantId,
+      });
+
+      handleIncomingOrderAlert(normalizedOrder, 'push');
+    };
+
+    window.addEventListener('app-order-push', handlePushOrder);
+    window.addEventListener('new_order', handlePushOrder);
+    return () => {
+      window.removeEventListener('app-order-push', handlePushOrder);
+      window.removeEventListener('new_order', handlePushOrder);
+    };
+  }, [restaurantId, handleIncomingOrderAlert]);
 
   const setMuted = useCallback((nextMuted) => {
     const muted = Boolean(nextMuted);

@@ -116,10 +116,19 @@ export default function MenuCategoriesPage() {
   // just not editable.
   const ownCategories = useMemo(
     () =>
-      (Array.isArray(categories) ? categories : []).filter(
-        (category) => category && typeof category === "object" && (category.ownedByRestaurant || category.isGlobal),
-      ),
-    [categories],
+      (Array.isArray(categories) ? categories : []).filter((category) => {
+        if (!category || typeof category !== "object") return false
+        if (!category.ownedByRestaurant && !category.isGlobal) return false
+        const scope = String(category.foodTypeScope || "").trim().toLowerCase()
+        if (isPureVegRestaurant && (scope === "non-veg" || scope === "nonveg" || scope === "non veg")) {
+          return false
+        }
+        if (restaurantFoodType === "Non-Veg" && (scope === "veg" || scope === "pure-veg" || scope === "pure veg")) {
+          return false
+        }
+        return true
+      }),
+    [categories, isPureVegRestaurant, restaurantFoodType],
   )
 
   /**
@@ -267,10 +276,10 @@ export default function MenuCategoriesPage() {
 
       if (editingCategory) {
         await restaurantAPI.updateCategory(editingCategory._id || editingCategory.id, payload)
-        toast.success("Category updated and sent for admin approval")
+        toast.success("Category updated successfully")
       } else {
         await restaurantAPI.createCategory(payload)
-        toast.success("Category created and sent for admin approval")
+        toast.success("Category created successfully")
       }
 
       resetModal()
@@ -385,8 +394,7 @@ export default function MenuCategoriesPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <p className="text-sm font-semibold text-slate-900">How this works</p>
           <p className="mt-2 text-sm text-slate-600">
-            New categories stay pending until admin approval. Editing an approved category sends it back for review.
-            Only approved categories can be used for food uploads.
+            Categories you create are directly visible in your item dropdown and available for dishes immediately.
           </p>
         </div>
 
@@ -480,10 +488,8 @@ export default function MenuCategoriesPage() {
                         <p>{category?.itemCount || 0} item(s) linked</p>
                         {isGlobal ? (
                           <p>Admin controls this category now, so you can use it but not rename or delete it.</p>
-                        ) : status === "approved" ? (
-                          <p>Editing this category will send it back for admin approval.</p>
                         ) : (
-                          <p>Foods can be added only after approval.</p>
+                          <p>Private category for your restaurant.</p>
                         )}
                         {!isOn && (
                           <p className="text-slate-600">Turned off: its dishes are hidden from customers.</p>
@@ -689,8 +695,8 @@ export default function MenuCategoriesPage() {
                   </h2>
                   <p className="text-xs text-slate-500">
                     {editingCategory
-                      ? "Any edit sends this category back for admin approval."
-                      : "Choose the diet scope carefully before sending it for approval."}
+                      ? "Update your custom category details."
+                      : "Choose the name and diet scope for your category."}
                   </p>
                 </div>
                 <button onClick={resetModal}>

@@ -3,6 +3,7 @@ import { useSearchParams, Link, useNavigate } from "react-router-dom"
 import { ArrowLeft, Star, Clock, Search, SlidersHorizontal, ChevronDown, Bookmark, BadgePercent, Mic, Grid2x2 } from "lucide-react"
 import { Card, CardContent } from "@food/components/ui/card"
 import { Button } from "@food/components/ui/button"
+import { useVoiceSearch } from "@food/hooks/useVoiceSearch"
 import { Input } from "@food/components/ui/input"
 import { RestaurantGridSkeleton } from "@food/components/ui/loading-skeletons"
 import StickyCartCard from "@food/components/user/StickyCartCard"
@@ -37,6 +38,9 @@ export default function SearchResults() {
   const { location } = useLocation()
   const { zoneId, isOutOfService } = useZone(location)
   const [searchQuery, setSearchQuery] = useState(query)
+  const { isListening: isVoiceListening, startListening, stopListening } = useVoiceSearch((transcript) => {
+    setSearchQuery(transcript)
+  })
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [activeFilters, setActiveFilters] = useState(new Set())
   const [favorites, setFavorites] = useState(new Set())
@@ -352,6 +356,7 @@ export default function SearchResults() {
           // Filter out restaurants with only default/mock data
           const restaurantsWithIds = restaurantsArray
             .filter((restaurant) => {
+              if (restaurant.hasDishes === false || restaurant.totalMenuItems === 0) return false;
               // Only include restaurants with real data (not just defaults)
               // At minimum, restaurant should have a name and either images or menu
               const hasName = restaurant.name && restaurant.name.trim().length > 0
@@ -892,8 +897,13 @@ export default function SearchResults() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 pr-10 h-11 rounded-lg border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-[#242424] focus:bg-white dark:focus:bg-[#2a2a2a] focus:border-gray-500 dark:focus:border-gray-600 text-sm dark:text-white placeholder:text-gray-600 dark:placeholder:text-gray-400"
               />
-              <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2">
-                <Mic className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+              <button
+                type="button"
+                aria-label={isVoiceListening ? "Stop voice search" : "Search by voice"}
+                onClick={() => (isVoiceListening ? stopListening() : startListening())}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 ${isVoiceListening ? "animate-pulse" : ""}`}
+              >
+                <Mic className={`h-4 w-4 ${isVoiceListening ? "text-red-500" : "text-gray-500 dark:text-gray-400"}`} />
               </button>
             </form>
           </div>

@@ -11,13 +11,15 @@ import {
   X,
   Briefcase,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  MessageSquare
 } from "lucide-react"
 import { deliveryAPI, authAPI } from "@food/api"
 import { toast } from "sonner"
 import { showUserFacingApiError } from "@/shared/utils/apiError"
 import { showAccountDeletedToast } from "@/shared/utils/customToasts"
 import { clearModuleAuth } from "@food/utils/auth"
+import FeedbackBottomSheet from "@food/components/common/FeedbackBottomSheet"
 
 /**
  * ProfileV2 - 1:1 EXACT Restoration of the Legacy Profile Hub.
@@ -37,10 +39,11 @@ export const ProfileV2 = () => {
   const [showBalanceWarning, setShowBalanceWarning] = useState(false)
   const [balanceData, setBalanceData] = useState({ balance: 0, type: "Wallet" })
   const [isCheckingBalance, setIsCheckingBalance] = useState(false)
+  const [feedbackSheetOpen, setFeedbackSheetOpen] = useState(false)
 
   // Lock scroll when any popup is open
   useEffect(() => {
-    const isPopupOpen = showLogoutConfirm || deleteAccountOpen || showBalanceWarning;
+    const isPopupOpen = showLogoutConfirm || deleteAccountOpen || showBalanceWarning || feedbackSheetOpen;
     if (isPopupOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -49,7 +52,7 @@ export const ProfileV2 = () => {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showLogoutConfirm, deleteAccountOpen, showBalanceWarning]);
+  }, [showLogoutConfirm, deleteAccountOpen, showBalanceWarning, feedbackSheetOpen]);
 
   // Fetch profile data
   useEffect(() => {
@@ -184,15 +187,28 @@ export const ProfileV2 = () => {
           {/* Support Section */}
           <div>
             <h3 className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-3 px-1">Support</h3>
-            <div 
-              onClick={() => navigate("/food/delivery/help/tickets")}
-              className="bg-white rounded-xl p-4 flex items-center justify-between cursor-pointer active:bg-gray-50 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Ticket className="w-5 h-5 text-gray-700" />
-                <span className="text-sm font-bold text-gray-900">Support tickets</span>
+            <div className="space-y-2">
+              <div 
+                onClick={() => navigate("/food/delivery/help/tickets")}
+                className="bg-white rounded-xl p-4 flex items-center justify-between cursor-pointer active:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Ticket className="w-5 h-5 text-gray-700" />
+                  <span className="text-sm font-bold text-gray-900">Support tickets</span>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-300" />
               </div>
-              <ChevronRight className="w-5 h-5 text-gray-300" />
+
+              <div 
+                onClick={() => setFeedbackSheetOpen(true)}
+                className="bg-white rounded-xl p-4 flex items-center justify-between cursor-pointer active:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="w-5 h-5 text-gray-700" />
+                  <span className="text-sm font-bold text-gray-900">Share Feedback</span>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-300" />
+              </div>
             </div>
           </div>
 
@@ -414,6 +430,13 @@ export const ProfileV2 = () => {
           </div>
         </div>
       )}
+      {/* Experience Feedback Bottom Sheet */}
+      <FeedbackBottomSheet
+        isOpen={feedbackSheetOpen}
+        onClose={() => setFeedbackSheetOpen(false)}
+        module="delivery"
+        title="Delivery App Experience"
+      />
     </div>
   )
 }

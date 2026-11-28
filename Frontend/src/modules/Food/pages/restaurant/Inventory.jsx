@@ -870,6 +870,9 @@ export default function Inventory() {
   // Tab bar ref for excluding swipe on topbar
   const tabBarRef = useRef(null)
 
+  // Search and filter container ref to prevent swipe when interacting with filters
+  const searchFilterRef = useRef(null)
+
   // Content container ref
   const contentContainerRef = useRef(null)
 
@@ -1014,12 +1017,8 @@ export default function Inventory() {
               })
             }
             
-            // Use category's isEnabled from menu API, not calculated from items
-            // Category toggle should be independent of item toggles
-            // Menu snapshots are disabled on backend; treat category toggle as derived from items (all in stock).
-            const categoryInStock = allItems.length > 0 ? allItems.every(i => i.inStock) : true
             const itemCount = allItems.length
-            
+
             return {
               id: section.id || `category-${sectionIndex}`,
               // Key the backend matches the saved sequence against.
@@ -1027,7 +1026,6 @@ export default function Inventory() {
               name: section.name || "Unnamed Category",
               description: section.description || "",
               itemCount: itemCount,
-              inStock: categoryInStock,
               items: allItems,
               order: section.order !== undefined ? section.order : sectionIndex,
             }
@@ -1055,7 +1053,6 @@ export default function Inventory() {
               ...category,
               items: ruledItems,
               itemCount: ruledItems.length,
-              inStock: ruledItems.length > 0 ? ruledItems.every((item) => item.inStock) : true,
             }
           })
           
@@ -1277,11 +1274,28 @@ export default function Inventory() {
     }
   }
 
+  // Any open modal or bottom sheet owns gestures; touches on filters or inputs should not trigger tab switching
+  const shouldIgnoreSwipe = (target) => {
+    if (!target) return true
+    if (filterOpen || sequenceOpen || togglePopupOpen || showTimePicker || isMenuOpen) return true
+    if (tabBarRef.current?.contains(target)) return true
+    if (searchFilterRef.current?.contains(target)) return true
+    if (typeof target.closest === "function") {
+      if (
+        target.closest("[data-swipe-ignore]") ||
+        target.closest(".overflow-x-auto") ||
+        target.closest("input, textarea, select")
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
   // Handle swipe gestures
   const handleTouchStart = (e) => {
     const target = e.target
-    // Don't handle swipe if starting on topbar
-    if (tabBarRef.current?.contains(target)) return
+    if (shouldIgnoreSwipe(target)) return
 
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
@@ -1291,6 +1305,7 @@ export default function Inventory() {
 
   const handleTouchMove = (e) => {
     if (!isSwiping.current) {
+      if (shouldIgnoreSwipe(e.target)) return
       const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current)
       const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current)
 
@@ -1306,6 +1321,14 @@ export default function Inventory() {
   }
 
   const handleTouchEnd = () => {
+    if (filterOpen || sequenceOpen || togglePopupOpen || showTimePicker || isMenuOpen) {
+      touchStartX.current = 0
+      touchEndX.current = 0
+      touchStartY.current = 0
+      isSwiping.current = false
+      return
+    }
+
     if (!isSwiping.current) {
       touchStartX.current = 0
       touchEndX.current = 0
@@ -1406,7 +1429,6 @@ export default function Inventory() {
           return {
             ...category,
             items: updatedItems,
-            inStock: updatedItems.every((item) => item.inStock),
           }
         }),
       )
@@ -1519,7 +1541,6 @@ export default function Inventory() {
           ...category,
           items: filteredItems,
           itemCount: filteredItems.length,
-          inStock: filteredItems.every((item) => item.inStock),
         }
       })
       .filter(Boolean)
@@ -1549,7 +1570,6 @@ export default function Inventory() {
           ...category,
           items: matchingItems.length > 0 ? matchingItems : items,
           itemCount: matchingItems.length > 0 ? matchingItems.length : items.length,
-          inStock: (matchingItems.length > 0 ? matchingItems : items).every((item) => item.inStock),
         }
       })
       .filter(Boolean)
@@ -1612,11 +1632,6 @@ export default function Inventory() {
     } finally {
       setSavingSequence(false)
     }
-  }
-
-  // Calculate out of stock count for a category
-  const getOutOfStockCount = (category) => {
-    return category.items.filter(item => !item.inStock).length
   }
 
   // Handle filter apply
@@ -1692,7 +1707,6 @@ export default function Inventory() {
             }))
             return {
               ...category,
-              inStock: true,
               items: updatedItems,
             }
           }
@@ -1702,8 +1716,6 @@ export default function Inventory() {
               ? { ...item, inStock: true, isAvailable: true, stockRule: null }
               : item
           )
-          // Don't automatically update category inStock when item is toggled
-          // Category toggle should be independent
           return {
             ...category,
             items: updatedItems,
@@ -1785,7 +1797,6 @@ export default function Inventory() {
           }))
           return {
             ...category,
-            inStock: false,
             items: updatedItems,
           }
         }
@@ -2025,8 +2036,7 @@ export default function Inventory() {
         onTouchEnd={handleTouchEnd}
         onMouseDown={(e) => {
           const target = e.target
-          // Don't handle swipe if starting on topbar
-          if (tabBarRef.current?.contains(target)) return
+          if (shouldIgnoreSwipe(target)) return
 
           mouseStartX.current = e.clientX
           mouseEndX.current = e.clientX
@@ -2082,7 +2092,11 @@ export default function Inventory() {
         }}
       >
         {/* Search and Filter */}
-        <div className="sticky top-0 z-30 -mx-4 px-4 pb-4 bg-[#f3f5f8]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f3f5f8]/80">
+        <div
+          ref={searchFilterRef}
+          data-swipe-ignore="true"
+          className="sticky top-0 z-30 -mx-4 px-4 pb-4 bg-[#f3f5f8]/95 backdrop-blur supports-[backdrop-filter]:bg-[#f3f5f8]/80"
+        >
           <div className="overflow-hidden rounded-[28px] border border-white/80 bg-white/90 p-4 shadow-[0_20px_48px_-34px_rgba(15,23,42,0.45)] backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -2164,7 +2178,14 @@ export default function Inventory() {
               )}
             </div>
 
-            <div className="mt-4 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+            <div
+              data-swipe-ignore="true"
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="mt-4 flex gap-2 overflow-x-auto scrollbar-hide pb-1"
+            >
               {activeFilterOptions.map((option) => {
                 const count = activeTab === "add-ons"
                   ? (addonFilterCounts[option.value] || 0)
@@ -2408,6 +2429,12 @@ export default function Inventory() {
           {listToRender.map((category, index) => {
             const isExpanded = expandedCategories.includes(category.id)
             const categoryItems = category.items || []
+            // Status comes from every item in the category, not only the ones
+            // left visible by search/filter. The category counts as off only
+            // when all of its items are off.
+            const allCategoryItems = categories.find((c) => c.id === category.id)?.items || categoryItems
+            const pausedCount = allCategoryItems.filter((item) => !item.inStock).length
+            const isCategoryOn = allCategoryItems.length === 0 || pausedCount < allCategoryItems.length
 
             return (
               <motion.div
@@ -2449,17 +2476,17 @@ export default function Inventory() {
                             {category.items?.length || category.itemCount || 0} items
                           </span>
                           <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
-                            category.inStock
+                            pausedCount === 0
                               ? "bg-green-50 text-green-700 border border-green-100"
                               : "bg-amber-50 text-amber-700 border border-amber-100"
                           }`}>
-                            {category.inStock ? "Healthy" : "Needs attention"}
+                            {pausedCount === 0 ? "Healthy" : "Needs attention"}
                           </span>
                         </div>
                       </div>
                       
                       <div className="flex flex-wrap items-center gap-3 mt-4">
-                        {category.inStock ? (
+                        {pausedCount === 0 ? (
                           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50/50 rounded-xl border border-green-100/50">
                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                             <p className="text-[10px] font-bold text-green-700">All items live</p>
@@ -2468,7 +2495,7 @@ export default function Inventory() {
                           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50/50 rounded-xl border border-rose-100/50">
                             <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                             <p className="text-[10px] font-bold text-rose-700">
-                              {getOutOfStockCount(category)} Items paused
+                              {pausedCount} {pausedCount === 1 ? "item" : "items"} paused
                             </p>
                           </div>
                         )}
@@ -2487,7 +2514,7 @@ export default function Inventory() {
                         className="scale-110"
                       >
                         <Switch
-                          checked={category.inStock}
+                          checked={isCategoryOn}
                           onCheckedChange={(checked) =>
                             handleToggleChange("category", category.id, null, checked)
                           }

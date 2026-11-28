@@ -323,7 +323,7 @@ export default function Cart() {
 
   const [customizationSettings, setCustomizationSettings] = useState({
     cod_enabled: true,
-    takeaway_cod_enabled: true,
+    takeaway_cod_enabled: false,
     takeaway_pay_at_pickup_enabled: true,
     delivery_cod_enabled: true,
     dining_cod_enabled: true,
@@ -331,30 +331,19 @@ export default function Cart() {
     online_payment_enabled: true,
   })
 
-  useEffect(() => {
-    userAPI.getCustomizationSettings()
-      .then(res => {
-        if (res?.data?.data) {
-          setCustomizationSettings(prev => ({
-            ...prev,
-            ...res.data.data
-          }))
-        }
-      })
-      .catch(() => {
-        debugError("Failed to fetch customization settings")
-      })
-  }, [])
+  // (Customization settings are fetched below, once the zone is known: payment switches can
+  // differ per zone.)
 
   // Payment availability logic
   const isPaymentMethodEnabled = (methodId) => {
     if (methodId === "razorpay") return customizationSettings.online_payment_enabled !== false
     if (methodId === "wallet") return customizationSettings.wallet_payment_enabled !== false
     if (methodId === "cash") {
-      // Takeaway is online-payment only — cash / Pay-at-Pickup is never offered.
-      if (orderType === "takeaway") return false
-
       if (customizationSettings.cod_blocking_feature_enabled !== false && userProfile?.isCodBlocked) return false
+
+      // Takeaway cash is offered only when an admin turned "Takeaway COD" on
+      // (the global COD switch is for delivery/dining and does not apply here).
+      if (orderType === "takeaway") return customizationSettings.takeaway_cod_enabled === true
 
       // General COD toggle
       if (customizationSettings.cod_enabled === false) return false
@@ -941,6 +930,28 @@ export default function Cart() {
     if (!restaurantZoneId) return false
     return String(restaurantZoneId).trim() !== String(zoneId).trim()
   }, [orderType, cart, zoneId, zoneStatus, restaurantData?.zoneId])
+
+  // Payment switches (COD / wallet / online) can be set per zone by an admin. Use the
+  // restaurant's zone, which is the zone checkout enforces, else the customer's zone.
+  const customizationZoneId = cart[0]?.restaurantZoneId || restaurantData?.zoneId || zoneId || ""
+  useEffect(() => {
+    let cancelled = false
+    userAPI.getCustomizationSettings(customizationZoneId || undefined)
+      .then(res => {
+        if (!cancelled && res?.data?.data) {
+          setCustomizationSettings(prev => ({
+            ...prev,
+            ...res.data.data
+          }))
+        }
+      })
+      .catch(() => {
+        debugError("Failed to fetch customization settings")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [customizationZoneId])
 
   useEffect(() => {
     // Sync delivery mode from overlay/localStorage changes.
@@ -1690,7 +1701,7 @@ export default function Cart() {
       : selectedPaymentMethod === "razorpay"
         ? (payAtPickup ? "Pay at Pickup" : orderType === "takeaway" ? "Pay Now" : "Online Payment")
         : orderType === "takeaway"
-          ? "Pay at Pickup"
+          ? "Cash at Pickup"
           : "Cash on Delivery"
 
   // Restaurant name from data or cart
@@ -2705,13 +2716,12 @@ export default function Cart() {
   }
 
   const handleGoToOrders = () => {
-    setShowSavingsCongrats(false)
-    setCongratssSavingsAmount(0)
-    setCongratssSavingsPercentage(0)
-    setCongratssSavingsItems([])
-    setOrderSuccessSavingsAmount(0)
-    setShowOrderSuccess(false)
-    setShowPlacingOrder(false)
+    // Do NOT reset the success/placing flags here. The cart was already cleared
+    // when the order was placed, so turning them off made this screen fall
+    // through to "Your cart is empty" for as long as the tracking page (a lazy
+    // chunk plus its first fetch) took to appear. The overlay stays up until
+    // the route changes, and all of this state goes away when Cart unmounts.
+    //
     // Only a confirmed order id opens tracking; without one (malformed response)
     // the placed order is still listed in My Orders - never `/orders/null`.
     if (!placedOrderId) {
@@ -2861,8 +2871,8 @@ export default function Cart() {
                       <div key={item.id} className="transition-all duration-300">
                         <div className="flex items-center gap-4">
                           {/* Veg/Non-veg indicator */}
-                          <div className={`w-4 h-4 border-2 ${isVegMenuItem(item, restaurantData) ? 'border-green-600' : 'border-red-600'} flex items-center justify-center flex-shrink-0 rounded-[2px]`}>
-                            <div className={`w-2 h-2 rounded-full ${isVegMenuItem(item, restaurantData) ? 'bg-green-600' : 'bg-red-600'}`} />
+                          <div className={`w-4 h-4 border-2 ${isVegMenuItem(item, restaurantData) ? 'border-[#15803D]' : 'border-red-600'} flex items-center justify-center flex-shrink-0 rounded-[2px]`}>
+                            <div className={`w-2 h-2 rounded-full ${isVegMenuItem(item, restaurantData) ? 'bg-[#15803D]' : 'bg-red-600'}`} />
                           </div>
 
                           <div className="flex-1 min-w-0 flex items-center gap-4">
@@ -3014,8 +3024,8 @@ export default function Cart() {
                               className="w-full h-28 md:h-36 object-cover rounded-lg md:rounded-xl"
                             />
                             <div className="absolute top-1 md:top-2 left-1 md:left-2">
-                              <div className="w-3.5 h-3.5 md:w-4 md:h-4 bg-white border border-green-600 flex items-center justify-center rounded">
-                                <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-green-600" />
+                              <div className="w-3.5 h-3.5 md:w-4 md:h-4 bg-white border-2 border-[#15803D] flex items-center justify-center rounded">
+                                <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#15803D]" />
                               </div>
                             </div>
                             <button
@@ -3121,6 +3131,10 @@ export default function Cart() {
                                 ? "This restaurant does not deliver to your selected location"
                                 : "Restaurant is closed. Coupons cannot be applied right now.",
                             )
+                            return
+                          }
+                          if (Number(pricing?.restaurantOfferDiscount) > 0) {
+                            toast.info("A restaurant offer is already applied to this order. Two coupons cannot be combined.")
                             return
                           }
                           setShowCouponSheet(true)
@@ -4124,8 +4138,9 @@ export default function Cart() {
                         },
                         {
                           id: 'cash',
-                          name: orderType === 'takeaway' ? 'Pay at Pickup' : 'Cash on Delivery',
-                          description: orderType === 'takeaway' ? 'Pay at the restaurant when you collect' : 'Pay when order arrives',
+                          // Named differently from the online "Pay at Pickup" row above.
+                          name: orderType === 'takeaway' ? 'Cash at Pickup' : 'Cash on Delivery',
+                          description: orderType === 'takeaway' ? 'Pay cash at the restaurant when you collect' : 'Pay when order arrives',
                           icon: <Banknote className="w-5 h-5" />,
                           color: 'bg-orange-50 text-#14512F dark:bg-orange-900/40 dark:text-orange-400',
                           selectedColor: 'bg-[#1F6B45] text-white',
@@ -4481,7 +4496,7 @@ export default function Cart() {
         {/* Auto Apply Coupon Popup Sheet */}
         {createPortal(
           <AnimatePresence>
-            {showAutoCouponPopup && bestCoupon && !isCartUnavailable && (
+            {showAutoCouponPopup && bestCoupon && !isCartUnavailable && !(Number(pricing?.restaurantOfferDiscount) > 0) && (
               <>
                 {/* Backdrop Overlay */}
                 <motion.div

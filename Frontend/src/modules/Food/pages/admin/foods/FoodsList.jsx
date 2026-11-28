@@ -12,6 +12,7 @@ import {
 } from "@food/utils/veganFoodGuard"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
 import dishFallbackImage from "@food/assets/dish_fallback.webp"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
@@ -99,6 +100,7 @@ function FoodImageThumb({ name, src, size = "md", className = "" }) {
 }
 
 export default function FoodsList() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRestaurant, setSelectedRestaurant] = useState("all")
   const [zones, setZones] = useState([])
@@ -266,6 +268,10 @@ export default function FoodsList() {
       const params = {
         page: currentPage,
         limit: pageSize,
+        // Ask the server for approved foods only. It used to return every status and the
+        // page dropped the non-approved ones afterwards, so the total and the pages
+        // counted rows that were never shown.
+        approvalStatus: "approved",
         ...(searchQuery.trim() && { search: searchQuery.trim() }),
         ...(selectedRestaurant !== "all" && { restaurantId: selectedRestaurant }),
         ...(selectedZone !== "all" && { zoneId: selectedZone }),
@@ -314,7 +320,14 @@ export default function FoodsList() {
       setImageVersion(Date.now())
     } catch (error) {
       debugError("Error fetching foods:", error)
-      toast.error("Failed to load foods")
+      // Say why (network down, 401, server error...) instead of a bare "Failed".
+      const reason =
+        error?.response?.data?.message ||
+        (error?.response?.status ? `Server error ${error.response.status}` : "") ||
+        (error?.code === "ERR_NETWORK" ? "Cannot reach the server" : "") ||
+        error?.message ||
+        ""
+      toast.error(reason ? `Failed to load foods: ${reason}` : "Failed to load foods")
       setFoods([])
     } finally {
       setLoading(false)
@@ -757,14 +770,16 @@ export default function FoodsList() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <button
-              type="button"
-              onClick={openAddFoodModal}
-              className="px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 inline-flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Food</span>
-            </button>
+            {(canCreate || canEdit) && (
+              <button
+                type="button"
+                onClick={openAddFoodModal}
+                className="px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Food</span>
+              </button>
+            )}
             <div className="relative flex-1 sm:flex-initial min-w-[200px]">
               <input
                 type="text"
@@ -896,25 +911,29 @@ export default function FoodsList() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => openEditFoodModal(food)}
-                          className="p-1.5 rounded text-amber-600 hover:bg-amber-50 transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(food.id)}
-                          disabled={deleting}
-                          className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Delete"
-                        >
-                          {deleting ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => openEditFoodModal(food)}
+                            className="p-1.5 rounded text-amber-600 hover:bg-amber-50 transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDelete(food.id)}
+                            disabled={deleting}
+                            className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Delete"
+                          >
+                            {deleting ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

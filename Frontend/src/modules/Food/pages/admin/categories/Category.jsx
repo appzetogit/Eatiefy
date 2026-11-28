@@ -19,6 +19,9 @@ import { toast } from "sonner"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { refreshSidebarBadges } from "@food/components/admin/AdminSidebar"
+import { useAdminBadgeListRefresh } from "@food/hooks/useAdminBadgeListRefresh"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const defaultFormData = {
   name: "",
@@ -42,18 +45,24 @@ const scopeBadgeClass = (scope) => {
   return "bg-slate-100 text-slate-700 border-slate-200"
 }
 
-const zoneLabel = (zone) => {
+const zoneNameOf = (zone) => zone?.name || zone?.zoneName || zone?.serviceLocation || ""
+
+// `zoneNames` maps zone id -> name (built from the zones API). A raw id is only
+// shown as a last resort, when the zone no longer exists.
+const zoneLabel = (zone, zoneNames) => {
   if (!zone) return "—"
   if (typeof zone === "string") {
     const value = zone.trim()
     if (value === "global") return "Global"
-    if (/^[a-f0-9]{24}$/i.test(value)) return `Zone ID ${value.slice(-6)}`
+    if (/^[a-f0-9]{24}$/i.test(value)) return zoneNames?.get(value) || `Deleted zone (${value.slice(-6)})`
     return value
   }
-  return zone?.name || zone?.zoneName || zone?.serviceLocation || "Zone"
+  const id = String(zone?._id || zone?.id || "")
+  return zoneNameOf(zone) || zoneNames?.get(id) || (id ? `Deleted zone (${id.slice(-6)})` : "Zone")
 }
 
 export default function Category() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [selectedZone, setSelectedZone] = useState("all")
@@ -72,6 +81,7 @@ export default function Category() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [zones, setZones] = useState([])
+  const [zoneNames, setZoneNames] = useState(() => new Map())
   const [zonesLoading, setZonesLoading] = useState(false)
   const [formData, setFormData] = useState(defaultFormData)
   const [selectedImageFile, setSelectedImageFile] = useState(null)
@@ -92,14 +102,19 @@ export default function Category() {
     let cancelled = false
     setZonesLoading(true)
     adminAPI
-      .getZones({ limit: 1000, isActive: true })
+      // All zones (not only active ones) so a category in a deactivated zone
+      // still shows its zone name; the dropdown below lists active zones only.
+      .getZones({ limit: 1000 })
       .then((res) => {
-        const list =
+        const raw =
           res?.data?.data?.zones ||
           res?.data?.data?.data?.zones ||
           res?.data?.data ||
           []
-        if (!cancelled) setZones(Array.isArray(list) ? list : [])
+        const list = Array.isArray(raw) ? raw : []
+        if (cancelled) return
+        setZoneNames(new Map(list.map((z) => [String(z?._id || z?.id || ""), zoneNameOf(z)]).filter(([id, name]) => id && name)))
+        setZones(list.filter((z) => z?.isActive !== false))
       })
       .catch(() => {
         if (!cancelled) setZones([])
@@ -125,6 +140,11 @@ export default function Category() {
   useEffect(() => {
     fetchCategories()
   }, [debouncedSearch, showPendingOnly, selectedZone, currentPage, pageSize])
+
+  // New pending category / approval elsewhere: reload when the sidebar count changes.
+  useAdminBadgeListRefresh("categories", () => fetchCategories({ silent: true }), [
+    debouncedSearch, showPendingOnly, selectedZone, currentPage, pageSize,
+  ])
 
   const fetchCategories = async ({ silent = false } = {}) => {
     try {
@@ -241,6 +261,7 @@ export default function Category() {
       const response = await adminAPI.approveCategory(String(id))
       if (response?.data?.success) {
         toast.success("Category approved successfully")
+        refreshSidebarBadges("categories")
         fetchCategories({ silent: true })
       }
     } catch (error) {
@@ -263,6 +284,7 @@ export default function Category() {
       const response = await adminAPI.rejectCategory(id, reason)
       if (response?.data?.success) {
         toast.success("Category rejected successfully")
+        refreshSidebarBadges("categories")
         fetchCategories({ silent: true })
       }
     } catch (error) {
@@ -316,7 +338,7 @@ export default function Category() {
         category?.name || "N/A",
         category?.foodTypeScope || "Both",
         category?.isGlobal ? "Global" : "Private",
-        zoneLabel(category?.zoneId),
+        category?.zoneName || zoneLabel(category?.zoneId, zoneNames),
         category?.approvalStatus || "pending",
       ])
 
@@ -461,13 +483,15 @@ export default function Category() {
               Export
             </button>
 
-            <button
-              onClick={handleAddNew}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
-            >
-              <Plus className="h-4 w-4" />
-              Add Category
-            </button>
+            {(canCreate || canEdit) && (
+              <button
+                onClick={handleAddNew}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white"
+              >
+                <Plus className="h-4 w-4" />
+                Add Category
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -506,7 +530,7 @@ export default function Category() {
                   const creatorName = category?.createdByRestaurant?.name || category?.restaurant?.name || "Admin"
                   const approvalStatus = category?.approvalStatus || "pending"
                   const isRestaurantCategory = Boolean(category?.createdByRestaurantId || category?.restaurantId)
-                  const zoneText = category?.zoneName || zoneLabel(category?.zoneId)
+                  const zoneText = category?.zoneName || zoneLabel(category?.zoneId, zoneNames)
 
                   return (
                     <tr key={category.id} className="align-top hover:bg-slate-50/80">
@@ -559,9 +583,10 @@ export default function Category() {
                       </td>
                       <td className="px-4 py-5 text-center">
                         <button
-                          onClick={() => handleToggleStatus(category.id)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full ${category?.status ? "bg-blue-600" : "bg-slate-300"}`}
-                          title={category?.status ? "Deactivate" : "Activate"}
+                          onClick={() => canEdit && handleToggleStatus(category.id)}
+                          disabled={!canEdit}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full ${category?.status ? "bg-blue-600" : "bg-slate-300"} ${!canEdit ? "opacity-60 cursor-not-allowed" : ""}`}
+                          title={!canEdit ? "Permission required to change status" : category?.status ? "Deactivate" : "Activate"}
                         >
                           <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${category?.status ? "translate-x-6" : "translate-x-1"}`} />
                         </button>
@@ -579,49 +604,55 @@ export default function Category() {
                       </td>
                       <td className="px-5 py-5">
                         <div className="flex flex-col items-end gap-2">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            {approvalStatus !== "approved" && (
-                              <button
-                                onClick={() => handleApprove(category.id)}
-                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                              >
-                                Approve
-                              </button>
-                            )}
-                            {isRestaurantCategory && approvalStatus !== "rejected" && (
-                              <button
-                                onClick={() => handleReject(category)}
-                                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                              >
-                                Reject
-                              </button>
-                            )}
-                            {isRestaurantCategory && !category?.isGlobal && approvalStatus === "approved" && (
-                              <button
-                                onClick={() => handleMakeGlobal(category)}
-                                className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                              >
-                                Make Global
-                              </button>
-                            )}
+                              { canEdit && (
+                                <div className="flex flex-wrap justify-end gap-2">
+                                  {approvalStatus !== "approved" && (
+                                    <button
+                                      onClick={() => handleApprove(category.id)}
+                                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+                                    >
+                                      Approve
+                                    </button>
+                                  )}
+                                  {isRestaurantCategory && approvalStatus !== "rejected" && (
+                                    <button
+                                      onClick={() => handleReject(category)}
+                                      className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+                                    >
+                                      Reject
+                                    </button>
+                                  )}
+                                  {isRestaurantCategory && !category?.isGlobal && approvalStatus === "approved" && (
+                                    <button
+                                      onClick={() => handleMakeGlobal(category)}
+                                      className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+                                    >
+                                      Make Global
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            <div className="flex items-center justify-end gap-1">
+                              {canEdit && (
+                                <button
+                                  onClick={() => handleEdit(category)}
+                                  className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                                  title="Edit"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                              )}
+                                { canDelete && (
+                                  <button
+                                    onClick={() => handleDelete(category.id)}
+                                    className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                            </div>
                           </div>
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => handleEdit(category)}
-                              className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
-                              title="Edit"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(category.id)}
-                              className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
                       </td>
                     </tr>
                   )
@@ -640,7 +671,7 @@ export default function Category() {
             setPageSize(size)
             try {
               localStorage.setItem("admin_categories_pageSize", String(size))
-            } catch {}
+            } catch { }
             setCurrentPage(1)
           }}
           itemLabel="categories"

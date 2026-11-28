@@ -6,12 +6,14 @@ import { adminAPI } from "@food/api"
 import { toast } from "sonner"
 import { exportReportsToCSV, exportReportsToExcel, exportReportsToPDF, exportReportsToJSON } from "@food/components/admin/reports/reportsExportUtils"
 import AdminListPagination from "@food/components/admin/AdminListPagination"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 
 export default function FeedbackExperienceReport() {
+  const { canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -254,7 +256,7 @@ export default function FeedbackExperienceReport() {
                     className="w-full px-4 py-2.5 pr-8 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">All Ratings</option>
-                    {[0, 1, 2, 3, 4, 5].map(r => (
+                    {[1, 2, 3, 4, 5].map(r => (
                       <option key={r} value={r}>{r}/5</option>
                     ))}
                   </select>
@@ -493,6 +495,7 @@ export default function FeedbackExperienceReport() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
+                            {canDelete && (
                             <button
                               onClick={() => handleDelete(feedback._id)}
                               className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors"
@@ -500,6 +503,7 @@ export default function FeedbackExperienceReport() {
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -564,7 +568,7 @@ export default function FeedbackExperienceReport() {
                     <label className="text-sm font-semibold text-slate-700 mb-1 block">Rating</label>
                     <p className="text-sm text-slate-900 mt-1">
                       <span className={`inline-block px-3 py-1.5 rounded-full text-sm font-medium ${getRatingColor(selectedFeedback.rating)}`}>
-                        {selectedFeedback.rating}/10
+                        {selectedFeedback.rating}/5
                       </span>
                     </p>
                   </div>

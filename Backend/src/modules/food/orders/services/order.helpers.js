@@ -566,7 +566,11 @@ export function buildDeliverySocketPayload(orderDoc, restaurantDoc = null) {
     customerPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
     userName: order?.customerName || order?.deliveryAddress?.fullName || order?.deliveryAddress?.name || order?.userId?.name || "",
     userPhone: order?.customerPhone || order?.deliveryAddress?.phone || order?.userId?.phone || "",
-    note: order?.note || "",
+    // The customer's note for the restaurant must reach the rider on every screen.
+    // It lives in restaurantNote (and note on orders created before the two were
+    // kept in sync), so send both with the same value.
+    restaurantNote: order?.restaurantNote || order?.note || "",
+    note: order?.restaurantNote || order?.note || "",
     riderEarning: order?.riderEarning || 0,
     // Never fall back to customer deliveryFee — that is not rider payout
     earnings: Number(order?.riderEarning || 0) || 0,
@@ -768,6 +772,15 @@ export async function notifyRestaurantNewOrder(orderDoc) {
         `[RestaurantOrders] Emitting new_order to ${rooms.restaurant(orderDoc.restaurantId)} for order ${orderMongoId}`,
       );
       io.to(rooms.restaurant(orderDoc.restaurantId)).emit("new_order", payload);
+      const adminOrderPayload = {
+        ...payload,
+        orderId: displayOrderId,
+        orderMongoId,
+        orderStatus: orderDoc.orderStatus || "pending",
+        restaurantName: orderDoc.restaurantName || payload?.restaurantName || "",
+      };
+      io.to(rooms.admins()).emit("admin_new_order", adminOrderPayload);
+      io.to(rooms.admins()).emit("new_order", adminOrderPayload);
     }
 
     await notifyOwnersSafely(

@@ -836,6 +836,15 @@ export async function getRestaurantEarnings(req, res, next) {
     }
 }
 
+export async function getAdminEarnings(req, res, next) {
+    try {
+        const data = await adminService.getAdminEarnings(req.query || {});
+        res.status(200).json({ success: true, message: 'Admin earnings fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
 // ----- Earning Addon (admin) -----
 export async function getEarningAddons(req, res, next) {
     try {
@@ -1682,18 +1691,21 @@ export async function deleteZone(req, res, next) {
 export async function processRefund(req, res, next) {
     try {
         const { orderId } = req.params;
-        const { refundAmount } = req.body;
-        if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
-            return res.status(400).json({ success: false, message: 'Invalid order id' });
+        const { refundAmount, destination } = req.body || {};
+        if (!orderId) {
+            return res.status(400).json({ success: false, message: 'Order id is required' });
         }
         
-        // This is a stub for the actual refund logic.
-        // We will assume adminService.processRefund exists and handles the refund.
-        const updated = await adminService.processRefund(orderId, refundAmount);
+        const updated = await adminService.processRefund(orderId, refundAmount, { destination });
         
-        // Let's add the push notification here if we have access to the user ID
-        // First we need to get the order to find the user ID
-        const order = await mongoose.model('FoodOrder').findById(orderId).lean();
+        const FoodOrder = mongoose.model('FoodOrder');
+        let order = null;
+        if (mongoose.Types.ObjectId.isValid(orderId)) {
+            order = await FoodOrder.findById(orderId).lean();
+        }
+        if (!order) {
+            order = await FoodOrder.findOne({ $or: [{ orderId }, { order_id: orderId }] }).lean();
+        }
         
         if (order && order.userId) {
             const { notifyOwnersSafely } = await import('../../notifications/firebase.service.js');
@@ -1701,11 +1713,11 @@ export async function processRefund(req, res, next) {
                 [{ ownerType: 'USER', ownerId: order.userId }],
                 {
                     title: 'Refund Processed! 💸',
-                    body: `Your refund of ₹${refundAmount || order.totalAmount || order.total || 0} for Order #${order.orderId} has been processed successfully.`,
+                    body: `Your refund of ₹${refundAmount || order.pricing?.total || order.totalAmount || order.total || 0} for Order #${order.order_id || order.orderId || order._id} has been processed successfully.`,
                     image: 'https://i.ibb.co/3m2Yh7r/Eatiefy-Brand-Image.png',
                     data: {
                         type: 'refund_processed',
-                        orderId: String(order.orderId),
+                        orderId: String(order.order_id || order.orderId || order._id),
                         orderMongoId: String(order._id)
                     }
                 }
@@ -1759,6 +1771,26 @@ export async function getDeliveryWallets(req, res, next) {
     try {
         const data = await adminService.getDeliveryWallets(req.query || {});
         res.status(200).json({ success: true, message: 'Delivery wallets fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function getRestaurantWallets(req, res, next) {
+    try {
+        const data = await adminService.getRestaurantWallets(req.query || {});
+        res.status(200).json({ success: true, message: 'Restaurant wallets fetched successfully', data });
+    } catch (error) {
+        next(error);
+    }
+}
+
+export async function updateDeliveryPartnerWallet(req, res, next) {
+    try {
+        const { id } = req.params;
+        const { pocketBalance, cashInHand } = req.body || {};
+        const data = await adminService.updateDeliveryPartnerWallet(id, { pocketBalance, cashInHand }, req.user);
+        res.status(200).json({ success: true, message: 'Delivery wallet updated successfully', data });
     } catch (error) {
         next(error);
     }

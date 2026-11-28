@@ -103,7 +103,7 @@ export function normalizeRestaurantProfile(apiData) {
     profileImage: toImageUrl(apiData.profileImage),
 
     restaurantName: apiData.restaurantName || apiData.name || "",
-    foodType: apiData.foodType || (apiData.pureVegRestaurant ? "Veg" : "Mixed"),
+    foodType: apiData.pureVegRestaurant ? "Veg" : (apiData.foodType || "Mixed"),
     pureVegRestaurant: apiData.foodType === "Veg" || Boolean(apiData.pureVegRestaurant),
     pureVeganRestaurant: false,
     primaryContactNumber: toDigits10(apiData.primaryContactNumber),
@@ -114,6 +114,11 @@ export function normalizeRestaurantProfile(apiData) {
     closingTime: apiData.closingTime || "",
     openDays: normalizeTagList(apiData.openDays, DAYS_OF_WEEK),
     estimatedDeliveryTime: apiData.estimatedDeliveryTime || "",
+    takeawaySettings: {
+      isEnabled: apiData.takeawaySettings?.isEnabled === true || apiData.isTakeawayEnabled === true,
+      payAtPickupEnabled: apiData.takeawaySettings?.payAtPickupEnabled === true,
+    },
+    isTakeawayEnabled: apiData.takeawaySettings?.isEnabled === true || apiData.isTakeawayEnabled === true,
 
     panNumber: apiData.panNumber || "",
     nameOnPan: apiData.nameOnPan || "",

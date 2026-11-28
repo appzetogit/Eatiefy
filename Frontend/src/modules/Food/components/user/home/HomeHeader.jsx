@@ -226,6 +226,7 @@ export default function HomeHeader({
     items: broadcastNotifications,
     unreadCount: broadcastUnreadCount,
     dismiss: dismissBroadcastNotification,
+    markAllAsRead: markAllBroadcastRead,
   } = useNotificationInbox("user", { limit: 20 });
 
   useEffect(() => {
@@ -284,6 +285,20 @@ export default function HomeHeader({
   const [isTransitionEnabled, setIsTransitionEnabled] = useState(true);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsHistoryPushedRef = useRef(false);
+
+  // Opening the panel means the notifications have been seen: clear the bell badge.
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+    if (broadcastUnreadCount > 0) markAllBroadcastRead();
+    if (notifications.some((item) => !item.read)) {
+      const next = notifications.map((item) => (item.read ? item : { ...item, read: true }));
+      setNotifications(next);
+      localStorage.setItem('food_user_notifications', JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('notificationsUpdated', { detail: { count: 0 } }));
+    }
+    // Runs once per opening; items arriving while it is open stay highlighted until reopened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNotificationsOpen]);
   
   // Horizontal Swipe & Drag State
   const [dragOffset, setDragOffset] = useState(0);

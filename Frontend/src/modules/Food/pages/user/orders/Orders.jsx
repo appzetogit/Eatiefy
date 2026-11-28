@@ -77,6 +77,30 @@ export default function Orders() {
     }
   }, [shownRatingForOrders])
 
+  // Prevent background scrolling when rating modal is open
+  useEffect(() => {
+    if (ratingModal.open) {
+      const scrollY = window.scrollY
+      const prevOverflow = document.body.style.overflow
+      const prevPosition = document.body.style.position
+      const prevTop = document.body.style.top
+      const prevWidth = document.body.style.width
+
+      document.body.style.overflow = "hidden"
+      document.body.style.position = "fixed"
+      document.body.style.top = `-${scrollY}px`
+      document.body.style.width = "100%"
+
+      return () => {
+        document.body.style.overflow = prevOverflow
+        document.body.style.position = prevPosition
+        document.body.style.top = prevTop
+        document.body.style.width = prevWidth
+        window.scrollTo(0, scrollY)
+      }
+    }
+  }, [ratingModal.open])
+
   // Calculate countdown for an order
   const calculateCountdown = (order) => {
     if (!order || 
@@ -241,9 +265,9 @@ export default function Orders() {
             const deliveryPartnerRating = order.ratings?.deliveryPartner?.rating || null
 
             return {
-              id: order._id?.toString() || order.orderId || `ORD-${order._id}`,
+              id: order.orderId || order.order_id || order._id?.toString() || `ORD-${order._id}`,
               mongoId: order._id,
-              orderId: order.orderId || order._id?.toString(), // Keep orderId for display
+              orderId: order.orderId || order.order_id || order._id?.toString(), // Keep orderId for display
               status: isRestaurantCancelled ? 'restaurant_cancelled' : getOrderStatus({ ...order, status: backendStatus }),
               originalStatus: originalStatus, // Keep original status for reference
               createdAt: createdAt.toISOString(),
@@ -552,11 +576,12 @@ Order again from this restaurant in the ${companyName} app.`
     setActiveMenuOrderId(null)
     const status = String(order.status || '').toLowerCase()
     const isTerminal = ['delivered', 'cancelled', 'completed', 'failed'].includes(status) || status.includes('cancelled')
+    const targetOrderId = order.orderId || order.id
     
     if (isTerminal) {
-      navigate(toFoodUserPath(`/user/orders/${order.id}/details`), { state: { from: '/food/user/orders', order } })
+      navigate(toFoodUserPath(`/user/orders/${targetOrderId}/details`), { state: { from: '/food/user/orders', order } })
     } else {
-      navigate(toFoodUserPath(`/user/orders/${order.id}`), { state: { from: '/food/user/orders', order } })
+      navigate(toFoodUserPath(`/user/orders/${targetOrderId}`), { state: { from: '/food/user/orders', order } })
     }
   }
 
@@ -960,7 +985,7 @@ Order again from this restaurant in the ${companyName} app.`
                       ) : isAwaitingPickupPayment ? (
                         <button
                           type="button"
-                          onClick={() => navigate(toFoodUserPath(`/user/orders/${order.id}`), { state: { from: '/food/user/orders', order } })}
+                          onClick={() => navigate(toFoodUserPath(`/user/orders/${order.orderId || order.id}`), { state: { from: '/food/user/orders', order } })}
                           className="px-3 py-1 rounded-full text-[10px] font-black bg-amber-500 text-white shadow-sm border border-amber-500 uppercase tracking-widest active:scale-95 transition-transform"
                         >
                           Pay Now
@@ -978,9 +1003,12 @@ Order again from this restaurant in the ${companyName} app.`
                   </div>
 
                   {/* Row 2: Secondary Metadata / Ratings and Actions */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-gray-100/70 dark:border-gray-800/50">
-                    {/* Left: Ratings or Countdowns or Cancellation Details */}
-                    <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 pt-2 border-t border-gray-100/70 dark:border-gray-800/50">
+                    {/* Left: Ratings or Countdowns or Cancellation Details.
+                        basis keeps it from being squeezed to nothing (its badges are
+                        shrink-0 and used to spill over the View Details link); when
+                        the card is too narrow the actions wrap onto the next line. */}
+                    <div className="flex-1 basis-[15rem] min-w-0">
                       {isRestaurantCancelled ? (
                         <div className="flex flex-col gap-0.5">
                           {order.cancellationReason && (
@@ -993,7 +1021,7 @@ Order again from this restaurant in the ${companyName} app.`
                       ) : paymentFailed ? (
                         <span className="text-xs text-red-500 font-medium">Please try ordering again</span>
                       ) : isDelivered && order.restaurantRating && (!order.deliveryPartnerId || order.deliveryPartnerRating) ? (
-                        <div className="flex items-center flex-wrap gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="flex items-center flex-wrap gap-x-1.5 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                           <span className="font-medium">Your rating:</span>
                           <div className="flex bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold items-center gap-0.5 h-4.5 shrink-0">
                             <span className="opacity-90">Food</span>
@@ -1029,10 +1057,10 @@ Order again from this restaurant in the ${companyName} app.`
                     </div>
 
                     {/* Right: View Details / Track Order & Reorder buttons */}
-                    <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 w-full sm:w-auto pt-1 sm:pt-0">
+                    <div className="flex grow sm:grow-0 sm:ml-auto items-center justify-between sm:justify-end gap-3 flex-shrink-0">
                       {(!isDelivered && !isCancelled && !paymentFailed) ? (
                         <Link
-                          to={toFoodUserPath(`/user/orders/${order.id}`)}
+                          to={toFoodUserPath(`/user/orders/${order.orderId || order.id}`)}
                           state={{ from: '/food/user/orders', order }}
                           className="bg-[#1F6B45] hover:bg-[#14512F] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm hover:shadow-[#1F6B45]/20 transition-all duration-150 active:scale-95 cursor-pointer ml-auto sm:ml-0"
                         >
@@ -1042,7 +1070,7 @@ Order again from this restaurant in the ${companyName} app.`
                         </Link>
                       ) : (
                         <Link
-                          to={toFoodUserPath((isDelivered || isCancelled) ? `/user/orders/${order.id}/details` : `/user/orders/${order.id}`)}
+                          to={toFoodUserPath((isDelivered || isCancelled) ? `/user/orders/${order.orderId || order.id}/details` : `/user/orders/${order.orderId || order.id}`)}
                           state={{ from: '/food/user/orders', order }}
                           className="py-1"
                         >
@@ -1075,13 +1103,24 @@ Order again from this restaurant in the ${companyName} app.`
         <h1 className="text-4xl font-black text-gray-200 dark:text-gray-800 tracking-tighter italic uppercase">eatiefy</h1>
       </div>
 
-      {/* Rating & Feedback Modal */}
+      {/* Rating & Feedback Bottom Sheet */}
       {ratingModal.open && ratingModal.order && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md rounded-3xl bg-white dark:bg-[#121212] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border dark:border-gray-800">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center animate-in fade-in duration-200">
+          {/* Backdrop */}
+          <div
+            onClick={handleCloseRating}
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+          />
+
+          <div className="relative z-10 w-full sm:max-w-md rounded-t-[2.5rem] sm:rounded-3xl bg-white dark:bg-[#121212] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in slide-in-from-bottom duration-300 border-t sm:border dark:border-gray-800">
+            {/* Mobile Drag Handle */}
+            <div className="pt-3 pb-1 flex justify-center sm:hidden">
+              <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-zinc-700" />
+            </div>
+
             {/* Header with gradient */}
-            <div className="bg-gradient-to-r from-[#1F6B45] to-[#14512F] px-6 py-5">
-              <div className="flex items-center justify-between mb-2">
+            <div className="bg-gradient-to-r from-[#1F6B45] to-[#14512F] px-6 py-4">
+              <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Star className="w-5 h-5 fill-white" />
                   Rate Your Delivery
@@ -1097,7 +1136,7 @@ Order again from this restaurant in the ${companyName} app.`
               <p className="text-sm text-white/90">{ratingModal.order.restaurant}</p>
             </div>
 
-            <div className="px-6 py-6 font-sans">
+            <div className="px-6 py-6 font-sans overflow-y-auto">
               <div className="mb-6">
                 <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
                   Restaurant rating (out of 5)

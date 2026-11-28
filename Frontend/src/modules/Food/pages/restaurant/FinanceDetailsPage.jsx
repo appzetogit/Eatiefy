@@ -82,9 +82,9 @@ export default function FinanceDetailsPage() {
       netOrderValue: {
         itemSubtotal: summary.subtotal || 0,
         totalGSTCollected: summary.taxes || 0,
-        restaurantDiscountPromos: 0,
+        restaurantDiscountPromos: summary.restaurantOfferDiscount || summary.discount || 0,
         restaurantDiscountOthers: 0,
-        total: summary.subtotal || 0
+        total: summary.gross || summary.subtotal || 0
       },
       additions: {
         tds194H: 0,

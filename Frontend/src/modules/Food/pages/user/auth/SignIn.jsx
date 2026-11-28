@@ -10,6 +10,8 @@ const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
+const REFERRAL_STORAGE_KEY = "userReferralCode"
+
 
 export default function SignIn() {
   const navigate = useNavigate()
@@ -29,6 +31,29 @@ export default function SignIn() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const submittingRef = useRef(false)
+
+  // Referral code: prefilled from the referral link (?ref=...). It is remembered
+  // for the session so it survives redirects/reloads before the user signs in.
+  const [referralCode, setReferralCode] = useState(() => {
+    const fromUrl = String(searchParams.get("ref") || "").trim()
+    if (fromUrl) return fromUrl
+    try {
+      return sessionStorage.getItem(REFERRAL_STORAGE_KEY) || ""
+    } catch {
+      return ""
+    }
+  })
+
+  useEffect(() => {
+    const fromUrl = String(searchParams.get("ref") || "").trim()
+    if (!fromUrl) return
+    setReferralCode(fromUrl)
+    try {
+      sessionStorage.setItem(REFERRAL_STORAGE_KEY, fromUrl)
+    } catch {
+      // ignore
+    }
+  }, [searchParams])
 
   useEffect(() => {
     const stored = sessionStorage.getItem("userAuthData")
@@ -89,7 +114,13 @@ export default function SignIn() {
       const fullPhone = `${countryCode} ${phoneDigits}`
       await authAPI.sendOTP(fullPhone, "login", null)
 
-      const ref = String(searchParams.get("ref") || "").trim()
+      const ref = String(referralCode || "").trim()
+      try {
+        if (ref) sessionStorage.setItem(REFERRAL_STORAGE_KEY, ref)
+        else sessionStorage.removeItem(REFERRAL_STORAGE_KEY)
+      } catch {
+        // ignore
+      }
       const authData = {
         method: "phone",
         phone: fullPhone,
@@ -166,6 +197,19 @@ export default function SignIn() {
                   <span>{error}</span>
                 </div>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Input
+                id="referralCode"
+                name="referralCode"
+                type="text"
+                autoComplete="off"
+                placeholder="Referral code (optional)"
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value.trim())}
+                className="h-12 md:h-14 text-base bg-white dark:bg-[#242424] text-gray-900 dark:text-white border-gray-300 dark:border-gray-700 rounded-lg focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary transition-all"
+              />
             </div>
 
             <Button

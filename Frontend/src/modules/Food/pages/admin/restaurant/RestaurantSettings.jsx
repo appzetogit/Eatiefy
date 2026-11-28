@@ -7,6 +7,7 @@ import { adminAPI } from "@food/api";
 import { toast } from "sonner";
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect";
 import { getZoneId, getZoneLabel, useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter";
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 const MIN_MINUTES = 1;
 const MAX_MINUTES = 60;
@@ -91,6 +92,7 @@ const validateMinutes = (value, label) => {
 };
 
 export default function RestaurantSettings() {
+  const { canEdit } = useAdminPermissions()
   const { zones, zonesLoading, zoneId, setZoneId, selectedZone } = useAdminZoneFilter();
   const [loading, setLoading] = useState(true);
   const [savingField, setSavingField] = useState(null);
@@ -284,6 +286,7 @@ export default function RestaurantSettings() {
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {canEdit && (
                     <Button
                       onClick={() => handleSave(config)}
                       disabled={!canSave}
@@ -301,7 +304,9 @@ export default function RestaurantSettings() {
                         </>
                       )}
                     </Button>
+                    )}
                     {isOverridden && (
+                      canEdit && (
                       <Button
                         variant="outline"
                         onClick={() => handleUseDefault(config)}
@@ -311,6 +316,7 @@ export default function RestaurantSettings() {
                         <RotateCcw className="w-4 h-4" />
                         Use default
                       </Button>
+                      )
                     )}
                   </div>
                 </div>

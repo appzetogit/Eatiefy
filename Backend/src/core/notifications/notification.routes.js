@@ -2,6 +2,7 @@ import express from 'express';
 import {
     getInboxController,
     markNotificationReadController,
+    markAllNotificationsReadController,
     dismissNotificationController,
     dismissAllNotificationsController
 } from './notification.controller.js';
@@ -9,6 +10,7 @@ import {
 const router = express.Router();
 
 router.get('/inbox', getInboxController);
+router.patch('/inbox/read-all', markAllNotificationsReadController);
 router.patch('/:id/read', markNotificationReadController);
 router.delete('/:id', dismissNotificationController);
 router.delete('/inbox/all', dismissAllNotificationsController);

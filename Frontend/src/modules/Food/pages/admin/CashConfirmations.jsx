@@ -25,6 +25,7 @@ import {
   DialogFooter,
 
 } from "@food/components/ui/dialog"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 
 
 
@@ -77,6 +78,7 @@ const TABS = [
 
 
 export default function CashConfirmations() {
+  const { canEdit } = useAdminPermissions()
 
   const [activeTab, setActiveTab] = useState("all")
 
@@ -598,6 +600,7 @@ export default function CashConfirmations() {
 
                           {isPending(tx) ? (
 
+                            canEdit && (
                             <button
 
                               type="button"
@@ -611,6 +614,7 @@ export default function CashConfirmations() {
                               Confirm Cash
 
                             </button>
+                            )
 
                           ) : (
 

@@ -10,7 +10,6 @@ import { useProfile } from "@food/context/ProfileContext"
 import { toast } from "sonner"
 import {
   filterDishesForVegMode,
-  filterRestaurantsForVegMode,
   isVegMenuItem,
 } from "@food/utils/vegMode"
 
@@ -25,17 +24,16 @@ export default function Favorites() {
     vegMode,
     vegModeOption,
   } = useProfile()
+  // Saved restaurants only store slug/name/image/rating/etc. (no foodType or
+  // pure-veg flags), so the veg-mode filter can't classify them and would hide
+  // every one of them. Show all saved restaurants regardless of veg mode.
   const restaurantFavorites = useMemo(
-    () =>
-      filterRestaurantsForVegMode(favorites || [], {
-        vegMode,
-        vegModeOption,
-      }),
-    [favorites, vegMode, vegModeOption],
+    () => (Array.isArray(favorites) ? favorites : []),
+    [favorites],
   )
   const dishFavorites = useMemo(
     () => filterDishesForVegMode(allDishFavorites || [], vegMode, vegModeOption),
-    [allDishFavorites, vegMode],
+    [allDishFavorites, vegMode, vegModeOption],
   )
   const [activeTab, setActiveTab] = useState("restaurants")
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   ChefHat,
   ChevronDown,
@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
-import { computePickupMetrics, formatPickupRouteSummary } from '@/modules/DeliveryV2/utils/pickupMetrics';
+import { formatPickupRouteSummary } from '@/modules/DeliveryV2/utils/pickupMetrics';
+import { useRoadPickupMetrics } from '@/modules/DeliveryV2/hooks/useRoadPickupMetrics';
+import OrderNoteBanner from '@/modules/DeliveryV2/components/orders/OrderNoteBanner';
 import { getEatiefyIncentiveBreakdown, formatEatiefyIncentiveLine } from '@/modules/DeliveryV2/utils/earningBreakdown';
 import { formatOrderAddress } from '@food/utils/orderAddress';
 import { toast } from 'sonner';
@@ -28,6 +30,7 @@ export function PickupMetricsValue({ metrics, label, unit, className = '' }) {
       <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{label}</span>
       {isReady ? (
         <p className="text-sm font-bold text-gray-900 tabular-nums">
+          {metrics.approximate ? '~' : ''}
           {unit === 'km'
             ? `${Number(metrics.distanceKm).toFixed(1)} km`
             : `${metrics.etaMins} mins`}
@@ -55,10 +58,7 @@ export default function NewOrderCard({
 }) {
   const riderLocation = useDeliveryStore((state) => state.riderLocation);
 
-  const metrics = useMemo(
-    () => computePickupMetrics(order, riderLocation),
-    [order, riderLocation],
-  );
+  const metrics = useRoadPickupMetrics(order, riderLocation);
   const routeSummary = formatPickupRouteSummary(metrics);
 
   if (!order) return null;
@@ -296,6 +296,8 @@ export default function NewOrderCard({
               </div>
             </div>
           </div>
+
+          <OrderNoteBanner order={order} />
 
           <div className="grid grid-cols-2 gap-2">
             <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 flex items-center gap-2">

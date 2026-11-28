@@ -67,6 +67,7 @@ export const adminSidebarMenu = [
           { label: "Onboarding Pricing", path: "/admin/food/onboarding-pricing" },
         ],
       },
+      { type: "link", label: "Restaurant Wallet", path: "/admin/food/restaurant-wallet", icon: "PiggyBank" },
     ],
   },
   {
@@ -177,7 +178,6 @@ export const adminSidebarMenu = [
     type: "section",
     label: "HELP & SUPPORT",
     items: [
-      { type: "link", label: "User Feedback", path: "/admin/food/contact-messages", icon: "Mail" },
       { type: "link", label: "Safety Emergency Reports", path: "/admin/food/safety-emergency-reports", icon: "AlertTriangle" },
     ],
   },
@@ -188,15 +188,9 @@ export const adminSidebarMenu = [
       { type: "link", label: "Transaction Report", path: "/admin/food/transaction-report", icon: "FileText" },
       { type: "link", label: "Order Report", path: "/admin/food/order-report/regular", icon: "FileText" },
       { type: "link", label: "Tax Report", path: "/admin/food/tax-report", icon: "Receipt" },
-      {
-        type: "expandable",
-        label: "Restaurant Report",
-        icon: "FileText",
-        subItems: [
-          { label: "Restaurant Report", path: "/admin/food/restaurant-report" },
-          { label: "Restaurant Earning", path: "/admin/food/restaurants/earnings" }
-        ],
-      },
+      { type: "link", label: "Admin Earning", path: "/admin/food/admin-earning", icon: "Wallet" },
+      // "Restaurant Earning" lives under Restaurants; it was listed here too (same page).
+      { type: "link", label: "Restaurant Report", path: "/admin/food/restaurant-report", icon: "FileText" },
       {
         type: "expandable",
         label: "Customer Report",

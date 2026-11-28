@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react"
 import { 
-  Search, Plus, Edit, Trash2, ArrowUpDown, 
-  Loader2, X, Building2, AlertTriangle
+  Search, Plus, Edit, Trash2, ArrowUpDown,
+  Loader2, X, Building2, AlertTriangle, Eye
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@food/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@food/components/ui/dropdown-menu"
@@ -10,11 +10,13 @@ import { API_BASE_URL } from "@food/api/config"
 import { toast } from "sonner"
 import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect"
 import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter"
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
 const debugLog = (...args) => {}
 const debugWarn = (...args) => {}
 const debugError = (...args) => {}
 
 export default function RestaurantCommission() {
+  const { canCreate, canEdit, canDelete } = useAdminPermissions()
   const [searchQuery, setSearchQuery] = useState("")
   const [commissions, setCommissions] = useState([])
   const [approvedRestaurants, setApprovedRestaurants] = useState([])
@@ -35,6 +37,14 @@ export default function RestaurantCommission() {
     notes: ""
   })
   const [formErrors, setFormErrors] = useState({})
+  // Commission history (view icon): delivered orders of one restaurant and the
+  // commission the admin earned on each.
+  const HISTORY_PAGE_SIZE = 10
+  const [historyTarget, setHistoryTarget] = useState(null)
+  const [historyPage, setHistoryPage] = useState(1)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState("")
+  const [historyData, setHistoryData] = useState({ earnings: [], summary: null, pagination: null })
   const { zones, zonesLoading, zoneId, setZoneId } = useAdminZoneFilter()
   // Only the newest load may write state, so a quick zone switch cannot be
   // overwritten by the slower response of the previous zone.
@@ -109,6 +119,59 @@ export default function RestaurantCommission() {
     } finally {
       if (isLatest()) setLoading(false)
     }
+  }
+
+  const historyRestaurantId = historyTarget?.restaurant?._id || ""
+
+  useEffect(() => {
+    if (!historyRestaurantId) return undefined
+    let cancelled = false
+    setHistoryLoading(true)
+    setHistoryError("")
+    adminAPI
+      .getRestaurantEarnings({ restaurantId: historyRestaurantId, page: historyPage, limit: HISTORY_PAGE_SIZE })
+      .then((response) => {
+        if (cancelled) return
+        const data = response?.data?.data || {}
+        setHistoryData({
+          earnings: Array.isArray(data.earnings) ? data.earnings : [],
+          summary: data.summary || null,
+          pagination: data.pagination || null,
+        })
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setHistoryData({ earnings: [], summary: null, pagination: null })
+        setHistoryError(error?.response?.data?.message || "Could not load commission history")
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [historyRestaurantId, historyPage])
+
+  const openHistory = (commission) => {
+    setHistoryData({ earnings: [], summary: null, pagination: null })
+    setHistoryPage(1)
+    setHistoryTarget(commission)
+  }
+
+  const closeHistory = () => {
+    setHistoryTarget(null)
+    setHistoryData({ earnings: [], summary: null, pagination: null })
+  }
+
+  const formatRupees = (value) =>
+    `₹${(Number(value) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  const formatHistoryDate = (value) => {
+    if (!value) return "—"
+    const date = new Date(value)
+    return Number.isNaN(date.getTime())
+      ? "—"
+      : date.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
   }
 
   const handleToggleStatus = async (commission) => {
@@ -304,6 +367,7 @@ export default function RestaurantCommission() {
             </div>
 
             <div className="flex items-center gap-2">
+              {canCreate && (
               <button 
                 onClick={handleAdd}
                 className="px-4 py-2.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-2 transition-all shadow-md"
@@ -311,6 +375,7 @@ export default function RestaurantCommission() {
                 <Plus className="w-4 h-4" />
                 Add Commission
               </button>
+              )}
             </div>
           </div>
 
@@ -428,7 +493,8 @@ export default function RestaurantCommission() {
                         {visibleColumns.status && (
                           <td className="px-6 py-4 whitespace-nowrap">
                             <button
-                              onClick={() => handleToggleStatus(commission)}
+                              onClick={() => canEdit && handleToggleStatus(commission)}
+                              disabled={!canEdit}
                               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                                 commission.status ? "bg-green-600" : "bg-slate-300"
                               }`}
@@ -445,12 +511,22 @@ export default function RestaurantCommission() {
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             <div className="flex items-center justify-center gap-2">
                               <button
+                                onClick={() => openHistory(commission)}
+                                className="p-1.5 rounded text-amber-600 hover:bg-amber-50 transition-colors"
+                                title="View commission history"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              {canEdit && (
+                              <button
                                 onClick={() => handleEdit(commission)}
                                 className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition-colors"
                                 title="Edit"
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
+                              )}
+                              {canDelete && (
                               <button
                                 onClick={() => handleDelete(commission)}
                                 className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
@@ -458,6 +534,7 @@ export default function RestaurantCommission() {
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
+                              )}
                             </div>
                           </td>
                         )}
@@ -470,6 +547,99 @@ export default function RestaurantCommission() {
           )}
         </div>
       </div>
+
+      {/* Commission history dialog */}
+      <Dialog open={Boolean(historyTarget)} onOpenChange={(open) => { if (!open) closeHistory() }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-white p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200">
+            <DialogTitle className="text-lg font-semibold text-slate-900">
+              Commission history — {historyTarget?.restaurantName || historyTarget?.restaurant?.name || "Restaurant"}
+            </DialogTitle>
+            <p className="text-xs text-slate-500 mt-1">
+              Commission earned on each delivered order. Current rate:{" "}
+              {historyTarget?.defaultCommission?.type === "percentage"
+                ? `${historyTarget?.defaultCommission?.value ?? 0}%`
+                : `₹${historyTarget?.defaultCommission?.value ?? 0}`}
+            </p>
+          </DialogHeader>
+
+          <div className="px-6 py-4 space-y-4">
+            {historyData.summary && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg bg-emerald-50 p-3">
+                  <p className="text-[11px] uppercase font-semibold text-emerald-700">Total commission</p>
+                  <p className="text-lg font-bold text-emerald-800">{formatRupees(historyData.summary.totalCommission)}</p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <p className="text-[11px] uppercase font-semibold text-slate-600">Delivered orders</p>
+                  <p className="text-lg font-bold text-slate-800">{Number(historyData.summary.totalOrders || 0).toLocaleString("en-IN")}</p>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <p className="text-[11px] uppercase font-semibold text-slate-600">Food sales</p>
+                  <p className="text-lg font-bold text-slate-800">{formatRupees(historyData.summary.totalFoodAmount)}</p>
+                </div>
+              </div>
+            )}
+
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
+              </div>
+            ) : historyError ? (
+              <p className="py-10 text-center text-sm text-red-600">{historyError}</p>
+            ) : historyData.earnings.length === 0 ? (
+              <p className="py-10 text-center text-sm text-slate-500">No commission earned from this restaurant yet.</p>
+            ) : (
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-700">Order ID</th>
+                      <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-700">Date</th>
+                      <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Food amount</th>
+                      <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Commission</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {historyData.earnings.map((row) => (
+                      <tr key={row.transactionId || row.orderId}>
+                        <td className="px-4 py-3 font-mono text-slate-700">{row.orderId}</td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatHistoryDate(row.createdAt)}</td>
+                        <td className="px-4 py-3 text-right text-slate-700">{formatRupees(row.baseSubtotal)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-emerald-700">{formatRupees(row.commission)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {historyData.pagination && historyData.pagination.pages > 1 && (
+            <DialogFooter className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between sm:justify-between">
+              <span className="text-xs text-slate-500">
+                Page {historyData.pagination.page} of {historyData.pagination.pages}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                  disabled={historyLoading || historyPage <= 1}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setHistoryPage((p) => Math.min(historyData.pagination.pages, p + 1))}
+                  disabled={historyLoading || historyPage >= historyData.pagination.pages}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Restaurant Selection Dialog */}
       <Dialog open={isRestaurantSelectOpen} onOpenChange={setIsRestaurantSelectOpen}>

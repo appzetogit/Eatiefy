@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronRight, Package } from 'lucide-react';
+import OrderNoteBanner from '@/modules/DeliveryV2/components/orders/OrderNoteBanner';
 import {
   resolveOrderKey,
   mapDeliveryPhaseToTripStatus,
@@ -57,6 +58,7 @@ export default function AcceptedOrderCard({ order, focused = false, onSelect }) 
             <p className="text-[11px] font-semibold !text-[#15498b] mt-0.5">
               {phaseLabel(order, session)}
             </p>
+            <OrderNoteBanner order={order} compact />
           </div>
         </div>
         <ChevronRight

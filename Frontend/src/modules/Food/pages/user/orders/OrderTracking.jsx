@@ -14,7 +14,6 @@ import {
   ChevronUp,
   MapPin,
   Home as HomeIcon,
-  MessageSquare,
   Check,
   CheckCircle2,
   Sparkles,
@@ -347,9 +346,9 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
   const customerCoordsResolved = getCustomerCoordsFromApiOrder(apiOrder, previousOrder)
 
   return {
-    id: apiOrder?.orderId || apiOrder?._id,
+    id: apiOrder?.orderId || apiOrder?.order_id || apiOrder?._id,
     mongoId: apiOrder?._id || null,
-    orderId: apiOrder?.orderId || apiOrder?._id,
+    orderId: apiOrder?.orderId || apiOrder?.order_id || apiOrder?._id,
     // Takeaway vs delivery decides the timeline steps and copy; without it every
     // takeaway order was shown the delivery flow (rider, "On Way").
     orderType: apiOrder?.orderType || previousOrder?.orderType || 'delivery',
@@ -446,7 +445,7 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
       }
       return merged
     })(),
-    note: apiOrder?.note || previousOrder?.note || '',
+    note: apiOrder?.note ?? previousOrder?.note ?? '',
     /*
      * Why the order was cancelled, and by whom.
      *
@@ -460,7 +459,7 @@ const transformOrderForTracking = (apiOrder, previousOrder = null, explicitResta
       apiOrder?.cancellationReason || previousOrder?.cancellationReason || '',
     cancelledBy: apiOrder?.cancelledBy || previousOrder?.cancelledBy || '',
     cancelledAt: apiOrder?.cancelledAt || previousOrder?.cancelledAt || null,
-    deliveryInstructions: apiOrder?.deliveryInstructions || apiOrder?.note || previousOrder?.deliveryInstructions || previousOrder?.note || ''
+    deliveryInstructions: apiOrder?.deliveryInstructions ?? apiOrder?.note ?? previousOrder?.deliveryInstructions ?? previousOrder?.note ?? ''
   }
 }
 
@@ -1294,7 +1293,7 @@ export default function OrderTracking() {
     try {
       const payload = {
         restaurantRating,
-        deliveryPartnerRating: deliveryRating,
+        ...(isTakeawayOrder ? {} : { deliveryPartnerRating: deliveryRating }),
         restaurantComment: [
           ratingComment.trim(),
           selectedCompliments.length > 0 ? `Compliments: ${selectedCompliments.join(", ")}` : ""
@@ -2045,7 +2044,11 @@ export default function OrderTracking() {
               },
             }
           }
-          if (payload.note) next.note = payload.note
+          if (payload.deliveryInstructions !== undefined || payload.restaurantNote !== undefined || payload.note) {
+            const updatedNote = payload.deliveryInstructions ?? payload.restaurantNote ?? payload.note
+            next.note = updatedNote
+            next.deliveryInstructions = updatedNote
+          }
           // The cancel event carries the reason; without this the screen showed
           // a bare "Order Cancelled" until the follow-up fetch landed.
           if (payload.cancellationReason) next.cancellationReason = payload.cancellationReason
@@ -2443,18 +2446,21 @@ export default function OrderTracking() {
     "Restaurant"
 
   const complaintOrderId = encodeURIComponent(
-    String(order?.orderId || order?.id || orderId || "")
+    String(order?.orderId || order?.order_id || order?.id || orderId || "")
   )
   const themeColor = "var(--module-theme-color, #EB590E)"
   const themeRgb = "var(--module-theme-rgb, 235,89,14)"
 
+  const displayOrderNumber = (
+    order?.orderId ||
+    order?.order_id ||
+    order?.displayOrderId ||
+    (order?.id && !/^[a-f0-9]{24}$/i.test(String(order.id)) ? String(order.id) : null) ||
+    (orderId && !/^[a-f0-9]{24}$/i.test(String(orderId)) ? String(orderId) : null) ||
+    (orderId ? String(orderId).slice(-6) : "ORDER")
+  ).toUpperCase().replace(/^#/, "");
+
   if (isDeliveredOrder) {
-    const displayOrderNumber = (
-      order?.orderId ||
-      order?.id ||
-      orderId?.slice(-6) ||
-      "ORDER"
-    ).toUpperCase().replace(/^#/, "");
 
     const deliveredTimestamp = order?.deliveredAt || order?.updatedAt || Date.now();
     const deliveredTimeOnly = (() => {
@@ -2752,7 +2758,7 @@ export default function OrderTracking() {
             ) : (
               <div className="space-y-4">
                 {/* 2 Side-by-Side Cards (Food Quality & Delivery Experience) */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid gap-3 ${isTakeawayOrder ? "grid-cols-1" : "grid-cols-2"}`}>
                   {/* Food Quality Card */}
                   <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-100 dark:border-zinc-800 shadow-xs flex flex-col items-center text-center">
                     <div className="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-950/40 text-orange-500 flex items-center justify-center mb-2">
@@ -2786,7 +2792,8 @@ export default function OrderTracking() {
                     </span>
                   </div>
 
-                  {/* Delivery Experience Card */}
+                  {/* Delivery Experience Card (not applicable to takeaway orders) */}
+                  {!isTakeawayOrder && (
                   <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 sm:p-5 border border-gray-100 dark:border-zinc-800 shadow-xs flex flex-col items-center text-center">
                     <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center mb-2">
                       <Bike className="w-5 h-5" />
@@ -2818,6 +2825,7 @@ export default function OrderTracking() {
                       {deliveryRating === 5 ? "⚡ Super Fast" : deliveryRating === 4 ? "😊 Polite & On-time" : deliveryRating === 3 ? "👍 Good" : deliveryRating === 2 ? "😐 Average" : "👎 Poor"}
                     </span>
                   </div>
+                  )}
                 </div>
 
                 {/* What did you like? Compliment tags */}
@@ -2828,11 +2836,11 @@ export default function OrderTracking() {
                   <div className="flex flex-wrap gap-2">
                     {[
                       { label: "Hot & Fresh", icon: "🔥" },
-                      { label: "Fast Delivery", icon: "⚡" },
+                      { label: "Fast Delivery", icon: "⚡", deliveryOnly: true },
                       { label: "Great Packaging", icon: "📦" },
                       { label: "Tasty Food", icon: "😋" },
-                      { label: "Polite Rider", icon: "😊" }
-                    ].map((chip) => {
+                      { label: "Polite Rider", icon: "😊", deliveryOnly: true }
+                    ].filter((chip) => !(isTakeawayOrder && chip.deliveryOnly)).map((chip) => {
                       const chipKey = `${chip.icon} ${chip.label}`;
                       const isSelected = selectedCompliments.includes(chipKey);
                       return (
@@ -2996,7 +3004,7 @@ export default function OrderTracking() {
                   Live
                 </span>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Order #{orderId?.slice(-6).toUpperCase()}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Order #{displayOrderNumber}</p>
             </div>
           </div>
 
@@ -3095,7 +3103,7 @@ export default function OrderTracking() {
 
       {/* Floating Map Utility Bar on Top-Right */}
       {!isDeliveredOrder && orderStatus !== 'cancelled' && (
-        <div className="absolute top-16 right-4 z-30 hidden sm:flex items-center gap-2">
+        <div className="absolute top-20 right-4 z-30 hidden sm:flex items-center gap-2">
           {currentEta && !customerDeliveryOtp && (
             <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg border border-gray-100 dark:border-zinc-800 flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-gray-200">
               <Clock className="w-3.5 h-3.5 text-[#EB590E]" />
@@ -3123,7 +3131,7 @@ export default function OrderTracking() {
         </div>
 
         {/* Desktop Scrollable Content */}
-        <div className="overflow-y-auto px-6 py-5 space-y-4.5 flex-1 overscroll-contain">
+        <div className="overflow-y-auto px-6 py-5 space-y-4.5 flex-1 min-h-0 overscroll-contain">
           {/* Main Status Hero */}
           <div className="bg-gradient-to-br from-orange-50 via-white to-amber-50/40 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-850 rounded-3xl p-5 shadow-xs border border-orange-100/70 dark:border-zinc-800 relative overflow-hidden">
             <div className="flex items-start justify-between">
@@ -3235,7 +3243,7 @@ export default function OrderTracking() {
                   <button
                     type="button"
                     onClick={handleCallRider}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-[#14512F] hover:bg-[#0F3D23] text-white rounded-2xl font-bold text-xs shadow-md shadow-[#14512F]/30 active:scale-95 transition-all cursor-pointer"
                   >
                     <Phone className="w-3.5 h-3.5" />
                     <span>Call</span>
@@ -3243,12 +3251,6 @@ export default function OrderTracking() {
                 )}
               </div>
 
-              {order?.deliveryInstructions && (
-                <div className="bg-blue-50/60 dark:bg-blue-950/30 p-3 mt-3.5 rounded-2xl flex items-start gap-2.5 border border-blue-100/80 dark:border-blue-900/40 text-xs text-blue-950 dark:text-blue-200">
-                  <MessageSquare className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed italic">"{order.deliveryInstructions}"</p>
-                </div>
-              )}
             </div>
           )}
 
@@ -3429,7 +3431,7 @@ export default function OrderTracking() {
                 from: location.pathname,
                 backTo: location.pathname
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-[#EB590E] transition-colors"
+              className="relative z-10 inline-flex items-center gap-1.5 px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-[#EB590E] transition-colors touch-manipulation"
             >
               <HelpCircle className="w-3.5 h-3.5" />
               <span>Need help with this order? Contact Support</span>
@@ -3552,7 +3554,7 @@ export default function OrderTracking() {
         )}
 
         {/* Mobile Scrollable Area (Rendered when half or expanded) */}
-        <div className={`overflow-y-auto px-4 sm:px-6 py-4 space-y-4 flex-1 overscroll-contain pb-12 ${sheetMode === 'compact' ? 'hidden' : 'block'}`}>
+        <div className={`overflow-y-auto px-4 sm:px-6 py-4 space-y-4 flex-1 min-h-0 overscroll-contain pb-[calc(4rem+env(safe-area-inset-bottom))] ${sheetMode === 'compact' ? 'hidden' : 'block'}`}>
           {/* Main Status Hero */}
           <div className="bg-gradient-to-br from-orange-50 via-white to-amber-50/40 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-850 rounded-3xl p-5 shadow-xs border border-orange-100/70 dark:border-zinc-800 relative overflow-hidden">
             <div className="flex items-start justify-between">
@@ -3664,7 +3666,7 @@ export default function OrderTracking() {
                   <button
                     type="button"
                     onClick={handleCallRider}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-[#14512F] hover:bg-[#0F3D23] text-white rounded-2xl font-bold text-xs shadow-md shadow-[#14512F]/30 active:scale-95 transition-all cursor-pointer"
                   >
                     <Phone className="w-3.5 h-3.5" />
                     <span>Call</span>
@@ -3672,12 +3674,6 @@ export default function OrderTracking() {
                 )}
               </div>
 
-              {order?.deliveryInstructions && (
-                <div className="bg-blue-50/60 dark:bg-blue-950/30 p-3 mt-3.5 rounded-2xl flex items-start gap-2.5 border border-blue-100/80 dark:border-blue-900/40 text-xs text-blue-950 dark:text-blue-200">
-                  <MessageSquare className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed italic">"{order.deliveryInstructions}"</p>
-                </div>
-              )}
             </div>
           )}
 
@@ -3858,7 +3854,7 @@ export default function OrderTracking() {
                 from: location.pathname,
                 backTo: location.pathname
               }}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-[#EB590E] transition-colors"
+              className="relative z-10 inline-flex items-center gap-1.5 px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-[#EB590E] transition-colors touch-manipulation"
             >
               <HelpCircle className="w-3.5 h-3.5" />
               <span>Need help with this order? Contact Support</span>

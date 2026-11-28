@@ -1792,6 +1792,42 @@ export const useDeliveryNotifications = () => {
     };
   }, [deliveryPartnerId, handleIncomingOrderAlert, isEventForCurrentAccount, isOrderAlertMuted, isOrderInAcceptedQueue, isProcessedOrder, joinDeliveryRoomIfPossible, markOrderIdsProcessed, clearOrderMuteState, playNotificationSound, recoverDeliveryState, showBackgroundOrderNotification, startAlertLoop, stopAlertLoop, endOrderAlert]);
 
+  // Handle push notification order alerts for delivery partner (FCM / Service Worker push)
+  useEffect(() => {
+    if (!deliveryPartnerId || typeof window === 'undefined') return;
+
+    const handlePushDeliveryOffer = (event) => {
+      const raw = event?.detail?.data || event?.detail || {};
+      const orderPayload = raw?.orderData || raw?.order || raw;
+      const orderId = orderPayload?.orderId || orderPayload?.order_id || orderPayload?._id || raw?.orderId;
+      if (!orderId) return;
+
+      const normalizedData = {
+        orderId,
+        orderMongoId: orderPayload?.orderMongoId || orderPayload?._id || orderId,
+        targetPartnerId: raw?.targetPartnerId || orderPayload?.targetPartnerId || deliveryPartnerId,
+        ...orderPayload,
+      };
+
+      if (!isEventForCurrentAccount(normalizedData)) return;
+      if (!isOfferStillValid(normalizedData)) return;
+      if (isOrderInAcceptedQueue(normalizedData) || isProcessedOrder(normalizedData)) return;
+
+      setNewOrder(normalizedData);
+      handleIncomingOrderAlert(normalizedData, { silent: false });
+    };
+
+    window.addEventListener('app-order-push', handlePushDeliveryOffer);
+    window.addEventListener('delivery_request', handlePushDeliveryOffer);
+    window.addEventListener('new_order', handlePushDeliveryOffer);
+
+    return () => {
+      window.removeEventListener('app-order-push', handlePushDeliveryOffer);
+      window.removeEventListener('delivery_request', handlePushDeliveryOffer);
+      window.removeEventListener('new_order', handlePushDeliveryOffer);
+    };
+  }, [deliveryPartnerId, handleIncomingOrderAlert, isEventForCurrentAccount, isOfferStillValid, isOrderInAcceptedQueue, isProcessedOrder, setNewOrder]);
+
   /**
    * Expire offers locally, on a ticker, between server events.
    *

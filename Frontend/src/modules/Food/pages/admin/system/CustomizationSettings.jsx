@@ -14,6 +14,21 @@ import {
   DialogFooter,
 } from "@food/components/ui/dialog";
 import { isDiningEnabled } from "@food/config/featureFlags";
+import AdminZoneSelect from "@food/components/admin/zones/AdminZoneSelect";
+import { useAdminZoneFilter } from "@food/hooks/useAdminZoneFilter";
+import { useAdminPermissions } from "@food/hooks/useAdminPermissions"
+
+// The checkout switches that can differ per zone (must match ZONE_CUSTOMIZATION_KEYS on the
+// server). Module-level switches stay platform-wide.
+const ZONE_TOGGLE_KEYS = new Set([
+  "cod_enabled",
+  "takeaway_cod_enabled",
+  "takeaway_pay_at_pickup_enabled",
+  "delivery_cod_enabled",
+  "dining_cod_enabled",
+  "wallet_payment_enabled",
+  "online_payment_enabled",
+]);
 
 const CUSTOMIZATION_TOGGLES = [
   {
@@ -48,8 +63,8 @@ const CUSTOMIZATION_TOGGLES = [
     key: "takeaway_cod_enabled",
     label: "Takeaway COD",
     description:
-      "Controls Cash on Delivery (COD) visibility for takeaway orders.",
-    defaultValue: true,
+      "When ON, customers can choose to pay cash at the restaurant when they collect a takeaway order. When OFF, takeaway is online-payment only.",
+    defaultValue: false,
   },
   {
     key: "takeaway_pay_at_pickup_enabled",
@@ -147,6 +162,7 @@ const getAdminToastOffsetPx = () => {
 };
 
 export default function CustomizationSettings() {
+  const { canEdit } = useAdminPermissions()
   const [loading, setLoading] = useState(true);
   const [savingByKey, setSavingByKey] = useState({});
   const loadToastShownRef = useRef(false);
@@ -157,6 +173,68 @@ export default function CustomizationSettings() {
     for (const t of CUSTOMIZATION_TOGGLES) initial[t.key] = t.defaultValue;
     return initial;
   });
+
+  // Zone scope: "" = platform-wide (the original page); a zone id edits only that zone's
+  // payment switches, each of which either overrides the platform value or follows it.
+  const { zones, zonesLoading, zoneId, setZoneId } = useAdminZoneFilter();
+  const [zoneLoading, setZoneLoading] = useState(false);
+  const [zoneState, setZoneState] = useState({ settings: {}, defaults: {}, overridden: {}, zonesWithOverrides: [] });
+
+  const loadZoneSettings = async (targetZoneId) => {
+    try {
+      setZoneLoading(true);
+      const res = await adminAPI.getZoneCustomizationSettings(targetZoneId);
+      const data = res?.data?.data || {};
+      setZoneState({
+        settings: data.settings || {},
+        defaults: data.defaults || {},
+        overridden: data.overridden || {},
+        zonesWithOverrides: Array.isArray(data.zonesWithOverrides) ? data.zonesWithOverrides : [],
+      });
+    } catch (_error) {
+      toast.error("Failed to load zone settings", { duration: 2000 });
+    } finally {
+      setZoneLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Always load: even in platform view the picker marks zones that override something.
+    loadZoneSettings(zoneId || undefined);
+  }, [zoneId]);
+
+  /** Set (true/false) or clear (null) one switch for the selected zone. */
+  const handleZoneToggle = async (key, value) => {
+    setSavingByKey((prev) => ({ ...prev, [key]: true }));
+    try {
+      const res = await adminAPI.updateZoneCustomizationSettings({ zoneId, [key]: value });
+      const data = res?.data?.data || {};
+      setZoneState({
+        settings: data.settings || {},
+        defaults: data.defaults || {},
+        overridden: data.overridden || {},
+        zonesWithOverrides: Array.isArray(data.zonesWithOverrides) ? data.zonesWithOverrides : [],
+      });
+      const label = CUSTOMIZATION_TOGGLES.find((t) => t.key === key)?.label || key;
+      toast.success(
+        value === null ? `${label}: now follows the platform default` : `${label} ${value ? "ON" : "OFF"} for this zone`,
+        { duration: 2000 }
+      );
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to update zone setting", { duration: 2500 });
+    } finally {
+      setSavingByKey((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const isZoneScope = Boolean(zoneId);
+  const visibleToggles = isZoneScope
+    ? CUSTOMIZATION_TOGGLES.filter((t) => ZONE_TOGGLE_KEYS.has(t.key))
+    : CUSTOMIZATION_TOGGLES;
+  const zoneOptionLabel = (zone) => {
+    const base = zone?.name || zone?.zoneName || zone?.serviceLocation || "Unnamed Zone";
+    return zoneState.zonesWithOverrides.includes(String(zone?._id || zone?.id)) ? `${base} • customised` : base;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -309,7 +387,29 @@ export default function CustomizationSettings() {
             Customization Settings
           </h1>
         </div>
-        <p className="text-neutral-600 dark:text-neutral-400 mt-1">Control global customization toggles for the platform.</p>
+        <p className="text-neutral-600 dark:text-neutral-400 mt-1">
+          {isZoneScope
+            ? "Payment switches for the selected zone. A switch set here overrides the platform value for this zone only."
+            : "Control global customization toggles for the platform."}
+        </p>
+      </div>
+
+      {/* Scope: the whole platform, or one zone's payment switches */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">Settings for</span>
+        <AdminZoneSelect
+          value={zoneId}
+          onChange={setZoneId}
+          zones={zones}
+          loading={zonesLoading}
+          allLabel="All zones (default)"
+          getOptionLabel={zoneOptionLabel}
+        />
+        {isZoneScope && (
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">
+            Module switches (Takeaway, Dining, Sweets, Maintenance…) apply to every zone and are only editable under "All zones".
+          </span>
+        )}
       </div>
 
       <Card className="dark:bg-[#1a1a1a] dark:border-neutral-800">
@@ -321,29 +421,57 @@ export default function CustomizationSettings() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-            {CUSTOMIZATION_TOGGLES.map((t) => (
-              <div
-                key={t.key}
-                className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-neutral-50/50 dark:bg-neutral-900/50 dark:border-neutral-800"
-              >
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-semibold dark:text-neutral-200">{t.label}</Label>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-snug">{t.description}</p>
+            {visibleToggles.map((t) => {
+              const overridden = isZoneScope && zoneState.overridden[t.key] === true;
+              const checked = isZoneScope ? zoneState.settings[t.key] === true : settings[t.key] === true;
+              const busy = loading || (isZoneScope && zoneLoading);
+              return (
+                <div
+                  key={t.key}
+                  className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-neutral-50/50 dark:bg-neutral-900/50 dark:border-neutral-800"
+                >
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold dark:text-neutral-200">{t.label}</Label>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-snug">{t.description}</p>
+                    {isZoneScope && !busy && (
+                      <p className="text-[11px] leading-snug pt-1">
+                        {overridden ? (
+                          <>
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">Set for this zone</span>
+                            {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleZoneToggle(t.key, null)}
+                              disabled={savingByKey[t.key] === true}
+                              className="ml-2 underline text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 disabled:opacity-50"
+                            >
+                              Reset to default
+                            </button>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-neutral-400">
+                            Using platform default ({zoneState.defaults[t.key] ? "ON" : "OFF"})
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 pt-0.5">
+                    {busy ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-neutral-400" />
+                    ) : (
+                      <Switch
+                        checked={checked}
+                        onCheckedChange={(next) => (isZoneScope ? handleZoneToggle(t.key, next) : requestToggle(t, next))}
+                        disabled={!canEdit || savingByKey[t.key] === true}
+                        className="scale-90 data-[state=checked]:bg-[#16a34a] data-[state=unchecked]:bg-zinc-400 shadow-sm"
+                      />
+                    )}
+                  </div>
                 </div>
-                <div className="shrink-0 pt-0.5">
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin text-neutral-400" />
-                  ) : (
-                    <Switch
-                      checked={settings[t.key] === true}
-                      onCheckedChange={(checked) => requestToggle(t, checked)}
-                      disabled={savingByKey[t.key] === true}
-                      className="scale-90 data-[state=checked]:bg-[#16a34a] data-[state=unchecked]:bg-zinc-400 shadow-sm"
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

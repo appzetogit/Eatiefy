@@ -164,6 +164,93 @@ const sendSmsViaMsg91 = async (phone, otp) => {
     }
 };
 
+/**
+ * Sends account approval SMS to delivery partner or restaurant.
+ * Never throws — account approval status in DB must succeed even if SMS provider fails.
+ */
+export const sendAccountApprovalSms = async ({ phone, name, role = 'RESTAURANT', isChangesApproval = false }) => {
+    try {
+        const rawPhone = String(phone || '').replace(/\D/g, '').slice(-10);
+        if (rawPhone.length !== 10) {
+            logger.warn(`[SMS-APPROVAL] Skipped: invalid phone ${phone}`);
+            return false;
+        }
+
+        const msisdn = toIndianMsisdn(rawPhone);
+        const targetRole = role === 'DELIVERY_PARTNER' ? 'Delivery Partner' : 'Restaurant';
+        const cleanName = String(name || targetRole).trim();
+
+        const approvalMsg = isChangesApproval
+            ? `Your profile changes for ${cleanName} on Eatiefy have been approved. - Eatiefy`
+            : `Congratulations! Your Eatiefy ${targetRole} account for ${cleanName} has been approved. You can now start receiving orders. - Eatiefy`;
+
+        logger.info(`[SMS-APPROVAL] Attempting to send approval SMS to ${msisdn} (${targetRole})...`);
+
+        // 1. Try SMS India Hub if configured
+        if (config.smsHubEnabled || (config.smsApiKey && config.smsSenderId)) {
+            try {
+                const apiKey = String(config.smsApiKey || '').trim();
+                const senderId = String(config.smsSenderId || '').trim();
+                const templateId = String(process.env.SMS_APPROVAL_DLT_TEMPLATE_ID || '').trim();
+
+                const url = new URL('https://cloud.smsindiahub.in/vendorsms/pushsms.aspx');
+                url.searchParams.append('APIKey', apiKey);
+                url.searchParams.append('sid', senderId);
+                url.searchParams.append('msisdn', msisdn);
+                url.searchParams.append('msg', approvalMsg);
+                url.searchParams.append('gwid', '2');
+                url.searchParams.append('fl', '0');
+                if (config.smsIndiaHubUsername) {
+                    url.searchParams.append('uname', String(config.smsIndiaHubUsername).trim());
+                }
+                if (templateId) {
+                    url.searchParams.append('DLT_TE_ID', templateId);
+                }
+
+                const response = await fetch(url.toString(), { signal: AbortSignal.timeout(10000) });
+                const resultText = await response.text();
+                logger.info(`[SMS-APPROVAL] SMS India Hub response for ${msisdn}: ${resultText}`);
+                return true;
+            } catch (hubErr) {
+                logger.warn(`[SMS-APPROVAL] SMS India Hub failed for ${msisdn}: ${hubErr?.message || hubErr}`);
+            }
+        }
+
+        // 2. Try MSG91 if configured
+        if (config.msg91Enabled && config.msg91AuthKey) {
+            try {
+                const templateId = String(process.env.MSG91_APPROVAL_TEMPLATE_ID || config.msg91TemplateId || '').trim();
+                if (templateId) {
+                    const response = await fetch('https://control.msg91.com/api/v5/otp', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'authkey': config.msg91AuthKey
+                        },
+                        body: JSON.stringify({
+                            template_id: templateId,
+                            mobile: msisdn,
+                            name: cleanName,
+                            role: targetRole
+                        })
+                    });
+                    const resultText = await response.text();
+                    logger.info(`[SMS-APPROVAL] MSG91 response for ${msisdn}: ${resultText}`);
+                    return true;
+                }
+            } catch (msg91Err) {
+                logger.warn(`[SMS-APPROVAL] MSG91 failed for ${msisdn}: ${msg91Err?.message || msg91Err}`);
+            }
+        }
+
+        logger.info(`[SMS-APPROVAL] Handled approval SMS attempt for ${msisdn} (${targetRole})`);
+        return true;
+    } catch (err) {
+        logger.warn(`[SMS-APPROVAL] Error sending approval SMS to ${phone}: ${err?.message || err}`);
+        return false;
+    }
+};
+
 // One line at boot saying how OTPs will be delivered, visible in `pm2 logs`.
 // eslint-disable-next-line no-console
 console.info(

@@ -3,6 +3,7 @@ import { adminAPI, supportAPI } from "@food/api";
 
 const DISMISSED_STORAGE_KEY = "admin_notifications_dismissed_v1";
 const READ_STORAGE_KEY = "admin_notifications_read_v1";
+const REALTIME_STORAGE_KEY = "admin_notifications_realtime_v1";
 const UPDATE_EVENT = "adminNotificationsUpdated";
 
 const safeParse = (value, fallback) => {
@@ -29,9 +30,41 @@ const saveDismissedIds = (ids) => saveStoredIds(DISMISSED_STORAGE_KEY, ids);
 const getReadIds = () => getStoredIds(READ_STORAGE_KEY);
 const saveReadIds = (ids) => saveStoredIds(READ_STORAGE_KEY, ids);
 
-export const dispatchAdminNotificationsUpdated = () => {
+export const getRealtimeNotifications = () => {
+  if (typeof localStorage === "undefined") return [];
+  const parsed = safeParse(localStorage.getItem(REALTIME_STORAGE_KEY) || "[]", []);
+  return Array.isArray(parsed) ? parsed : [];
+};
+
+export const saveRealtimeNotifications = (items) => {
+  if (typeof localStorage === "undefined") return;
+  const toSave = (Array.isArray(items) ? items : []).slice(0, 50);
+  localStorage.setItem(REALTIME_STORAGE_KEY, JSON.stringify(toSave));
+};
+
+export const dispatchAdminNotificationsUpdated = (detail) => {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(UPDATE_EVENT));
+  if (detail && typeof detail === "object" && detail.title) {
+    try {
+      const liveId = String(detail.id || `live-${Date.now()}`);
+      const liveItem = {
+        id: liveId,
+        title: detail.title || "New notification",
+        message: detail.body || detail.message || "",
+        type: detail.type || "alert",
+        category: detail.category || detail.type || "admin_alert",
+        path: detail.link || detail.path || "",
+        createdAt: detail.createdAt || new Date().toISOString(),
+        timeLabel: toDateLabel(detail.createdAt || new Date()),
+        metaLabel: detail.metaLabel || detail.type || "Live alert",
+      };
+      const existing = getRealtimeNotifications().filter((i) => i.id !== liveId);
+      saveRealtimeNotifications([liveItem, ...existing]);
+    } catch {
+      // Storage errors shouldn't crash the event dispatch
+    }
+  }
+  window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail }));
 };
 
 const toDateValue = (value) => {
@@ -98,6 +131,25 @@ const mapDeliveryJoinRequests = (response) => {
     timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
     metaLabel: joinMeta(item?.name, item?.phone, item?.email),
   }));
+};
+
+const mapPendingCategories = (response) => {
+  const payload = response?.data?.data;
+  const rows = payload?.categories || payload?.items || response?.data?.categories || [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.approvalStatus || "").toLowerCase() === "pending")
+    .map((item) => ({
+      id: `approval-category-${String(item?._id || item?.id || "")}`,
+      title: "Category Approval Pending",
+      message: `Category "${item?.name || "Category"}" is waiting for approval.`,
+      type: "approval",
+      category: "category_approval",
+      path: "/admin/food/categories",
+      createdAt: item?.requestedAt || item?.createdAt || item?.updatedAt,
+      timeLabel: toDateLabel(item?.requestedAt || item?.createdAt || item?.updatedAt),
+      metaLabel: joinMeta(item?.name, item?.foodTypeScope),
+    }));
 };
 
 const mapFoodApprovals = (response) => {
@@ -201,6 +253,60 @@ const mapExpiredFssai = (response) => {
   }));
 };
 
+const mapRestaurantWithdrawals = (response) => {
+  const payload = response?.data?.data;
+  const rows =
+    payload?.requests ||
+    payload?.items ||
+    payload?.withdrawals ||
+    response?.data?.requests ||
+    [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.status || "").toLowerCase() === "pending")
+    .map((item) => {
+      const amountStr = Number(item?.amount || 0).toLocaleString("en-IN");
+      return {
+        id: `withdrawal-restaurant-${String(item?._id || item?.id || "")}`,
+        title: "Restaurant Withdrawal Request",
+        message: `${item?.restaurantName || "Restaurant"} requested a withdrawal of ₹${amountStr}.`,
+        type: "withdrawal",
+        category: "restaurant_withdrawal",
+        path: "/admin/food/restaurant-withdraws",
+        createdAt: item?.createdAt || item?.updatedAt,
+        timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+        metaLabel: joinMeta(item?.restaurantName, `₹${amountStr}`, item?.restaurantIdString),
+      };
+    });
+};
+
+const mapDeliveryWithdrawals = (response) => {
+  const payload = response?.data?.data;
+  const rows =
+    payload?.requests ||
+    payload?.items ||
+    payload?.withdrawals ||
+    response?.data?.requests ||
+    [];
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => String(item?.status || "").toLowerCase() === "pending")
+    .map((item) => {
+      const amountStr = Number(item?.amount || 0).toLocaleString("en-IN");
+      return {
+        id: `withdrawal-delivery-${String(item?._id || item?.id || "")}`,
+        title: "Delivery Withdrawal Request",
+        message: `${item?.deliveryName || "Delivery partner"} requested a withdrawal of ₹${amountStr}.`,
+        type: "withdrawal",
+        category: "delivery_withdrawal",
+        path: "/admin/food/delivery-withdrawal",
+        createdAt: item?.createdAt || item?.updatedAt,
+        timeLabel: toDateLabel(item?.createdAt || item?.updatedAt),
+        metaLabel: joinMeta(item?.deliveryName, item?.deliveryPhone, `₹${amountStr}`),
+      };
+    });
+};
+
 const applyReadState = (items, readIds) =>
   items.map((item) => ({
     ...item,
@@ -239,9 +345,12 @@ export default function useAdminNotifications(options = {}) {
         adminAPI.getPendingRestaurants(),
         adminAPI.getDeliveryPartnerJoinRequests({ page: 1, limit: 50, status: "pending" }),
         adminAPI.getPendingFoodApprovals({ page: 1, limit: 50 }),
+        adminAPI.getCategories({ page: 1, limit: 50, approvalStatus: "pending" }),
         supportAPI.getSupportTicketsAdmin({ page: 1, limit: 50, source: "all" }),
         adminAPI.getDeliverySupportTickets({ page: 1, limit: 50 }),
         adminAPI.getExpiredFssaiNotifications(),
+        adminAPI.getWithdrawals({ page: 1, limit: 50, status: "pending" }),
+        adminAPI.getDeliveryWithdrawals({ page: 1, limit: 50, status: "pending" }),
       ]);
 
       const pick = (result) => (result.status === "fulfilled" ? result.value : null);
@@ -249,9 +358,12 @@ export default function useAdminNotifications(options = {}) {
         restaurantsRes,
         deliveryJoinRes,
         foodApprovalRes,
+        categoryApprovalRes,
         supportRes,
         deliverySupportRes,
         fssaiExpiredRes,
+        restaurantWithdrawalsRes,
+        deliveryWithdrawalsRes,
       ] = settled.map(pick);
 
       const restaurantPayload = restaurantsRes?.data?.data
@@ -263,10 +375,16 @@ export default function useAdminNotifications(options = {}) {
             ? restaurantsRes.data.restaurants
             : []
 
+      const realtimeItems = getRealtimeNotifications();
+
       const aggregated = uniqueById([
+        ...realtimeItems,
         ...mapPendingRestaurants(restaurantRows),
         ...mapDeliveryJoinRequests(deliveryJoinRes),
         ...mapFoodApprovals(foodApprovalRes),
+        ...mapPendingCategories(categoryApprovalRes),
+        ...mapRestaurantWithdrawals(restaurantWithdrawalsRes),
+        ...mapDeliveryWithdrawals(deliveryWithdrawalsRes),
         ...mapUserRestaurantSupport(supportRes),
         ...mapDeliverySupport(deliverySupportRes),
         ...mapExpiredFssai(fssaiExpiredRes),
@@ -306,7 +424,7 @@ export default function useAdminNotifications(options = {}) {
   useEffect(() => {
     const timer = window.setInterval(() => {
       loadNotifications();
-    }, 5 * 60 * 1000);
+    }, 2 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [loadNotifications]);
 
@@ -335,6 +453,7 @@ export default function useAdminNotifications(options = {}) {
     if (!id) return;
     const dismissed = [...new Set([...getDismissedIds(), id])];
     saveDismissedIds(dismissed);
+    saveRealtimeNotifications(getRealtimeNotifications().filter((i) => i.id !== id));
     setItems((prev) => prev.filter((item) => item.id !== id));
     dispatchAdminNotificationsUpdated();
   }, []);
@@ -344,6 +463,7 @@ export default function useAdminNotifications(options = {}) {
     if (ids.length) {
       saveDismissedIds([...new Set([...getDismissedIds(), ...ids])]);
     }
+    saveRealtimeNotifications([]);
     setItems([]);
     dispatchAdminNotificationsUpdated();
   }, [items]);

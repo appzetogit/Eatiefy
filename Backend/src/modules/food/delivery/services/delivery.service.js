@@ -314,15 +314,20 @@ export const registerDeliveryPartner = async (payload, files, draftImageRefs = {
 
     try {
         const { notifyAdminsSafely } = await import('../../../../core/notifications/firebase.service.js');
+        const joinRequestLink = '/admin/food/delivery-partners/join-request';
+        const registrationEventKey = `new_registration:delivery_partner:${String(partner._id)}`;
         void notifyAdminsSafely({
             title: 'New Delivery Partner Registration 🚲',
             body: `A new delivery partner "${partner.name}" has signed up and is pending approval.`,
+            link: joinRequestLink,
+            idempotencyKey: registrationEventKey,
             data: {
                 type: 'new_registration',
                 subType: 'delivery_partner',
                 id: String(partner._id)
             }
         });
+        // notifyAdminsSafely also pushes a live copy to open admin panels.
     } catch (e) {
         // eslint-disable-next-line no-console
         console.error('Failed to notify admins of new delivery partner registration:', e);
@@ -946,14 +951,15 @@ const toTripDto = (order) => {
   const isCashCod =
     paymentMethod === 'cash' ||
     paymentMethod === 'cod' ||
-    paymentMethod === 'cash on delivery';
+    paymentMethod === 'cash on delivery' ||
+    paymentMethod === 'cash_on_delivery';
   const amountDue = Number(order?.payment?.amountDue);
   const codAmount = isCashCod
     ? (Number.isFinite(amountDue) && amountDue > 0 ? amountDue : pricingTotal)
     : 0;
   const paymentStatus = String(order?.payment?.status || '').toLowerCase();
   const codCollectedAmount =
-    isCashCod && (paymentStatus === 'paid' || isDelivered) ? codAmount : 0;
+    isCashCod && !isCancelled && (paymentStatus === 'paid' || isDelivered) ? codAmount : 0;
   return {
     id: order?._id,
     _id: order?._id,

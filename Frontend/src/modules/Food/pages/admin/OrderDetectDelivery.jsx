@@ -265,6 +265,10 @@ const transformOrder = (order, index) => {
     deliveryBoyName,
     deliveryBoyNumber,
     status: displayStatus,
+    packagingCharge: order.pricing?.packagingFee || order.packagingFee || 0,
+    packagingFee: order.pricing?.packagingFee || order.packagingFee || 0,
+    platformFee: order.pricing?.platformFee || order.platformFee || 0,
+    platformCharge: order.pricing?.platformFee || order.platformFee || 0,
     // Heavy status history only when opening detail dialog (keeps page changes fast)
     statusHistory: null,
     orderDate: dateStr,

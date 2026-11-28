@@ -31,40 +31,49 @@ export const getOfferStatus = (offer, now = new Date()) => {
     return isOfferLiveAt(offer, now) ? 'live' : 'off_hours';
 };
 
-const toOfferView = (offer, now = new Date()) => ({
-    id: String(offer._id),
-    restaurantId: String(offer.restaurantId?._id || offer.restaurantId),
-    restaurantName: offer.restaurantId?.restaurantName || '',
-    title: offer.title,
-    description: offer.description || '',
-    applicableTo: offer.applicableTo,
-    itemIds: (offer.itemIds || []).map((it) => (it?._id ? String(it._id) : String(it))),
-    items: Array.isArray(offer.itemIds) && offer.itemIds[0]?._id
-        ? offer.itemIds.map((it) => ({ id: String(it._id), name: it.name, price: it.price }))
-        : [],
-    categoryIds: (offer.categoryIds || []).map((cat) => (cat?._id ? String(cat._id) : String(cat))),
-    categories: Array.isArray(offer.categoryIds) && offer.categoryIds[0]?._id
-        ? offer.categoryIds.map((cat) => ({ id: String(cat._id), name: cat.name }))
-        : [],
-    discountType: offer.discountType,
-    discountValue: offer.discountValue,
-    minOrderValue: offer.minOrderValue || 0,
-    validFrom: offer.validFrom,
-    validTill: offer.validTill,
-    activeDays: offer.activeDays || [],
-    activeTimeSlot: {
-        start: offer.activeTimeSlot?.start || '',
-        end: offer.activeTimeSlot?.end || ''
-    },
-    isActive: offer.isActive !== false,
-    approvalStatus: offer.approvalStatus || 'pending',
-    rejectionReason: offer.rejectionReason || null,
-    approvedAt: offer.approvedAt || null,
-    label: describeOffer(offer),
-    status: getOfferStatus(offer, now),
-    createdAt: offer.createdAt,
-    updatedAt: offer.updatedAt
-});
+const toOfferView = (offer, now = new Date()) => {
+    const rawItems = Array.isArray(offer.itemIds) && offer.itemIds[0]?._id
+        ? offer.itemIds.map((it) => ({ id: String(it._id), _id: String(it._id), name: it.name, price: it.price }))
+        : [];
+    const rawCategories = Array.isArray(offer.categoryIds) && offer.categoryIds[0]?._id
+        ? offer.categoryIds.map((cat) => ({ id: String(cat._id), _id: String(cat._id), name: cat.name }))
+        : [];
+
+    return {
+        id: String(offer._id),
+        _id: String(offer._id),
+        restaurantId: String(offer.restaurantId?._id || offer.restaurantId),
+        restaurantName: offer.restaurantId?.restaurantName || '',
+        title: offer.title,
+        name: offer.title,
+        description: offer.description || '',
+        applicableTo: offer.applicableTo,
+        appliesTo: offer.applicableTo,
+        itemIds: (offer.itemIds || []).map((it) => (it?._id ? String(it._id) : String(it))),
+        items: rawItems,
+        dishes: rawItems,
+        categoryIds: (offer.categoryIds || []).map((cat) => (cat?._id ? String(cat._id) : String(cat))),
+        categories: rawCategories,
+        discountType: offer.discountType,
+        discountValue: offer.discountValue,
+        minOrderValue: offer.minOrderValue || 0,
+        validFrom: offer.validFrom,
+        validTill: offer.validTill,
+        activeDays: offer.activeDays || [],
+        activeTimeSlot: {
+            start: offer.activeTimeSlot?.start || '',
+            end: offer.activeTimeSlot?.end || ''
+        },
+        isActive: offer.isActive !== false,
+        approvalStatus: offer.approvalStatus || 'pending',
+        rejectionReason: offer.rejectionReason || null,
+        approvedAt: offer.approvedAt || null,
+        label: describeOffer(offer),
+        status: getOfferStatus(offer, now),
+        createdAt: offer.createdAt,
+        updatedAt: offer.updatedAt
+    };
+};
 
 /**
  * Customer menus refresh on the catalog event, and the public offers cache is dropped
@@ -124,6 +133,9 @@ export async function listRestaurantOffers(restaurantId, { page = 1, limit = 50 
             .sort({ createdAt: -1, _id: -1 })
             .skip((page - 1) * limit)
             .limit(limit)
+            .populate('restaurantId', 'restaurantName logo phone ownerPhone')
+            .populate('itemIds', 'name price')
+            .populate('categoryIds', 'name')
             .lean(),
         FoodRestaurantOffer.countDocuments(filter)
     ]);
@@ -163,7 +175,7 @@ export async function getRestaurantOfferOptions(restaurantId) {
 export async function createRestaurantOffer(restaurantId, payload) {
     const rid = toObjectId(restaurantId);
     await assertOwnedTargets(rid, payload);
-    const offer = await FoodRestaurantOffer.create({
+    const created = await FoodRestaurantOffer.create({
         ...payload,
         restaurantId: rid,
         approvalStatus: 'pending',
@@ -171,8 +183,13 @@ export async function createRestaurantOffer(restaurantId, payload) {
         approvedAt: null,
         approvedBy: null
     });
+    const offer = await FoodRestaurantOffer.findById(created._id)
+        .populate('restaurantId', 'restaurantName logo phone ownerPhone')
+        .populate('itemIds', 'name price')
+        .populate('categoryIds', 'name')
+        .lean();
     await announceOfferChange(rid);
-    return toOfferView(offer.toObject());
+    return toOfferView(offer || created.toObject());
 }
 
 export async function updateRestaurantOffer(restaurantId, offerId, payload) {
@@ -190,7 +207,11 @@ export async function updateRestaurantOffer(restaurantId, offerId, payload) {
             }
         },
         { new: true, runValidators: true }
-    ).lean();
+    )
+        .populate('restaurantId', 'restaurantName logo phone ownerPhone')
+        .populate('itemIds', 'name price')
+        .populate('categoryIds', 'name')
+        .lean();
     if (!offer) throw new NotFoundError('Offer not found');
     await announceOfferChange(rid);
     return toOfferView(offer);

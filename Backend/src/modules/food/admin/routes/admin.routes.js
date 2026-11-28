@@ -80,6 +80,7 @@ router.patch('/restaurants/complaints/:id', adminController.updateRestaurantComp
 router.get('/restaurants', adminController.getRestaurants);
 router.get('/restaurants/counts', adminController.getRestaurantCounts);
 router.get('/restaurants/earnings', adminController.getRestaurantEarnings);
+router.get('/admin-earnings', adminController.getAdminEarnings);
 router.get('/dashboard-stats', adminController.getDashboardStats);
 router.get('/reports/restaurants', adminController.getRestaurantReport);
 router.get('/reports/transactions', adminController.getTransactionReport);
@@ -198,6 +199,8 @@ router.get('/delivery-emergency-help', adminController.getEmergencyHelp);
 router.put('/delivery-emergency-help', adminController.createOrUpdateEmergencyHelp);
 
 // ----- Withdrawals (admin) -----
+// Path matches the page (/admin/food/restaurant-wallet) so sub-admin permissions apply.
+router.get('/restaurant-wallet', adminController.getRestaurantWallets);
 router.get('/withdrawals', adminController.getWithdrawals);
 router.patch('/withdrawals/:id', adminController.updateWithdrawalStatus);
 router.get('/delivery/withdrawals', adminController.getDeliveryWithdrawals);
@@ -236,6 +239,7 @@ router.get('/delivery/support-tickets/stats', adminController.getSupportTicketSt
 router.get('/delivery/support-tickets', adminController.getSupportTickets);
 router.patch('/delivery/support-tickets/:id', adminController.updateSupportTicket);
 router.get('/delivery/partners', adminController.getDeliveryPartners);
+router.patch('/delivery/partners/:id/wallet', adminController.updateDeliveryPartnerWallet);
 router.get('/delivery/:id', adminController.getDeliveryPartnerById);
 router.patch('/delivery/:id', adminController.updateDeliveryPartner);
 router.patch('/delivery-partners/:id', adminController.updateDeliveryPartner);
@@ -280,12 +284,15 @@ router.patch('/dining/requests/:id/approve', requireDiningEnabled, diningAdminCo
 router.patch('/dining/requests/:id/reject', requireDiningEnabled, diningAdminController.rejectDiningRequest);
 
 // ----- Orders -----
+router.get('/orders/refund-requests', orderController.getRefundRequestsAdminController);
+router.get('/refund-requests', orderController.getRefundRequestsAdminController);
 router.get('/orders', orderController.listOrdersAdminController);
 router.get('/orders/:orderId', orderController.getOrderByIdAdminController);
 router.delete('/orders/:orderId', orderController.deleteOrderAdminController);
 router.patch('/orders/:orderId/accept', orderController.acceptOrderAdminController);
 router.patch('/orders/:orderId/reject', orderController.rejectOrderAdminController);
 router.patch('/orders/:orderId/statuses', orderController.updateOrderStatusesAdminController);
+router.post('/orders/:orderId/refund', adminController.processRefund);
 
 // ----- CMS Pages (About + legal) -----
 router.get('/pages-social-media/:key', getAdminPageController);
@@ -297,6 +304,8 @@ router.get('/notifications/fssai-expired', adminController.getExpiredFssaiNotifi
 // ----- Customization Settings -----
 router.get('/customization-settings', systemConfigController.getCustomizationSettings);
 router.patch('/customization-settings', systemConfigController.updateCustomizationSettings);
+router.get('/customization-settings/zones', systemConfigController.getZoneCustomizationSettings);
+router.patch('/customization-settings/zones', systemConfigController.updateZoneCustomizationSettings);
 router.get('/customization-settings/takeaway-cod', systemConfigController.getTakeawayCodStatus);
 
 // ----- Restaurant Settings -----

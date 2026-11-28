@@ -97,6 +97,15 @@ function getModuleFromConfig(config) {
   return getModuleFromUrl(url);
 }
 
+function isCredentialRequest(config) {
+  const u = String(typeof config === "string" ? config : config?.url || "").toLowerCase();
+  return (
+    /\/auth\/(user|restaurant|delivery)\/(request-otp|verify-otp|reapply)/.test(u) ||
+    /\/auth\/admin\/(login|forgot-password)/.test(u) ||
+    u.includes("/auth/refresh-token")
+  );
+}
+
 function getAccessToken(config) {
   const module = getModuleFromConfig(config);
   const key = `${module}_accessToken`;
@@ -206,6 +215,13 @@ apiClient.interceptors.response.use(
       return Promise.reject(err);
     }
     if (err?.response?.status !== 401 || !original || original._retry) {
+      return Promise.reject(err);
+    }
+    // A 401 from a credential endpoint (wrong OTP / password) is a normal
+    // "invalid input" answer, not an expired session. Treating it as one wiped
+    // the stored session and bounced the user to the login page after a single
+    // wrong OTP. The calling screen shows its own "Invalid OTP" message.
+    if (isCredentialRequest(original)) {
       return Promise.reject(err);
     }
     // Same resolution as the request interceptor, so a shared endpoint refreshes
