@@ -325,7 +325,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
     const goingToCustomer = tripStatus === 'PICKED_UP' || tripStatus === 'REACHED_DROP';
     const target = parseSimPoint(
       goingToCustomer
-        ? (activeOrder?.customerLiveLocation || activeOrder?.customerLocation || activeOrder?.deliveryAddress?.location || activeOrder?.address?.location || activeOrder?.deliveryAddress || activeOrder?.address)
+        ? (activeOrder?.customerLocation ||activeOrder?.deliveryAddress?.location || activeOrder?.address?.location || activeOrder?.deliveryAddress || activeOrder?.address)
         : (activeOrder?.restaurantLocation || activeOrder?.restaurantId?.location || activeOrder?.restaurant?.location)
     );
 
@@ -367,8 +367,17 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
   }, [isSimMode, tripStatus, activeOrder, setRiderLocation]);
 
   const routeProgressRef = useRef(null);
+  // Distance still to drive along the map's road route; shown to the rider.
+  // (distanceToTarget is straight-line and only used for the arrival geofence.)
+  const [roadDistanceM, setRoadDistanceM] = useState(null);
+  useEffect(() => {
+    setRoadDistanceM(null);
+  }, [focusedOrderId, tripStatus]);
   const handleRouteProgress = useCallback((progress) => {
     routeProgressRef.current = progress ? { ...progress, at: Date.now() } : null;
+    setRoadDistanceM(
+      Number.isFinite(progress?.remainingMeters) ? Math.round(progress.remainingMeters / 10) * 10 : null,
+    );
     if (progress && Number.isFinite(progress.etaSeconds)) {
       setEta(Math.max(1, Math.round(progress.etaSeconds / 60)));
     }
@@ -804,7 +813,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                       <span className="text-[9px] text-white/70 font-black uppercase tracking-[0.15em] mb-1">Distance</span>
                       <div className="flex items-end gap-1">
                         <span className="text-2xl font-black text-white leading-none tracking-tighter">
-                          {formatTripDistanceKm(distanceToTarget)}
+                          {formatTripDistanceKm(roadDistanceM)}
                         </span>
                         <span className="text-[11px] text-white/80 font-bold mb-0.5">KM</span>
                       </div>
@@ -973,7 +982,7 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                     order={activeOrder} 
                     status={tripStatus} 
                     isWithinRange={isWithinRange} 
-                    distanceToTarget={distanceToTarget}
+                    distanceToTarget={roadDistanceM}
                     eta={eta}
                     onReachedPickup={reachPickup} 
                     onPickedUp={(billImageUrl) => pickUpOrder(billImageUrl)} 
@@ -1021,9 +1030,9 @@ export default function DeliveryHomeV2({ tab = 'feed' }) {
                                <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mt-1.5 ${isWithinRange ? 'text-green-600' : 'text-orange-500'}`}>
                                  {isWithinRange
                                    ? 'Ready - Swipe to Arrive √'
-                                   : formatTripDistanceKm(distanceToTarget) === '--'
+                                   : formatTripDistanceKm(roadDistanceM) === '--'
                                      ? 'Locating customer…'
-                                     : `${formatTripDistanceKm(distanceToTarget)} km • ${eta || '--'} min Arrival`}
+                                     : `${formatTripDistanceKm(roadDistanceM)} km • ${eta || '--'} min Arrival`}
                                </p>
                             </div>
                           </div>

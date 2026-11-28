@@ -173,5 +173,6 @@ export function formatPickupRouteSummary(metrics) {
   if (!metrics?.isReady) {
     return 'Locating route…';
   }
-  return `${Number(metrics.distanceKm).toFixed(1)} km · ${metrics.etaMins} min`;
+  const approx = metrics.approximate ? '~' : '';
+  return `${approx}${Number(metrics.distanceKm).toFixed(1)} km · ${approx}${metrics.etaMins} min`;
 }

@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, MapPin, FastForward, Clock, Phone, ChefHat, ChevronDown, Volume2, VolumeX, Navigation } from 'lucide-react';
 import { ActionSlider } from '@/modules/DeliveryV2/components/ui/ActionSlider';
 import { useDeliveryStore } from '@/modules/DeliveryV2/store/useDeliveryStore';
-import { computePickupMetrics } from '@/modules/DeliveryV2/utils/pickupMetrics';
+import { useRoadPickupMetrics } from '@/modules/DeliveryV2/hooks/useRoadPickupMetrics';
 import { PickupMetricsValue } from '@/modules/DeliveryV2/components/orders/NewOrderCard';
 import OrderNoteBanner from '@/modules/DeliveryV2/components/orders/OrderNoteBanner';
 import { toast } from 'sonner';
@@ -17,10 +17,7 @@ import { formatOrderAddress } from '@food/utils/orderAddress';
 export const NewOrderModal = ({ order, onAccept, onReject, onMinimize, isMuted = false, onToggleMute }) => {
   const { riderLocation } = useDeliveryStore();
 
-  const metrics = useMemo(
-    () => computePickupMetrics(order, riderLocation),
-    [order, riderLocation],
-  );
+  const metrics = useRoadPickupMetrics(order, riderLocation);
 
   if (!order) return null;
 
